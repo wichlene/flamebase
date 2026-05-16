@@ -7,12 +7,24 @@ contract FlameBase {
     uint256 public likePrice = 0.0001 ether;
     uint256 public commentPrice = 0.0003 ether;
     uint256 public photoPrice = 0.0005 ether;
+    uint256 public postPrice = 0.0002 ether;
 
     struct Profile {
         string username;
-        string ipfsHash;
+        string avatarHash;
         bool exists;
         uint256 flames;
+        uint256 tips;
+    }
+
+    struct Post {
+        uint256 id;
+        address author;
+        string content;
+        string ipfsHash;
+        uint256 timestamp;
+        uint256 likes;
+        uint256 tips;
     }
 
     struct Comment {
@@ -21,13 +33,18 @@ contract FlameBase {
         uint256 timestamp;
     }
 
+    uint256 public postCount;
+
     mapping(address => Profile) public profiles;
-    mapping(address => address[]) public likes;
-    mapping(address => Comment[]) public comments;
+    mapping(uint256 => Post) public posts;
+    mapping(uint256 => Comment[]) public postComments;
+    mapping(uint256 => address[]) public postLikes;
 
     event ProfileCreated(address indexed user, string username);
-    event Liked(address indexed from, address indexed to, uint256 amount);
-    event Commented(address indexed from, address indexed to, string text);
+    event PostCreated(uint256 indexed postId, address indexed author, string content);
+    event Liked(uint256 indexed postId, address indexed from);
+    event Commented(uint256 indexed postId, address indexed from, string text);
+    event TipSent(uint256 indexed postId, address indexed from, address indexed to, uint256 amount);
     event PhotoUploaded(address indexed user, string ipfsHash);
 
     modifier onlyOwner() {
@@ -39,57 +56,79 @@ contract FlameBase {
         owner = msg.sender;
     }
 
-    function createProfile(string memory _username, string memory _ipfsHash) external {
+    function createProfile(string memory _username, string memory _avatarHash) external {
         require(!profiles[msg.sender].exists, "Profile exists");
-        profiles[msg.sender] = Profile(_username, _ipfsHash, true, 0);
+        profiles[msg.sender] = Profile(_username, _avatarHash, true, 0, 0);
         emit ProfileCreated(msg.sender, _username);
     }
 
-    function like(address _to) external payable {
+    function createPost(string memory _content, string memory _ipfsHash) external payable {
+        require(msg.value >= postPrice, "Insufficient fee");
+        require(profiles[msg.sender].exists, "Create profile first");
+        uint256 postId = postCount++;
+        posts[postId] = Post(postId, msg.sender, _content, _ipfsHash, block.timestamp, 0, 0);
+        (bool sent, ) = owner.call{value: msg.value}("");
+        require(sent, "Transfer failed");
+        emit PostCreated(postId, msg.sender, _content);
+    }
+
+    function like(uint256 _postId) external payable {
         require(msg.value >= likePrice, "Insufficient fee");
-        require(profiles[_to].exists, "Profile not found");
-        likes[_to].push(msg.sender);
-        profiles[_to].flames += 1;
+        require(_postId < postCount, "Post not found");
+        posts[_postId].likes++;
+        postLikes[_postId].push(msg.sender);
+        profiles[posts[_postId].author].flames++;
         (bool sent, ) = owner.call{value: msg.value}("");
         require(sent, "Transfer failed");
-        emit Liked(msg.sender, _to, msg.value);
+        emit Liked(_postId, msg.sender);
     }
 
-    function comment(address _to, string memory _text) external payable {
+    function comment(uint256 _postId, string memory _text) external payable {
         require(msg.value >= commentPrice, "Insufficient fee");
-        require(profiles[_to].exists, "Profile not found");
-        comments[_to].push(Comment(msg.sender, _text, block.timestamp));
+        require(_postId < postCount, "Post not found");
+        postComments[_postId].push(Comment(msg.sender, _text, block.timestamp));
         (bool sent, ) = owner.call{value: msg.value}("");
         require(sent, "Transfer failed");
-        emit Commented(msg.sender, _to, _text);
+        emit Commented(_postId, msg.sender, _text);
     }
 
-    function uploadPhoto(string memory _ipfsHash) external payable {
+    function tip(uint256 _postId) external payable {
+        require(msg.value > 0, "Send some ETH");
+        require(_postId < postCount, "Post not found");
+        address author = posts[_postId].author;
+        posts[_postId].tips += msg.value;
+        profiles[author].tips += msg.value;
+        uint256 ownerCut = msg.value / 10;
+        uint256 authorAmount = msg.value - ownerCut;
+        (bool s1, ) = owner.call{value: ownerCut}("");
+        (bool s2, ) = author.call{value: authorAmount}("");
+        require(s1 && s2, "Transfer failed");
+        emit TipSent(_postId, msg.sender, author, msg.value);
+    }
+
+    function uploadAvatar(string memory _ipfsHash) external payable {
         require(msg.value >= photoPrice, "Insufficient fee");
         require(profiles[msg.sender].exists, "Create profile first");
-        profiles[msg.sender].ipfsHash = _ipfsHash;
+        profiles[msg.sender].avatarHash = _ipfsHash;
         (bool sent, ) = owner.call{value: msg.value}("");
         require(sent, "Transfer failed");
         emit PhotoUploaded(msg.sender, _ipfsHash);
     }
 
-    function setLikePrice(uint256 _price) external onlyOwner {
-        likePrice = _price;
+    function setPostPrice(uint256 _price) external onlyOwner { postPrice = _price; }
+    function setLikePrice(uint256 _price) external onlyOwner { likePrice = _price; }
+    function setCommentPrice(uint256 _price) external onlyOwner { commentPrice = _price; }
+    function setPhotoPrice(uint256 _price) external onlyOwner { photoPrice = _price; }
+
+    function getPost(uint256 _postId) external view returns (Post memory) {
+        return posts[_postId];
     }
 
-    function setCommentPrice(uint256 _price) external onlyOwner {
-        commentPrice = _price;
+    function getPostComments(uint256 _postId) external view returns (Comment[] memory) {
+        return postComments[_postId];
     }
 
-    function setPhotoPrice(uint256 _price) external onlyOwner {
-        photoPrice = _price;
-    }
-
-    function getLikes(address _user) external view returns (address[] memory) {
-        return likes[_user];
-    }
-
-    function getComments(address _user) external view returns (Comment[] memory) {
-        return comments[_user];
+    function getPostLikes(uint256 _postId) external view returns (address[] memory) {
+        return postLikes[_postId];
     }
 }
