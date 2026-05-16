@@ -1,8 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   try {
-    const formData = await request.formData()
+    const formData = await request.formData() as unknown as globalThis.FormData
     const file = formData.get('file') as File
 
     if (!file) {
