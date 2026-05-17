@@ -27,24 +27,22 @@ contract SimpleDAO {
     constructor() { owner = msg.sender; }
 
     function propose(string memory _title, string memory _description) external payable returns (uint256) {
-        require(msg.value >= PROPOSE_FEE, "Fee required");
         require(bytes(_title).length > 0 && bytes(_title).length <= 100, "Title 1-100 chars");
         uint256 id = proposalCount++;
         proposals[id] = Proposal(id, msg.sender, _title, _description, 0, 0, block.timestamp + VOTE_DURATION);
-        (bool s,) = owner.call{value: msg.value}(""); require(s);
+        if (msg.value > 0) { (bool s,) = owner.call{value: msg.value}(""); require(s); }
         emit ProposalCreated(id, msg.sender, _title);
         return id;
     }
 
     function vote(uint256 _id, bool _support) external payable {
-        require(msg.value >= VOTE_FEE, "Fee required");
         require(_id < proposalCount, "Not found");
         require(!hasVoted[_id][msg.sender], "Already voted");
         require(block.timestamp < proposals[_id].deadline, "Voting ended");
         hasVoted[_id][msg.sender] = true;
         if (_support) proposals[_id].votesFor++;
         else proposals[_id].votesAgainst++;
-        (bool s,) = owner.call{value: msg.value}(""); require(s);
+        if (msg.value > 0) { (bool s,) = owner.call{value: msg.value}(""); require(s); }
         emit Voted(_id, msg.sender, _support);
     }
 

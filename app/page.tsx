@@ -113,8 +113,12 @@ export default function Home() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [leaderboard, setLeaderboard] = useState<Array<{ address: string; profile: ProfileData }>>([])
+  const [ethPrice, setEthPrice] = useState(2500)
   const publicClient = usePublicClient()
   const { writeContractAsync } = useWriteContract()
+
+  // $0.07 fixed fee — recalculated when ETH price updates
+  const fixedFee = parseEther((0.07 / ethPrice).toFixed(10))
 
   // New state variables
   const [hiddenPosts, setHiddenPosts] = useState<Set<string>>(new Set())
@@ -240,6 +244,14 @@ export default function Home() {
   const hasProfile = myProfile && myProfile[2]
   const isAdmin = address?.toLowerCase() === ADMIN_ADDRESS.toLowerCase()
   const isWrongNetwork = isConnected && chainId !== base.id
+
+  // Fetch ETH price for $0.07 calculation
+  useEffect(() => {
+    fetch('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd')
+      .then(r => r.json())
+      .then(d => { if (d?.ethereum?.usd) setEthPrice(d.ethereum.usd) })
+      .catch(() => {})
+  }, [])
 
   // Auto-switch to Base
   useEffect(() => {
@@ -378,7 +390,7 @@ export default function Home() {
   }
 
   const createPost = async () => {
-    if (!newPost || !postPrice) return
+    if (!newPost) return
     setLoading(true)
     try {
       let ipfsHash = ''
@@ -391,7 +403,7 @@ export default function Home() {
       }
       await writeContractAsync({
         address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'createPost',
-        args: [newPost, ipfsHash], value: postPrice as bigint,
+        args: [newPost, ipfsHash], value: fixedFee,
       })
       setNewPost(''); setSelectedFile(null); setPreviewUrl(null)
       setTimeout(() => refetchCount(), 3000)
@@ -401,10 +413,10 @@ export default function Home() {
   }
 
   const handleLike = async (postId: bigint) => {
-    if (!isConnected || !likePrice) return
+    if (!isConnected) return
     setLoadingAction(`like-${postId}`)
     try {
-      await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'like', args: [postId], value: likePrice as bigint })
+      await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'like', args: [postId], value: fixedFee })
       setPosts(prev => prev.map(p => p.id === postId ? { ...p, likes: p.likes + 1n } : p))
     } catch (e) { console.error(e) }
     setLoadingAction(null)
@@ -413,10 +425,10 @@ export default function Home() {
   const handleComment = async (postId: bigint) => {
     const key = postId.toString()
     const text = commentTexts[key]
-    if (!text || !commentPrice) return
+    if (!text) return
     setLoadingAction(`comment-${postId}`)
     try {
-      await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'comment', args: [postId, text], value: commentPrice as bigint })
+      await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'comment', args: [postId, text], value: fixedFee })
       setCommentTexts(prev => ({ ...prev, [key]: '' }))
       setReplyingTo(prev => ({ ...prev, [key]: '' }))
       await loadComments(key)
@@ -478,7 +490,7 @@ export default function Home() {
           abi: CONTRACT_ABI,
           functionName: 'uploadAvatar',
           args: [data.ipfsHash],
-          value: parseEther('0.0005'),
+          value: fixedFee,
         })
         setTimeout(() => refetchProfile(), 3000)
       }
@@ -737,7 +749,7 @@ export default function Home() {
                                 className="flex items-center gap-1.5 text-[#5B6271] hover:text-[#FF6B35] hover:bg-[#FFF0EB] rounded-xl px-3 py-2 text-sm transition-all group disabled:opacity-50 disabled:hover:bg-transparent">
                                 <span className="text-lg group-hover:scale-125 transition-transform">🔥</span>
                                 <span className="font-bold">{post.likes.toString()}</span>
-                                <span className="text-[11px] opacity-60 hidden sm:inline">{fmtPrice(likePrice)}</span>
+                                <span className="text-[11px] opacity-60 hidden sm:inline">$0.07</span>
                               </button>
 
                               <button onClick={() => toggleComments(key)}
@@ -796,7 +808,7 @@ export default function Home() {
                                 <Avatar addr={address!} profiles={profiles} size="sm" />
                                 <div className="flex-1 flex gap-2">
                                   <input type="text"
-                                    placeholder={replyingTo[key] ? t('replyPlaceholder', { user: replyingTo[key] }) : `${t('commentPlaceholder')} (${fmtPrice(commentPrice)} ETH)`}
+                                    placeholder={replyingTo[key] ? t('replyPlaceholder', { user: replyingTo[key] }) : `${t('commentPlaceholder')} ($0.07)`}
                                     value={commentTexts[key] || ''}
                                     onChange={e => setCommentTexts(prev => ({ ...prev, [key]: e.target.value }))}
                                     onKeyDown={e => e.key === 'Enter' && handleComment(post.id)}
@@ -854,7 +866,7 @@ export default function Home() {
                       <Avatar addr={address!} profiles={profiles} />
                       <div>
                         <p className="font-bold text-[#0A0B0D]">{myProfile?.[0]}</p>
-                        <p className="text-xs text-[#5B6271]">{t('postFee')}: {fmtPrice(postPrice)} ETH</p>
+                        <p className="text-xs text-[#5B6271]">{t('postFee')}: $0.07</p>
                       </div>
                     </div>
                     <textarea placeholder={t('postPlaceholder')} value={newPost}
@@ -973,14 +985,14 @@ export default function Home() {
                                 address: TOOLS_ADDRESS,
                                 abi: TOOLS_ABI,
                                 functionName: 'count',
-                                value: parseEther('0.0001'),
+                                value: fixedFee,
                               })
                             }, setCounterLoading)
                           }}
                           disabled={counterLoading}
                           className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white py-3 rounded-xl font-bold disabled:opacity-40 transition-colors"
                         >
-                          {counterLoading ? 'Counting...' : 'Count (+0.0001 ETH)'}
+                          {counterLoading ? 'Counting...' : 'Count ($0.07)'}
                         </button>
                       </div>
                     )}
@@ -1006,14 +1018,14 @@ export default function Home() {
                                 address: TOOLS_ADDRESS,
                                 abi: TOOLS_ABI,
                                 functionName: 'checkIn',
-                                value: parseEther('0.0001'),
+                                value: fixedFee,
                               })
                             }, setStreakLoading)
                           }}
                           disabled={streakLoading || canCheckIn === false}
                           className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white py-3 rounded-xl font-bold disabled:opacity-40 transition-colors"
                         >
-                          {streakLoading ? 'Checking in...' : canCheckIn === false ? 'Already checked in today' : 'Check In (+0.0001 ETH)'}
+                          {streakLoading ? 'Checking in...' : canCheckIn === false ? 'Already checked in today' : 'Check In ($0.07)'}
                         </button>
                       </div>
                     )}
@@ -1039,7 +1051,7 @@ export default function Home() {
                                 abi: TOOLS_ABI,
                                 functionName: 'log',
                                 args: [logText],
-                                value: parseEther('0.0001'),
+                                value: fixedFee,
                               })
                               setLogText('')
                             }, setLogLoading)
@@ -1047,7 +1059,7 @@ export default function Home() {
                           disabled={logLoading || !logText}
                           className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white py-3 rounded-xl font-bold disabled:opacity-40 transition-colors"
                         >
-                          {logLoading ? 'Writing...' : 'Write to Blockchain (+0.0001 ETH)'}
+                          {logLoading ? 'Writing...' : 'Write to Blockchain ($0.07)'}
                         </button>
                       </div>
                     )}
@@ -1077,7 +1089,7 @@ export default function Home() {
                                 abi: TOOLS_ABI,
                                 functionName: 'greet',
                                 args: [greetText],
-                                value: parseEther('0.0001'),
+                                value: fixedFee,
                               })
                               setGreetText('')
                             }, setGreetLoading)
@@ -1085,7 +1097,7 @@ export default function Home() {
                           disabled={greetLoading || !greetText}
                           className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white py-3 rounded-xl font-bold disabled:opacity-40 transition-colors"
                         >
-                          {greetLoading ? 'Setting...' : 'Set Greeting (+0.0001 ETH)'}
+                          {greetLoading ? 'Setting...' : 'Set Greeting ($0.07)'}
                         </button>
                       </div>
                     )}
@@ -1128,7 +1140,7 @@ export default function Home() {
                                 abi: TOKEN_FACTORY_ABI,
                                 functionName: 'deployToken',
                                 args: [tokenName, tokenSymbol, BigInt(tokenSupply)],
-                                value: parseEther('0.001'),
+                                value: fixedFee,
                               })
                               setTokenName(''); setTokenSymbol(''); setTokenSupply('1000000')
                             }, setTokenLoading)
@@ -1136,7 +1148,7 @@ export default function Home() {
                           disabled={tokenLoading || !tokenName || !tokenSymbol || !tokenSupply}
                           className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white py-3 rounded-xl font-bold disabled:opacity-40 transition-colors"
                         >
-                          {tokenLoading ? 'Deploying...' : 'Deploy Token (+0.001 ETH)'}
+                          {tokenLoading ? 'Deploying...' : 'Deploy Token ($0.07)'}
                         </button>
                       </div>
                     )}
@@ -1188,7 +1200,7 @@ export default function Home() {
                                 abi: NFT_FACTORY_ABI,
                                 functionName: 'deployNFT',
                                 args: [nftName, nftSymbol, BigInt(nftMaxSupply), parseEther(nftMintPrice), ''],
-                                value: parseEther('0.001'),
+                                value: fixedFee,
                               })
                               setNftName(''); setNftSymbol(''); setNftMaxSupply('1000'); setNftMintPrice('0.001')
                             }, setNftLoading)
@@ -1196,7 +1208,7 @@ export default function Home() {
                           disabled={nftLoading || !nftName || !nftSymbol || !nftMaxSupply || !nftMintPrice}
                           className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white py-3 rounded-xl font-bold disabled:opacity-40 transition-colors"
                         >
-                          {nftLoading ? 'Deploying...' : 'Deploy NFT Collection (+0.001 ETH)'}
+                          {nftLoading ? 'Deploying...' : 'Deploy NFT Collection ($0.07)'}
                         </button>
                       </div>
                     )}
@@ -1232,7 +1244,7 @@ export default function Home() {
                                 abi: DAO_ABI,
                                 functionName: 'propose',
                                 args: [daoTitle, daoDesc],
-                                value: parseEther('0.001'),
+                                value: fixedFee,
                               })
                               setDaoTitle(''); setDaoDesc('')
                             }, setDaoLoading)
@@ -1240,7 +1252,7 @@ export default function Home() {
                           disabled={daoLoading || !daoTitle}
                           className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white py-3 rounded-xl font-bold disabled:opacity-40 transition-colors"
                         >
-                          {daoLoading ? 'Creating...' : 'Create Proposal (+0.001 ETH)'}
+                          {daoLoading ? 'Creating...' : 'Create Proposal ($0.07)'}
                         </button>
                       </div>
                     )}

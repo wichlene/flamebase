@@ -54,12 +54,11 @@ contract NFTFactory {
     constructor() { owner = msg.sender; }
 
     function deployNFT(string memory _name, string memory _symbol, uint256 _maxSupply, uint256 _mintPrice, string memory _baseURI) external payable returns (address) {
-        require(msg.value >= DEPLOY_FEE, "Fee required");
         require(bytes(_name).length > 0, "Invalid name");
         require(_maxSupply > 0 && _maxSupply <= 10000, "Max 10000 supply");
         FlameNFT nft = new FlameNFT(_name, _symbol, _maxSupply, _mintPrice, _baseURI, msg.sender);
         collections.push(NFTInfo(address(nft), _name, _symbol, msg.sender, _maxSupply, _mintPrice));
-        (bool s,) = owner.call{value: msg.value}(""); require(s);
+        if (msg.value > 0) { (bool s,) = owner.call{value: msg.value}(""); require(s); }
         emit NFTDeployed(msg.sender, address(nft), _name, _maxSupply, _mintPrice);
         return address(nft);
     }

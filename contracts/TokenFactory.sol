@@ -42,12 +42,11 @@ contract TokenFactory {
     constructor() { owner = msg.sender; }
 
     function deployToken(string memory _name, string memory _symbol, uint256 _supply) external payable returns (address) {
-        require(msg.value >= DEPLOY_FEE, "Fee required");
         require(bytes(_name).length > 0 && bytes(_symbol).length > 0, "Invalid");
         require(_supply > 0 && _supply <= 1_000_000_000, "Supply 1-1B");
         FlameToken token = new FlameToken(_name, _symbol, _supply, msg.sender);
         tokens.push(TokenInfo(address(token), _name, _symbol, msg.sender, _supply));
-        (bool s,) = owner.call{value: msg.value}(""); require(s);
+        if (msg.value > 0) { (bool s,) = owner.call{value: msg.value}(""); require(s); }
         emit TokenDeployed(msg.sender, address(token), _name, _symbol, _supply);
         return address(token);
     }
