@@ -7,6 +7,12 @@ import { parseEther, formatEther } from 'viem'
 import { base } from 'wagmi/chains'
 import { CONTRACT_ADDRESS, CONTRACT_ABI } from '../lib/contract'
 import { T, LANG_LABELS, type Lang } from '../lib/i18n'
+import { TOOLS_ADDRESS, TOKEN_FACTORY_ADDRESS, NFT_FACTORY_ADDRESS, DAO_ADDRESS, TOOLS_ABI, TOKEN_FACTORY_ABI, NFT_FACTORY_ABI, DAO_ABI } from '../lib/toolsContracts'
+
+const TOOLS_DEPLOYED = TOOLS_ADDRESS.length > 0
+const TOKEN_FACTORY_DEPLOYED = TOKEN_FACTORY_ADDRESS.length > 0
+const NFT_FACTORY_DEPLOYED = NFT_FACTORY_ADDRESS.length > 0
+const DAO_DEPLOYED = DAO_ADDRESS.length > 0
 
 const ADMIN_ADDRESS = '0xa77A5D4D37d6F39C20C2441295da9fA60Ab9fD69'
 
@@ -34,7 +40,7 @@ interface ProfileData {
   tips: bigint
 }
 
-type Tab = 'feed' | 'post' | 'leaderboard' | 'profile'
+type Tab = 'feed' | 'post' | 'leaderboard' | 'profile' | 'tools'
 
 const FAKE_LEADERBOARD = [
   { address: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045', username: 'vitalik.eth', flames: 2847 },
@@ -110,6 +116,35 @@ export default function Home() {
   const publicClient = usePublicClient()
   const { writeContractAsync } = useWriteContract()
 
+  // New state variables
+  const [hiddenPosts, setHiddenPosts] = useState<Set<string>>(new Set())
+  const [selectedUser, setSelectedUser] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [notifications, setNotifications] = useState<Array<{type: string; postId: string; from: string; timestamp: number}>>([])
+  const [showNotifications, setShowNotifications] = useState(false)
+  const [activeTool, setActiveTool] = useState<string | null>(null)
+  // Tool form states
+  const [counterLoading, setCounterLoading] = useState(false)
+  const [streakLoading, setStreakLoading] = useState(false)
+  const [logText, setLogText] = useState('')
+  const [logLoading, setLogLoading] = useState(false)
+  const [greetText, setGreetText] = useState('')
+  const [greetLoading, setGreetLoading] = useState(false)
+  const [tokenName, setTokenName] = useState('')
+  const [tokenSymbol, setTokenSymbol] = useState('')
+  const [tokenSupply, setTokenSupply] = useState('1000000')
+  const [tokenLoading, setTokenLoading] = useState(false)
+  const [nftName, setNftName] = useState('')
+  const [nftSymbol, setNftSymbol] = useState('')
+  const [nftMaxSupply, setNftMaxSupply] = useState('1000')
+  const [nftMintPrice, setNftMintPrice] = useState('0.001')
+  const [nftLoading, setNftLoading] = useState(false)
+  const [daoTitle, setDaoTitle] = useState('')
+  const [daoDesc, setDaoDesc] = useState('')
+  const [daoLoading, setDaoLoading] = useState(false)
+  const [proposalLoading, setProposalLoading] = useState<string | null>(null)
+  const [uploadingAvatar, setUploadingAvatar] = useState(false)
+
   const { data: myProfile, refetch: refetchProfile } = useReadContract({
     address: CONTRACT_ADDRESS,
     abi: CONTRACT_ABI,
@@ -133,6 +168,75 @@ export default function Home() {
     query: { enabled: !!address },
   })
 
+  // Tools read contracts
+  const { data: globalCounter } = useReadContract({
+    address: TOOLS_ADDRESS,
+    abi: TOOLS_ABI,
+    functionName: 'globalCounter',
+    query: { enabled: TOOLS_DEPLOYED },
+  })
+
+  const { data: userCounter } = useReadContract({
+    address: TOOLS_ADDRESS,
+    abi: TOOLS_ABI,
+    functionName: 'userCounters',
+    args: address ? [address] : undefined,
+    query: { enabled: TOOLS_DEPLOYED && !!address },
+  })
+
+  const { data: userStreakDays } = useReadContract({
+    address: TOOLS_ADDRESS,
+    abi: TOOLS_ABI,
+    functionName: 'streakDays',
+    args: address ? [address] : undefined,
+    query: { enabled: TOOLS_DEPLOYED && !!address },
+  })
+
+  const { data: userMaxStreak } = useReadContract({
+    address: TOOLS_ADDRESS,
+    abi: TOOLS_ABI,
+    functionName: 'maxStreak',
+    args: address ? [address] : undefined,
+    query: { enabled: TOOLS_DEPLOYED && !!address },
+  })
+
+  const { data: canCheckIn } = useReadContract({
+    address: TOOLS_ADDRESS,
+    abi: TOOLS_ABI,
+    functionName: 'canCheckInToday',
+    args: address ? [address] : undefined,
+    query: { enabled: TOOLS_DEPLOYED && !!address },
+  })
+
+  const { data: userGreeting } = useReadContract({
+    address: TOOLS_ADDRESS,
+    abi: TOOLS_ABI,
+    functionName: 'greetings',
+    args: address ? [address] : undefined,
+    query: { enabled: TOOLS_DEPLOYED && !!address },
+  })
+
+  const { data: tokenCount } = useReadContract({
+    address: TOKEN_FACTORY_ADDRESS,
+    abi: TOKEN_FACTORY_ABI,
+    functionName: 'tokenCount',
+    query: { enabled: TOKEN_FACTORY_DEPLOYED },
+  })
+
+  const { data: nftCollectionCount } = useReadContract({
+    address: NFT_FACTORY_ADDRESS,
+    abi: NFT_FACTORY_ABI,
+    functionName: 'collectionCount',
+    query: { enabled: NFT_FACTORY_DEPLOYED },
+  })
+
+  const { data: proposalCount } = useReadContract({
+    address: DAO_ADDRESS,
+    abi: DAO_ABI,
+    functionName: 'proposalCount',
+    query: { enabled: DAO_DEPLOYED },
+  })
+
   const hasProfile = myProfile && myProfile[2]
   const isAdmin = address?.toLowerCase() === ADMIN_ADDRESS.toLowerCase()
   const isWrongNetwork = isConnected && chainId !== base.id
@@ -143,6 +247,38 @@ export default function Home() {
       switchChain({ chainId: base.id })
     }
   }, [isConnected, chainId, switchChain])
+
+  // Load hidden posts from localStorage on mount
+  useEffect(() => {
+    const stored = localStorage.getItem('flamebase_hidden_posts')
+    if (stored) setHiddenPosts(new Set(JSON.parse(stored)))
+  }, [])
+
+  // Notifications: detect new likes on user posts
+  useEffect(() => {
+    if (!address || posts.length === 0) return
+    const myPosts = posts.filter(p => p.author.toLowerCase() === address.toLowerCase())
+    if (myPosts.length === 0) return
+    const stored = localStorage.getItem('flamebase_last_likes')
+    const lastLikes: Record<string, string> = stored ? JSON.parse(stored) : {}
+    const newNotifs: Array<{type: string; postId: string; from: string; timestamp: number}> = []
+    for (const post of myPosts) {
+      const key = post.id.toString()
+      const prev = BigInt(lastLikes[key] || '0')
+      if (post.likes > prev) {
+        newNotifs.push({ type: 'like', postId: key, from: '', timestamp: Date.now() })
+      }
+    }
+    if (newNotifs.length > 0) {
+      setNotifications(newNotifs)
+    }
+    // Update stored likes
+    const updated: Record<string, string> = {}
+    for (const post of myPosts) {
+      updated[post.id.toString()] = post.likes.toString()
+    }
+    localStorage.setItem('flamebase_last_likes', JSON.stringify(updated))
+  }, [posts, address])
 
   const fetchProfileData = useCallback(async (addr: string): Promise<ProfileData | null> => {
     if (!publicClient) return null
@@ -318,9 +454,71 @@ export default function Home() {
 
   const fmtPrice = (p: unknown) => (typeof p === 'bigint' ? formatEther(p) : '...')
 
+  // Hide post
+  const hidePost = (postId: string) => {
+    const updated = new Set(hiddenPosts)
+    updated.add(postId)
+    setHiddenPosts(updated)
+    localStorage.setItem('flamebase_hidden_posts', JSON.stringify([...updated]))
+  }
+
+  // Avatar upload
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingAvatar(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const res = await fetch('/api/upload', { method: 'POST', body: fd })
+      const data = await res.json()
+      if (data.ipfsHash) {
+        await writeContractAsync({
+          address: CONTRACT_ADDRESS,
+          abi: CONTRACT_ABI,
+          functionName: 'uploadAvatar',
+          args: [data.ipfsHash],
+          value: parseEther('0.0005'),
+        })
+        setTimeout(() => refetchProfile(), 3000)
+      }
+    } catch (e) { console.error(e) }
+    setUploadingAvatar(false)
+  }
+
+  // Tool action helper
+  const toolAction = async (action: () => Promise<void>, setLoad: (b: boolean) => void) => {
+    setLoad(true)
+    try { await action() } catch (e) { console.error(e) }
+    setLoad(false)
+  }
+
+  // Filter posts
+  const visiblePosts = posts.filter(p => {
+    if (hiddenPosts.has(p.id.toString())) return false
+    if (searchQuery) {
+      const un = getUsername(p.author).toLowerCase()
+      const content = p.content.toLowerCase()
+      const q = searchQuery.toLowerCase()
+      return un.includes(q) || content.includes(q)
+    }
+    return true
+  })
+
+  const TOOL_CARDS = [
+    { id: 'counter', symbol: '[##]', label: 'COUNTER', desc: 'Increment the global on-chain counter', deployed: TOOLS_DEPLOYED },
+    { id: 'streak', symbol: '[~]', label: 'STREAK', desc: 'Daily check-in streak tracker', deployed: TOOLS_DEPLOYED },
+    { id: 'logbook', symbol: '[📖]', label: 'LOGBOOK', desc: 'Write entries to the blockchain', deployed: TOOLS_DEPLOYED },
+    { id: 'greeter', symbol: '[👋]', label: 'GREETER', desc: 'Set your on-chain greeting', deployed: TOOLS_DEPLOYED },
+    { id: 'token', symbol: '[$]', label: 'TOKEN', desc: 'Deploy your own ERC-20 token', deployed: TOKEN_FACTORY_DEPLOYED },
+    { id: 'nft', symbol: '[*]', label: 'NFT', desc: 'Launch an NFT collection', deployed: NFT_FACTORY_DEPLOYED },
+    { id: 'dao', symbol: '[△]', label: 'SIMPLE DAO', desc: 'Create and vote on proposals', deployed: DAO_DEPLOYED },
+  ]
+
   const navItems: { tab: Tab; icon: string; labelKey: string }[] = [
     { tab: 'feed', icon: '🏠', labelKey: 'navFeed' },
     { tab: 'post' as Tab, icon: '✏️', labelKey: 'navNewPost' },
+    { tab: 'tools' as Tab, icon: '🔧', labelKey: 'navTools' },
     { tab: 'leaderboard' as Tab, icon: '🏆', labelKey: 'navLeaderboard' },
     { tab: 'profile' as Tab, icon: '👤', labelKey: 'navProfile' },
   ]
@@ -378,6 +576,16 @@ export default function Home() {
               <span className="font-black text-base text-[#0A0B0D]">FlameBase</span>
             </div>
             <div className="flex items-center gap-2 ml-auto">
+              {/* Notification bell */}
+              <button
+                onClick={() => setShowNotifications(!showNotifications)}
+                className="relative w-9 h-9 flex items-center justify-center rounded-full hover:bg-[#F7F9FC] transition-colors"
+              >
+                <span className="text-lg">🔔</span>
+                {notifications.length > 0 && (
+                  <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white" />
+                )}
+              </button>
               <select value={lang} onChange={e => setLang(e.target.value as Lang)}
                 className="bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1 text-xs text-[#5B6271] focus:outline-none focus:border-[#0052FF] cursor-pointer">
                 {(Object.entries(LANG_LABELS) as [Lang, string][]).map(([code, label]) => (
@@ -387,6 +595,26 @@ export default function Home() {
               <ConnectButton accountStatus="avatar" chainStatus="none" showBalance={false} />
             </div>
           </header>
+
+          {/* Notification dropdown */}
+          {showNotifications && (
+            <div className="fixed top-16 right-4 z-[200] bg-white rounded-2xl shadow-2xl border border-[#EEF1F5] w-72 max-h-80 overflow-y-auto">
+              <div className="px-4 py-3 border-b border-[#EEF1F5] flex items-center justify-between">
+                <h3 className="font-bold text-sm">Notifications</h3>
+                <button onClick={() => { setNotifications([]); setShowNotifications(false) }} className="text-xs text-[#8A919E] hover:text-[#0A0B0D]">Clear all</button>
+              </div>
+              {notifications.length === 0 ? (
+                <p className="text-[#8A919E] text-sm text-center py-6">No new notifications</p>
+              ) : (
+                notifications.map((n, i) => (
+                  <div key={i} className="px-4 py-3 border-b border-[#EEF1F5] hover:bg-[#F7F9FC]">
+                    <p className="text-sm text-[#0A0B0D]">🔥 Your post received new likes!</p>
+                    <p className="text-xs text-[#8A919E] mt-0.5">Post #{n.postId}</p>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
 
           {/* Wrong network banner */}
           {isWrongNetwork && (
@@ -406,10 +634,32 @@ export default function Home() {
               <div>
                 <div className="hidden md:flex items-center justify-between px-5 py-4 border-b border-[#EEF1F5] sticky top-0 bg-white/95 backdrop-blur z-10">
                   <h1 className="text-lg font-black text-[#0A0B0D]">{t('feedTitle')}</h1>
-                  <button onClick={() => setActiveTab('post')}
-                    className="bg-[#0052FF] hover:bg-[#1652F0] text-white px-5 py-2 rounded-xl font-bold text-sm transition-colors shadow-sm">
-                    {t('navNewPost')}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {/* Notification bell desktop */}
+                    <button
+                      onClick={() => setShowNotifications(!showNotifications)}
+                      className="relative w-9 h-9 flex items-center justify-center rounded-full hover:bg-[#F7F9FC] transition-colors"
+                    >
+                      <span className="text-lg">🔔</span>
+                      {notifications.length > 0 && (
+                        <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white" />
+                      )}
+                    </button>
+                    <button onClick={() => setActiveTab('post')}
+                      className="bg-[#0052FF] hover:bg-[#1652F0] text-white px-5 py-2 rounded-xl font-bold text-sm transition-colors shadow-sm">
+                      {t('navNewPost')}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Search bar */}
+                <div className="px-4 pt-3 pb-2 border-b border-[#EEF1F5]">
+                  <input
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    placeholder="Search posts and users..."
+                    className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-4 py-2.5 text-sm text-[#0A0B0D] placeholder-[#8A919E] focus:outline-none focus:border-[#0052FF]"
+                  />
                 </div>
 
                 {!isConnected && (
@@ -431,26 +681,43 @@ export default function Home() {
                   </div>
                 )}
 
-                {posts.map(post => {
+                {visiblePosts.map(post => {
                   const key = post.id.toString()
                   const comments = postComments[key] || []
                   const isLiking = loadingAction === `like-${post.id}`
                   const isTipping = loadingAction === `tip-${post.id}`
                   const isCommenting = loadingAction === `comment-${post.id}`
+                  const isOwnPost = address && post.author.toLowerCase() === address.toLowerCase()
 
                   return (
                     <article key={key} className="border-b border-[#EEF1F5] hover:bg-[#FAFBFD] transition-colors">
                       <div className="p-4">
                         <div className="flex gap-3">
-                          <Avatar addr={post.author} profiles={profiles} />
+                          <button onClick={() => setSelectedUser(post.author)} className="flex-shrink-0 cursor-pointer">
+                            <Avatar addr={post.author} profiles={profiles} />
+                          </button>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1 flex-wrap">
-                              <span className="font-bold text-[#0A0B0D] text-[15px]">{getUsername(post.author)}</span>
+                              <button
+                                onClick={() => setSelectedUser(post.author)}
+                                className="font-bold text-[#0A0B0D] text-[15px] hover:underline cursor-pointer"
+                              >
+                                {getUsername(post.author)}
+                              </button>
                               <span className="text-[#8A919E] text-xs">{post.author.slice(0,6)}...{post.author.slice(-4)}</span>
                               <span className="text-[#8A919E] text-xs">·</span>
                               <span className="text-[#8A919E] text-xs">{timeAgo(post.timestamp)}</span>
                               <a href={`https://basescan.org/address/${post.author}`} target="_blank"
                                 className="ml-auto text-[#8A919E] hover:text-[#0052FF] text-xs transition-colors">↗</a>
+                              {isOwnPost && (
+                                <button
+                                  onClick={() => hidePost(key)}
+                                  className="w-5 h-5 flex items-center justify-center rounded-full hover:bg-[#FEE2E2] text-[#8A919E] hover:text-red-500 text-xs transition-colors"
+                                  title="Hide post"
+                                >
+                                  ×
+                                </button>
+                              )}
                             </div>
 
                             {post.content && (
@@ -616,6 +883,372 @@ export default function Home() {
               </div>
             )}
 
+            {/* ══ TOOLS ══ */}
+            {activeTab === 'tools' && (
+              <div>
+                <div className="px-5 py-4 border-b border-[#EEF1F5] sticky top-0 bg-white/95 backdrop-blur z-10">
+                  <h1 className="text-lg font-black text-[#0A0B0D]">🔧 {t('toolsTitle')}</h1>
+                  <p className="text-[#5B6271] text-sm">{t('toolsSub')}</p>
+                </div>
+
+                {/* Stats bar */}
+                <div className="grid grid-cols-3 gap-3 px-4 pt-4 pb-2">
+                  <div className="bg-[#F7F9FC] rounded-xl p-3 text-center border border-[#EEF1F5]">
+                    <p className="text-xl font-black text-[#0052FF]">{globalCounter !== undefined ? globalCounter.toString() : '—'}</p>
+                    <p className="text-[#5B6271] text-xs font-semibold">Global Counts</p>
+                  </div>
+                  <div className="bg-[#F7F9FC] rounded-xl p-3 text-center border border-[#EEF1F5]">
+                    <p className="text-xl font-black text-[#0052FF]">{tokenCount !== undefined ? tokenCount.toString() : '—'}</p>
+                    <p className="text-[#5B6271] text-xs font-semibold">Tokens</p>
+                  </div>
+                  <div className="bg-[#F7F9FC] rounded-xl p-3 text-center border border-[#EEF1F5]">
+                    <p className="text-xl font-black text-[#0052FF]">{proposalCount !== undefined ? proposalCount.toString() : '—'}</p>
+                    <p className="text-[#5B6271] text-xs font-semibold">Proposals</p>
+                  </div>
+                </div>
+
+                {/* Tool cards grid */}
+                <div className="grid grid-cols-2 gap-3 px-4 py-3">
+                  {TOOL_CARDS.map(tool => {
+                    const isDeployed = tool.deployed
+                    const isActive = activeTool === tool.id
+                    return (
+                      <button
+                        key={tool.id}
+                        onClick={() => {
+                          if (!isDeployed) return
+                          setActiveTool(isActive ? null : tool.id)
+                        }}
+                        className={`rounded-2xl p-4 text-left border transition-all ${
+                          isDeployed
+                            ? isActive
+                              ? 'bg-[#E6EEFF] border-[#0052FF] shadow-sm'
+                              : 'bg-white border-[#E4E7EB] hover:border-[#0052FF] hover:bg-[#F0F4FF]'
+                            : 'bg-[#F7F9FC] border-[#E4E7EB] opacity-60 cursor-not-allowed'
+                        }`}
+                      >
+                        <p className="font-mono text-2xl font-bold text-[#0052FF] mb-1">{tool.symbol}</p>
+                        <p className="font-black text-[#0A0B0D] text-sm">{tool.label}</p>
+                        <p className="text-[#5B6271] text-xs mt-0.5 leading-relaxed">{tool.desc}</p>
+                        {!isDeployed && (
+                          <a
+                            href="https://remix.ethereum.org"
+                            target="_blank"
+                            onClick={e => e.stopPropagation()}
+                            className="mt-2 inline-block text-[#0052FF] text-xs font-semibold hover:underline"
+                          >
+                            {t('deployViaRemix')}
+                          </a>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* Active tool panel */}
+                {activeTool && (
+                  <div className="mx-4 mb-4 bg-white border border-[#E4E7EB] rounded-2xl p-5 shadow-sm">
+                    {!isConnected && (
+                      <ConnectPrompt message="Connect your wallet to use tools." label={t('connectWallet')} />
+                    )}
+
+                    {isConnected && activeTool === 'counter' && (
+                      <div>
+                        <h3 className="font-black text-lg mb-3">[##] COUNTER</h3>
+                        <div className="grid grid-cols-2 gap-3 mb-4">
+                          <div className="bg-[#F7F9FC] rounded-xl p-3 text-center border border-[#EEF1F5]">
+                            <p className="text-2xl font-black text-[#0052FF]">{globalCounter !== undefined ? globalCounter.toString() : '—'}</p>
+                            <p className="text-xs text-[#5B6271] font-semibold">Global Counter</p>
+                          </div>
+                          <div className="bg-[#F7F9FC] rounded-xl p-3 text-center border border-[#EEF1F5]">
+                            <p className="text-2xl font-black text-[#0052FF]">{userCounter !== undefined ? userCounter.toString() : '—'}</p>
+                            <p className="text-xs text-[#5B6271] font-semibold">Your Count</p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => {
+                            if (!TOOLS_DEPLOYED) return
+                            toolAction(async () => {
+                              await writeContractAsync({
+                                address: TOOLS_ADDRESS,
+                                abi: TOOLS_ABI,
+                                functionName: 'count',
+                                value: parseEther('0.0001'),
+                              })
+                            }, setCounterLoading)
+                          }}
+                          disabled={counterLoading}
+                          className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white py-3 rounded-xl font-bold disabled:opacity-40 transition-colors"
+                        >
+                          {counterLoading ? 'Counting...' : 'Count (+0.0001 ETH)'}
+                        </button>
+                      </div>
+                    )}
+
+                    {isConnected && activeTool === 'streak' && (
+                      <div>
+                        <h3 className="font-black text-lg mb-3">[~] STREAK</h3>
+                        <div className="grid grid-cols-2 gap-3 mb-4">
+                          <div className="bg-[#F7F9FC] rounded-xl p-3 text-center border border-[#EEF1F5]">
+                            <p className="text-2xl font-black text-[#0052FF]">{userStreakDays !== undefined ? userStreakDays.toString() : '—'}</p>
+                            <p className="text-xs text-[#5B6271] font-semibold">Current Streak</p>
+                          </div>
+                          <div className="bg-[#F7F9FC] rounded-xl p-3 text-center border border-[#EEF1F5]">
+                            <p className="text-2xl font-black text-[#0052FF]">{userMaxStreak !== undefined ? userMaxStreak.toString() : '—'}</p>
+                            <p className="text-xs text-[#5B6271] font-semibold">Max Streak</p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => {
+                            if (!TOOLS_DEPLOYED) return
+                            toolAction(async () => {
+                              await writeContractAsync({
+                                address: TOOLS_ADDRESS,
+                                abi: TOOLS_ABI,
+                                functionName: 'checkIn',
+                                value: parseEther('0.0001'),
+                              })
+                            }, setStreakLoading)
+                          }}
+                          disabled={streakLoading || canCheckIn === false}
+                          className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white py-3 rounded-xl font-bold disabled:opacity-40 transition-colors"
+                        >
+                          {streakLoading ? 'Checking in...' : canCheckIn === false ? 'Already checked in today' : 'Check In (+0.0001 ETH)'}
+                        </button>
+                      </div>
+                    )}
+
+                    {isConnected && activeTool === 'logbook' && (
+                      <div>
+                        <h3 className="font-black text-lg mb-3">[📖] LOGBOOK</h3>
+                        <textarea
+                          value={logText}
+                          onChange={e => setLogText(e.target.value)}
+                          placeholder="Write your on-chain log entry (1-280 chars)..."
+                          rows={4}
+                          maxLength={280}
+                          className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-4 py-3 text-sm text-[#0A0B0D] placeholder-[#8A919E] resize-none focus:outline-none focus:border-[#0052FF] mb-2"
+                        />
+                        <p className="text-xs text-[#8A919E] mb-3">{logText.length}/280</p>
+                        <button
+                          onClick={() => {
+                            if (!TOOLS_DEPLOYED || !logText) return
+                            toolAction(async () => {
+                              await writeContractAsync({
+                                address: TOOLS_ADDRESS,
+                                abi: TOOLS_ABI,
+                                functionName: 'log',
+                                args: [logText],
+                                value: parseEther('0.0001'),
+                              })
+                              setLogText('')
+                            }, setLogLoading)
+                          }}
+                          disabled={logLoading || !logText}
+                          className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white py-3 rounded-xl font-bold disabled:opacity-40 transition-colors"
+                        >
+                          {logLoading ? 'Writing...' : 'Write to Blockchain (+0.0001 ETH)'}
+                        </button>
+                      </div>
+                    )}
+
+                    {isConnected && activeTool === 'greeter' && (
+                      <div>
+                        <h3 className="font-black text-lg mb-3">[👋] GREETER</h3>
+                        {userGreeting && (
+                          <div className="bg-[#F0F4FF] border border-[#D6E2FF] rounded-xl p-3 mb-3">
+                            <p className="text-xs text-[#5B6271] font-semibold mb-1">Current greeting:</p>
+                            <p className="text-sm text-[#0A0B0D] font-bold">{userGreeting as string}</p>
+                          </div>
+                        )}
+                        <input
+                          value={greetText}
+                          onChange={e => setGreetText(e.target.value)}
+                          placeholder="Set your on-chain greeting (max 100 chars)..."
+                          maxLength={100}
+                          className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-4 py-3 text-sm text-[#0A0B0D] placeholder-[#8A919E] focus:outline-none focus:border-[#0052FF] mb-3"
+                        />
+                        <button
+                          onClick={() => {
+                            if (!TOOLS_DEPLOYED || !greetText) return
+                            toolAction(async () => {
+                              await writeContractAsync({
+                                address: TOOLS_ADDRESS,
+                                abi: TOOLS_ABI,
+                                functionName: 'greet',
+                                args: [greetText],
+                                value: parseEther('0.0001'),
+                              })
+                              setGreetText('')
+                            }, setGreetLoading)
+                          }}
+                          disabled={greetLoading || !greetText}
+                          className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white py-3 rounded-xl font-bold disabled:opacity-40 transition-colors"
+                        >
+                          {greetLoading ? 'Setting...' : 'Set Greeting (+0.0001 ETH)'}
+                        </button>
+                      </div>
+                    )}
+
+                    {isConnected && activeTool === 'token' && (
+                      <div>
+                        <h3 className="font-black text-lg mb-3">[$] TOKEN FACTORY</h3>
+                        <div className="space-y-3 mb-4">
+                          <input
+                            value={tokenName}
+                            onChange={e => setTokenName(e.target.value)}
+                            placeholder="Token name (e.g. MyToken)"
+                            className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-4 py-3 text-sm text-[#0A0B0D] placeholder-[#8A919E] focus:outline-none focus:border-[#0052FF]"
+                          />
+                          <input
+                            value={tokenSymbol}
+                            onChange={e => setTokenSymbol(e.target.value)}
+                            placeholder="Symbol (e.g. MTK)"
+                            className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-4 py-3 text-sm text-[#0A0B0D] placeholder-[#8A919E] focus:outline-none focus:border-[#0052FF]"
+                          />
+                          <input
+                            value={tokenSupply}
+                            onChange={e => setTokenSupply(e.target.value)}
+                            placeholder="Total supply (1 - 1,000,000,000)"
+                            type="number"
+                            min="1"
+                            max="1000000000"
+                            className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-4 py-3 text-sm text-[#0A0B0D] placeholder-[#8A919E] focus:outline-none focus:border-[#0052FF]"
+                          />
+                        </div>
+                        {tokenCount !== undefined && (
+                          <p className="text-xs text-[#5B6271] mb-3">Tokens deployed: {tokenCount.toString()}</p>
+                        )}
+                        <button
+                          onClick={() => {
+                            if (!TOKEN_FACTORY_DEPLOYED || !tokenName || !tokenSymbol || !tokenSupply) return
+                            toolAction(async () => {
+                              await writeContractAsync({
+                                address: TOKEN_FACTORY_ADDRESS,
+                                abi: TOKEN_FACTORY_ABI,
+                                functionName: 'deployToken',
+                                args: [tokenName, tokenSymbol, BigInt(tokenSupply)],
+                                value: parseEther('0.001'),
+                              })
+                              setTokenName(''); setTokenSymbol(''); setTokenSupply('1000000')
+                            }, setTokenLoading)
+                          }}
+                          disabled={tokenLoading || !tokenName || !tokenSymbol || !tokenSupply}
+                          className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white py-3 rounded-xl font-bold disabled:opacity-40 transition-colors"
+                        >
+                          {tokenLoading ? 'Deploying...' : 'Deploy Token (+0.001 ETH)'}
+                        </button>
+                      </div>
+                    )}
+
+                    {isConnected && activeTool === 'nft' && (
+                      <div>
+                        <h3 className="font-black text-lg mb-3">[*] NFT FACTORY</h3>
+                        <div className="space-y-3 mb-4">
+                          <input
+                            value={nftName}
+                            onChange={e => setNftName(e.target.value)}
+                            placeholder="Collection name"
+                            className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-4 py-3 text-sm text-[#0A0B0D] placeholder-[#8A919E] focus:outline-none focus:border-[#0052FF]"
+                          />
+                          <input
+                            value={nftSymbol}
+                            onChange={e => setNftSymbol(e.target.value)}
+                            placeholder="Symbol (e.g. FNFT)"
+                            className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-4 py-3 text-sm text-[#0A0B0D] placeholder-[#8A919E] focus:outline-none focus:border-[#0052FF]"
+                          />
+                          <input
+                            value={nftMaxSupply}
+                            onChange={e => setNftMaxSupply(e.target.value)}
+                            placeholder="Max supply (1 - 10,000)"
+                            type="number"
+                            min="1"
+                            max="10000"
+                            className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-4 py-3 text-sm text-[#0A0B0D] placeholder-[#8A919E] focus:outline-none focus:border-[#0052FF]"
+                          />
+                          <input
+                            value={nftMintPrice}
+                            onChange={e => setNftMintPrice(e.target.value)}
+                            placeholder="Mint price in ETH"
+                            type="number"
+                            step="0.001"
+                            min="0"
+                            className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-4 py-3 text-sm text-[#0A0B0D] placeholder-[#8A919E] focus:outline-none focus:border-[#0052FF]"
+                          />
+                        </div>
+                        {nftCollectionCount !== undefined && (
+                          <p className="text-xs text-[#5B6271] mb-3">Collections deployed: {nftCollectionCount.toString()}</p>
+                        )}
+                        <button
+                          onClick={() => {
+                            if (!NFT_FACTORY_DEPLOYED || !nftName || !nftSymbol || !nftMaxSupply || !nftMintPrice) return
+                            toolAction(async () => {
+                              await writeContractAsync({
+                                address: NFT_FACTORY_ADDRESS,
+                                abi: NFT_FACTORY_ABI,
+                                functionName: 'deployNFT',
+                                args: [nftName, nftSymbol, BigInt(nftMaxSupply), parseEther(nftMintPrice), ''],
+                                value: parseEther('0.001'),
+                              })
+                              setNftName(''); setNftSymbol(''); setNftMaxSupply('1000'); setNftMintPrice('0.001')
+                            }, setNftLoading)
+                          }}
+                          disabled={nftLoading || !nftName || !nftSymbol || !nftMaxSupply || !nftMintPrice}
+                          className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white py-3 rounded-xl font-bold disabled:opacity-40 transition-colors"
+                        >
+                          {nftLoading ? 'Deploying...' : 'Deploy NFT Collection (+0.001 ETH)'}
+                        </button>
+                      </div>
+                    )}
+
+                    {isConnected && activeTool === 'dao' && (
+                      <div>
+                        <h3 className="font-black text-lg mb-3">[△] SIMPLE DAO</h3>
+                        {proposalCount !== undefined && (
+                          <p className="text-xs text-[#5B6271] mb-3">Active proposals: {proposalCount.toString()}</p>
+                        )}
+                        <div className="space-y-3 mb-4">
+                          <input
+                            value={daoTitle}
+                            onChange={e => setDaoTitle(e.target.value)}
+                            placeholder="Proposal title (1-100 chars)"
+                            maxLength={100}
+                            className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-4 py-3 text-sm text-[#0A0B0D] placeholder-[#8A919E] focus:outline-none focus:border-[#0052FF]"
+                          />
+                          <textarea
+                            value={daoDesc}
+                            onChange={e => setDaoDesc(e.target.value)}
+                            placeholder="Proposal description..."
+                            rows={3}
+                            className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-4 py-3 text-sm text-[#0A0B0D] placeholder-[#8A919E] resize-none focus:outline-none focus:border-[#0052FF]"
+                          />
+                        </div>
+                        <button
+                          onClick={() => {
+                            if (!DAO_DEPLOYED || !daoTitle) return
+                            toolAction(async () => {
+                              await writeContractAsync({
+                                address: DAO_ADDRESS,
+                                abi: DAO_ABI,
+                                functionName: 'propose',
+                                args: [daoTitle, daoDesc],
+                                value: parseEther('0.001'),
+                              })
+                              setDaoTitle(''); setDaoDesc('')
+                            }, setDaoLoading)
+                          }}
+                          disabled={daoLoading || !daoTitle}
+                          className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white py-3 rounded-xl font-bold disabled:opacity-40 transition-colors"
+                        >
+                          {daoLoading ? 'Creating...' : 'Create Proposal (+0.001 ETH)'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* ══ LEADERBOARD ══ */}
             {activeTab === 'leaderboard' && (
               <div>
@@ -680,8 +1313,17 @@ export default function Home() {
                     <div className="bg-white border border-[#E4E7EB] rounded-2xl overflow-hidden shadow-sm">
                       <div className="h-28 bg-gradient-to-r from-[#0052FF] via-[#1652F0] to-[#4D8FFF]" />
                       <div className="px-6 pb-6">
-                        <div className="-mt-12 mb-4">
+                        <div className="relative -mt-12 mb-4 inline-block">
                           <Avatar addr={address!} profiles={profiles} size="lg" />
+                          <label className="absolute bottom-0 right-0 w-7 h-7 bg-[#0052FF] hover:bg-[#1652F0] rounded-full flex items-center justify-center cursor-pointer shadow-md transition-colors">
+                            <span className="text-white text-xs">📷</span>
+                            <input type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} disabled={uploadingAvatar} />
+                          </label>
+                          {uploadingAvatar && (
+                            <div className="absolute inset-0 bg-white/70 rounded-full flex items-center justify-center">
+                              <span className="text-xs">...</span>
+                            </div>
+                          )}
                         </div>
                         <h2 className="text-2xl font-black text-[#0A0B0D]">{myProfile[0]}</h2>
                         <p className="text-[#5B6271] text-sm mb-1">{address?.slice(0,10)}...{address?.slice(-6)}</p>
@@ -813,6 +1455,58 @@ export default function Home() {
           ))}
         </div>
       </nav>
+
+      {/* ── User Profile Modal ── */}
+      {selectedUser && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4" onClick={() => setSelectedUser(null)}>
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="sticky top-0 bg-white border-b border-[#EEF1F5] px-5 py-4 flex items-center justify-between">
+              <h2 className="font-black text-lg">Profile</h2>
+              <button onClick={() => setSelectedUser(null)} className="w-8 h-8 rounded-full hover:bg-[#F7F9FC] flex items-center justify-center text-[#5B6271] transition-colors">✕</button>
+            </div>
+            {/* Profile header */}
+            <div className="p-5">
+              <div className="flex items-center gap-4 mb-4">
+                <Avatar addr={selectedUser} profiles={profiles} size="lg" />
+                <div>
+                  <h3 className="text-xl font-black">{getUsername(selectedUser)}</h3>
+                  <p className="text-[#8A919E] text-sm">{selectedUser.slice(0,8)}...{selectedUser.slice(-6)}</p>
+                  <a href={`https://basescan.org/address/${selectedUser}`} target="_blank" className="text-[#0052FF] text-xs hover:underline">View on Basescan ↗</a>
+                </div>
+              </div>
+              {profiles[selectedUser.toLowerCase()] && (
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  <div className="bg-[#F7F9FC] rounded-xl p-3 text-center border border-[#EEF1F5]">
+                    <p className="text-2xl font-black text-[#0052FF]">{profiles[selectedUser.toLowerCase()].flames.toString()}</p>
+                    <p className="text-[#5B6271] text-xs font-semibold">🔥 Flames</p>
+                  </div>
+                  <div className="bg-[#F7F9FC] rounded-xl p-3 text-center border border-[#EEF1F5]">
+                    <p className="text-2xl font-black text-[#0052FF]">{parseFloat(formatEther(profiles[selectedUser.toLowerCase()].tips)).toFixed(4)}</p>
+                    <p className="text-[#5B6271] text-xs font-semibold">💸 ETH</p>
+                  </div>
+                </div>
+              )}
+              {/* User's posts */}
+              <div className="space-y-3">
+                {posts.filter(p => p.author.toLowerCase() === selectedUser.toLowerCase()).map(post => (
+                  <div key={post.id.toString()} className="bg-[#F7F9FC] rounded-2xl p-4 border border-[#EEF1F5]">
+                    {post.content && <p className="text-sm text-[#0A0B0D] mb-2">{post.content}</p>}
+                    {post.ipfsHash && <img src={`https://gateway.pinata.cloud/ipfs/${post.ipfsHash}`} className="w-full max-h-40 object-cover rounded-xl mb-2" alt="" />}
+                    <div className="flex items-center gap-3 text-xs text-[#8A919E]">
+                      <span>🔥 {post.likes.toString()}</span>
+                      <span>💸 {parseFloat(formatEther(post.tips)).toFixed(4)} ETH</span>
+                      <span className="ml-auto">{timeAgo(post.timestamp)}</span>
+                    </div>
+                  </div>
+                ))}
+                {posts.filter(p => p.author.toLowerCase() === selectedUser.toLowerCase()).length === 0 && (
+                  <p className="text-[#8A919E] text-sm text-center py-4">No posts yet</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
