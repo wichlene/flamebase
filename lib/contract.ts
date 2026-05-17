@@ -103,5 +103,40 @@ export const CONTRACT_ABI = [
     "outputs": [{"internalType": "address","name": "","type": "address"}],
     "stateMutability": "view",
     "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "photoPrice",
+    "outputs": [{"internalType": "uint256","name": "","type": "uint256"}],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [{"internalType": "uint256","name": "_price","type": "uint256"}],
+    "name": "setLikePrice",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [{"internalType": "uint256","name": "_price","type": "uint256"}],
+    "name": "setCommentPrice",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [{"internalType": "uint256","name": "_price","type": "uint256"}],
+    "name": "setPostPrice",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [{"internalType": "uint256","name": "_price","type": "uint256"}],
+    "name": "setPhotoPrice",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
   }
 ] as const

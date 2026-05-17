@@ -564,9 +564,10 @@ export default function Home() {
   const navItems: { tab: Tab; icon: string; labelKey: string }[] = [
     { tab: 'feed', icon: '🏠', labelKey: 'navFeed' },
     { tab: 'post' as Tab, icon: '✏️', labelKey: 'navNewPost' },
-    { tab: 'tools' as Tab, icon: '🔧', labelKey: 'navTools' },
     { tab: 'leaderboard' as Tab, icon: '🏆', labelKey: 'navLeaderboard' },
     { tab: 'profile' as Tab, icon: '👤', labelKey: 'navProfile' },
+    // Tools tab hidden for launch — only visible to admin
+    ...(isAdmin ? [{ tab: 'tools' as Tab, icon: '🔧', labelKey: 'navTools' }] : []),
   ]
 
   return (
@@ -1487,10 +1488,33 @@ export default function Home() {
                           </div>
                         </div>
 
+                        {/* One-click price setup */}
+                        <div className="bg-gradient-to-br from-[#0052FF] to-[#1652F0] rounded-xl p-4 mb-3 text-white">
+                          <p className="font-black text-sm mb-1">⚡ One-Click Setup</p>
+                          <p className="text-white/80 text-xs mb-3">Sets like/comment/post/photo prices to $0.07 each. Tip stays free for users to choose amount.</p>
+                          <button
+                            onClick={async () => {
+                              if (loading) return
+                              setLoading(true)
+                              try {
+                                const price = fixedFee
+                                await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'setLikePrice', args: [price] }, 'setLikePrice')
+                                await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'setCommentPrice', args: [price] }, 'setCommentPrice')
+                                await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'setPostPrice', args: [price] }, 'setPostPrice')
+                                await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'setPhotoPrice', args: [price] }, 'setPhotoPrice')
+                              } catch (e) { console.error(e) }
+                              setLoading(false)
+                            }}
+                            disabled={loading}
+                            className="w-full bg-white text-[#0052FF] py-2.5 rounded-lg font-black text-sm hover:bg-white/90 disabled:opacity-50 transition-colors"
+                          >
+                            {loading ? 'Setting prices... (4 transactions)' : '🚀 Set all fees to $0.07'}
+                          </button>
+                        </div>
                         <div className="space-y-2">
                           <a href={`https://basescan.org/address/${CONTRACT_ADDRESS}#writeContract`} target="_blank"
                             className="flex items-center justify-between bg-[#E6EEFF] border border-[#D6E2FF] text-[#0052FF] py-3 px-4 rounded-xl text-sm hover:bg-[#D6E2FF] transition-colors font-semibold">
-                            <span>⚙️ {t('changePrices')}</span><span>↗</span>
+                            <span>⚙️ Manual price control on Basescan</span><span>↗</span>
                           </a>
                           <a href={`https://basescan.org/address/${CONTRACT_ADDRESS}`} target="_blank"
                             className="flex items-center justify-between bg-[#F7F9FC] border border-[#E4E7EB] text-[#5B6271] py-3 px-4 rounded-xl text-sm hover:text-[#0A0B0D] transition-colors font-semibold">
