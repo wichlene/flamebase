@@ -117,8 +117,14 @@ export default function Home() {
   const publicClient = usePublicClient()
   const { writeContractAsync } = useWriteContract()
 
-  // $0.07 fixed fee — recalculated when ETH price updates
-  const fixedFee = parseEther((0.07 / ethPrice).toFixed(10))
+  // $0.07 fixed fee in ETH — recalculated when ETH price updates
+  const fixedFeeETH = (0.07 / ethPrice).toFixed(10)
+  const fixedFee = parseEther(fixedFeeETH)
+  // Use the higher of contract price or fixedFee so transactions always pass
+  const effectiveFee = (contractFee?: bigint) => {
+    if (!contractFee || contractFee === 0n) return fixedFee
+    return contractFee > fixedFee ? contractFee : fixedFee
+  }
 
   // New state variables
   const [hiddenPosts, setHiddenPosts] = useState<Set<string>>(new Set())
@@ -403,7 +409,7 @@ export default function Home() {
       }
       await writeContractAsync({
         address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'createPost',
-        args: [newPost, ipfsHash], value: fixedFee,
+        args: [newPost, ipfsHash], value: effectiveFee(postPrice as bigint | undefined),
       })
       setNewPost(''); setSelectedFile(null); setPreviewUrl(null)
       setTimeout(() => refetchCount(), 3000)
@@ -416,7 +422,7 @@ export default function Home() {
     if (!isConnected) return
     setLoadingAction(`like-${postId}`)
     try {
-      await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'like', args: [postId], value: fixedFee })
+      await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'like', args: [postId], value: effectiveFee(likePrice as bigint | undefined) })
       setPosts(prev => prev.map(p => p.id === postId ? { ...p, likes: p.likes + 1n } : p))
     } catch (e) { console.error(e) }
     setLoadingAction(null)
@@ -428,7 +434,7 @@ export default function Home() {
     if (!text) return
     setLoadingAction(`comment-${postId}`)
     try {
-      await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'comment', args: [postId, text], value: fixedFee })
+      await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'comment', args: [postId, text], value: effectiveFee(commentPrice as bigint | undefined) })
       setCommentTexts(prev => ({ ...prev, [key]: '' }))
       setReplyingTo(prev => ({ ...prev, [key]: '' }))
       await loadComments(key)
@@ -490,7 +496,7 @@ export default function Home() {
           abi: CONTRACT_ABI,
           functionName: 'uploadAvatar',
           args: [data.ipfsHash],
-          value: fixedFee,
+          value: effectiveFee(undefined),
         })
         setTimeout(() => refetchProfile(), 3000)
       }
@@ -985,7 +991,7 @@ export default function Home() {
                                 address: TOOLS_ADDRESS,
                                 abi: TOOLS_ABI,
                                 functionName: 'count',
-                                value: fixedFee,
+                                value: effectiveFee(parseEther('0.0001')),
                               })
                             }, setCounterLoading)
                           }}
@@ -1018,7 +1024,7 @@ export default function Home() {
                                 address: TOOLS_ADDRESS,
                                 abi: TOOLS_ABI,
                                 functionName: 'checkIn',
-                                value: fixedFee,
+                                value: effectiveFee(parseEther('0.0001')),
                               })
                             }, setStreakLoading)
                           }}
@@ -1051,7 +1057,7 @@ export default function Home() {
                                 abi: TOOLS_ABI,
                                 functionName: 'log',
                                 args: [logText],
-                                value: fixedFee,
+                                value: effectiveFee(parseEther('0.0001')),
                               })
                               setLogText('')
                             }, setLogLoading)
@@ -1089,7 +1095,7 @@ export default function Home() {
                                 abi: TOOLS_ABI,
                                 functionName: 'greet',
                                 args: [greetText],
-                                value: fixedFee,
+                                value: effectiveFee(parseEther('0.0001')),
                               })
                               setGreetText('')
                             }, setGreetLoading)
@@ -1140,7 +1146,7 @@ export default function Home() {
                                 abi: TOKEN_FACTORY_ABI,
                                 functionName: 'deployToken',
                                 args: [tokenName, tokenSymbol, BigInt(tokenSupply)],
-                                value: fixedFee,
+                                value: effectiveFee(parseEther('0.0001')),
                               })
                               setTokenName(''); setTokenSymbol(''); setTokenSupply('1000000')
                             }, setTokenLoading)
@@ -1200,7 +1206,7 @@ export default function Home() {
                                 abi: NFT_FACTORY_ABI,
                                 functionName: 'deployNFT',
                                 args: [nftName, nftSymbol, BigInt(nftMaxSupply), parseEther(nftMintPrice), ''],
-                                value: fixedFee,
+                                value: effectiveFee(parseEther('0.0001')),
                               })
                               setNftName(''); setNftSymbol(''); setNftMaxSupply('1000'); setNftMintPrice('0.001')
                             }, setNftLoading)
@@ -1244,7 +1250,7 @@ export default function Home() {
                                 abi: DAO_ABI,
                                 functionName: 'propose',
                                 args: [daoTitle, daoDesc],
-                                value: fixedFee,
+                                value: effectiveFee(parseEther('0.0001')),
                               })
                               setDaoTitle(''); setDaoDesc('')
                             }, setDaoLoading)
