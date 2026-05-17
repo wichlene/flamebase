@@ -1,6 +1,6 @@
 'use client'
 
-import { RainbowKitProvider, getDefaultConfig, darkTheme } from '@rainbow-me/rainbowkit'
+import { RainbowKitProvider, getDefaultConfig, lightTheme } from '@rainbow-me/rainbowkit'
 import {
   metaMaskWallet,
   coinbaseWallet,
@@ -39,7 +39,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
         <RainbowKitProvider
-          theme={darkTheme({
+          theme={lightTheme({
             accentColor: '#0052FF',
             accentColorForeground: 'white',
             borderRadius: 'large',

@@ -48,12 +48,24 @@ function Avatar({ addr, profiles, size = 'md' }: { addr: string; profiles: Recor
   )
 }
 
+function FlameLogo({ size = 32 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 32 32" className="flex-shrink-0">
+      <rect width="32" height="32" rx="8" fill="#0052FF"/>
+      <path d="M16 6.5c1.8 3.5-2 5.4-2 9.5a4 4 0 0 0 8 0c0-1.8-1-2.7-2-3.7 1 3.7-2.7 3.7-2.7 1.7 0-2.7 1.7-4.7-1.3-7.5z" fill="#fff"/>
+      <path d="M14.5 19c-1 1.5.5 4 1.5 4s2.5-2.5 1.5-4c-.5 1.2-2 1.2-3 0z" fill="#fff" opacity="0.85"/>
+    </svg>
+  )
+}
+
 function ConnectPrompt({ message }: { message: string }) {
   return (
-    <div className="bg-[#16181D] border border-[#2C2D33] rounded-2xl p-6 text-center">
-      <div className="text-4xl mb-3">🔐</div>
-      <p className="text-white font-semibold mb-1">Cüzdan Bağla</p>
-      <p className="text-[#8A919E] text-sm mb-5">{message}</p>
+    <div className="bg-white border border-[#E4E7EB] rounded-2xl p-8 text-center shadow-sm">
+      <div className="w-14 h-14 mx-auto rounded-2xl bg-[#E6EEFF] flex items-center justify-center mb-4">
+        <span className="text-2xl">🔐</span>
+      </div>
+      <p className="text-[#0A0B0D] font-bold mb-1 text-lg">Cüzdan Bağla</p>
+      <p className="text-[#5B6271] text-sm mb-6">{message}</p>
       <div className="flex justify-center">
         <ConnectButton />
       </div>
@@ -101,7 +113,6 @@ export default function Home() {
 
   const hasProfile = myProfile && myProfile[2]
   const isAdmin = address?.toLowerCase() === ADMIN_ADDRESS.toLowerCase()
-  const myUsername = myProfile?.[0] || address?.slice(0, 6) || ''
 
   const fetchProfileData = useCallback(async (addr: string): Promise<ProfileData | null> => {
     if (!publicClient) return null
@@ -285,50 +296,50 @@ export default function Home() {
   ]
 
   return (
-    <div className="min-h-screen bg-[#0A0B0D] text-white flex">
+    <div className="min-h-screen bg-white text-[#0A0B0D] flex">
 
       {/* ── Left Sidebar (desktop) ── */}
-      <aside className="hidden md:flex flex-col fixed left-0 top-0 h-full w-60 bg-[#0F1115] border-r border-[#1E2128] z-40 px-3 py-5">
+      <aside className="hidden md:flex flex-col fixed left-0 top-0 h-full w-60 bg-white border-r border-[#E4E7EB] z-40 px-3 py-5">
         <div className="flex items-center gap-2.5 mb-8 px-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#0052FF] to-[#1652F0] flex items-center justify-center text-lg">🔥</div>
-          <span className="text-lg font-black text-white">FlameBase</span>
+          <FlameLogo size={36} />
+          <span className="text-lg font-black text-[#0A0B0D]">FlameBase</span>
         </div>
         <nav className="flex-1 space-y-1">
           {navItems.map(({ tab, icon, label }) => (
             <button key={tab} onClick={() => setActiveTab(tab)}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold transition-all text-left text-sm ${
+              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl font-semibold transition-all text-left text-sm ${
                 activeTab === tab
-                  ? 'bg-[#0052FF]/15 text-[#4D8FFF] border border-[#0052FF]/30'
-                  : 'text-[#8A919E] hover:bg-[#16181D] hover:text-white'
+                  ? 'bg-[#E6EEFF] text-[#0052FF]'
+                  : 'text-[#5B6271] hover:bg-[#F7F9FC] hover:text-[#0A0B0D]'
               }`}>
-              <span className="text-xl">{icon}</span>{label}
+              <span className="text-lg">{icon}</span>{label}
             </button>
           ))}
         </nav>
-        <div className="border-t border-[#1E2128] pt-4 mt-4 space-y-3">
+        <div className="border-t border-[#EEF1F5] pt-4 mt-4 space-y-3">
           {isConnected && address ? (
-            <div className="flex items-center gap-2.5 px-2">
+            <div className="flex items-center gap-2.5 px-2 mb-1">
               <Avatar addr={address} profiles={profiles} size="sm" />
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-bold truncate text-white">{myProfile?.[0] || 'Bağlandın'}</p>
+                <p className="text-sm font-bold truncate text-[#0A0B0D]">{myProfile?.[0] || 'Bağlandın'}</p>
                 <p className="text-xs text-[#8A919E] truncate">{address.slice(0,6)}...{address.slice(-4)}</p>
               </div>
             </div>
           ) : (
-            <p className="text-xs text-[#8A919E] px-2">Etkileşim için bağlan</p>
+            <p className="text-xs text-[#8A919E] px-2 mb-1">Etkileşim için bağlan</p>
           )}
           <ConnectButton />
         </div>
       </aside>
 
       {/* ── Main Content ── */}
-      <main className="flex-1 md:ml-60 xl:mr-72 min-h-screen">
+      <main className="flex-1 md:ml-60 xl:mr-72 min-h-screen border-x border-[#EEF1F5]">
 
         {/* Mobile header */}
-        <header className="md:hidden fixed top-0 left-0 right-0 z-50 bg-[#0F1115]/95 backdrop-blur border-b border-[#1E2128] px-4 py-3 flex items-center justify-between">
+        <header className="md:hidden fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur border-b border-[#E4E7EB] px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#0052FF] to-[#1652F0] flex items-center justify-center text-base">🔥</div>
-            <span className="font-black text-base text-white">FlameBase</span>
+            <FlameLogo size={32} />
+            <span className="font-black text-base text-[#0A0B0D]">FlameBase</span>
           </div>
           <ConnectButton accountStatus="avatar" chainStatus="none" showBalance={false} />
         </header>
@@ -338,29 +349,29 @@ export default function Home() {
           {/* ══ FEED ══ */}
           {activeTab === 'feed' && (
             <div>
-              <div className="hidden md:flex items-center justify-between px-5 py-4 border-b border-[#1E2128] sticky top-0 bg-[#0A0B0D]/90 backdrop-blur z-10">
-                <h1 className="text-lg font-black">Feed</h1>
+              <div className="hidden md:flex items-center justify-between px-5 py-4 border-b border-[#EEF1F5] sticky top-0 bg-white/95 backdrop-blur z-10">
+                <h1 className="text-lg font-black text-[#0A0B0D]">Feed</h1>
                 <button onClick={() => setActiveTab('post')}
-                  className="bg-[#0052FF] hover:bg-[#1652F0] px-5 py-2 rounded-xl font-bold text-sm transition-colors">
+                  className="bg-[#0052FF] hover:bg-[#1652F0] text-white px-5 py-2 rounded-xl font-bold text-sm transition-colors shadow-sm">
                   + Yeni Post
                 </button>
               </div>
 
               {!isConnected && (
-                <div className="mx-4 mt-4 p-4 rounded-2xl bg-gradient-to-r from-[#0052FF]/10 to-[#1652F0]/10 border border-[#0052FF]/30 flex items-center gap-3">
-                  <div className="text-2xl">👋</div>
-                  <div className="flex-1">
-                    <p className="font-bold text-white text-sm">FlameBase'e hoş geldin</p>
-                    <p className="text-[#8A919E] text-xs">Gezinmek için cüzdana gerek yok. Etkileşim için bağlan.</p>
+                <div className="mx-4 mt-4 p-4 rounded-2xl bg-[#F0F4FF] border border-[#D6E2FF] flex items-center gap-3">
+                  <FlameLogo size={36} />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-[#0A0B0D] text-sm">FlameBase'e hoş geldin</p>
+                    <p className="text-[#5B6271] text-xs">Gezinmek serbest. Etkileşim için cüzdan bağla.</p>
                   </div>
                   <ConnectButton accountStatus="avatar" chainStatus="none" showBalance={false} />
                 </div>
               )}
 
               {posts.length === 0 && (
-                <div className="text-center text-[#8A919E] mt-40 px-6">
+                <div className="text-center text-[#5B6271] mt-40 px-6">
                   <div className="text-7xl mb-4">🔥</div>
-                  <p className="font-bold text-white text-xl">Henüz post yok</p>
+                  <p className="font-bold text-[#0A0B0D] text-xl">Henüz post yok</p>
                   <p className="text-sm mt-2">İlk alevi sen yak!</p>
                 </div>
               )}
@@ -373,7 +384,7 @@ export default function Home() {
                 const isCommenting = loadingAction === `comment-${post.id}`
 
                 return (
-                  <article key={key} className="border-b border-[#1E2128] hover:bg-[#0F1115] transition-colors">
+                  <article key={key} className="border-b border-[#EEF1F5] hover:bg-[#FAFBFD] transition-colors">
                     <div className="p-4">
                       <div className="flex gap-3">
                         <div className="flex-shrink-0">
@@ -381,20 +392,20 @@ export default function Home() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1 flex-wrap">
-                            <span className="font-black text-white text-[15px]">{getUsername(post.author)}</span>
-                            <span className="text-[#5B6271] text-xs">{post.author.slice(0,6)}...{post.author.slice(-4)}</span>
-                            <span className="text-[#5B6271] text-xs">·</span>
+                            <span className="font-bold text-[#0A0B0D] text-[15px]">{getUsername(post.author)}</span>
+                            <span className="text-[#8A919E] text-xs">{post.author.slice(0,6)}...{post.author.slice(-4)}</span>
+                            <span className="text-[#8A919E] text-xs">·</span>
                             <span className="text-[#8A919E] text-xs">{timeAgo(post.timestamp)}</span>
                             <a href={`https://basescan.org/address/${post.author}`} target="_blank"
-                              className="ml-auto text-[#5B6271] hover:text-[#4D8FFF] text-xs transition-colors">↗</a>
+                              className="ml-auto text-[#8A919E] hover:text-[#0052FF] text-xs transition-colors">↗</a>
                           </div>
 
                           {post.content && (
-                            <p className="text-[#E5E7EB] text-[15px] leading-relaxed mb-3 whitespace-pre-wrap">{post.content}</p>
+                            <p className="text-[#0A0B0D] text-[15px] leading-relaxed mb-3 whitespace-pre-wrap">{post.content}</p>
                           )}
 
                           {post.ipfsHash && (
-                            <div className="rounded-2xl overflow-hidden mb-3 border border-[#1E2128]">
+                            <div className="rounded-2xl overflow-hidden mb-3 border border-[#E4E7EB]">
                               <img src={`https://gateway.pinata.cloud/ipfs/${post.ipfsHash}`}
                                 className="w-full max-h-[520px] object-cover" alt="post" />
                             </div>
@@ -403,14 +414,14 @@ export default function Home() {
                           <div className="flex items-center gap-0.5 -ml-2 mt-1">
                             <button onClick={() => handleLike(post.id)} disabled={isLiking || !isConnected}
                               title={!isConnected ? 'Cüzdan bağla' : ''}
-                              className="flex items-center gap-1.5 text-[#8A919E] hover:text-[#FF6B35] hover:bg-[#FF6B35]/10 rounded-xl px-3 py-2 text-sm transition-all group disabled:opacity-50 disabled:hover:bg-transparent">
+                              className="flex items-center gap-1.5 text-[#5B6271] hover:text-[#FF6B35] hover:bg-[#FFF0EB] rounded-xl px-3 py-2 text-sm transition-all group disabled:opacity-50 disabled:hover:bg-transparent">
                               <span className="text-lg group-hover:scale-125 transition-transform">🔥</span>
                               <span className="font-bold">{post.likes.toString()}</span>
-                              <span className="text-[11px] opacity-50 hidden sm:inline">{fmtPrice(likePrice)}</span>
+                              <span className="text-[11px] opacity-60 hidden sm:inline">{fmtPrice(likePrice)}</span>
                             </button>
 
                             <button onClick={() => toggleComments(key)}
-                              className={`flex items-center gap-1.5 hover:bg-[#0052FF]/10 rounded-xl px-3 py-2 text-sm transition-all ${expandedComments[key] ? 'text-[#4D8FFF]' : 'text-[#8A919E] hover:text-[#4D8FFF]'}`}>
+                              className={`flex items-center gap-1.5 hover:bg-[#E6EEFF] rounded-xl px-3 py-2 text-sm transition-all ${expandedComments[key] ? 'text-[#0052FF] bg-[#E6EEFF]' : 'text-[#5B6271] hover:text-[#0052FF]'}`}>
                               <span className="text-lg">💬</span>
                               <span className="font-bold">{comments.length > 0 ? comments.length : ''}</span>
                             </button>
@@ -420,40 +431,40 @@ export default function Home() {
                                 value={tipAmounts[key] || ''}
                                 onChange={e => setTipAmounts(prev => ({ ...prev, [key]: e.target.value }))}
                                 disabled={!isConnected}
-                                className="w-20 bg-[#16181D] border border-[#2C2D33] rounded-xl px-2 py-1.5 text-xs text-white text-center focus:outline-none focus:border-[#0052FF] placeholder-[#5B6271] disabled:opacity-50"
+                                className="w-20 bg-white border border-[#E4E7EB] rounded-xl px-2 py-1.5 text-xs text-[#0A0B0D] text-center focus:outline-none focus:border-[#0052FF] placeholder-[#8A919E] disabled:opacity-50 disabled:bg-[#F7F9FC]"
                                 step="0.001" min="0.001" />
                               <button onClick={() => handleTip(post.id)} disabled={isTipping || !tipAmounts[key] || !isConnected}
                                 title={!isConnected ? 'Cüzdan bağla' : ''}
-                                className="bg-[#0052FF] hover:bg-[#1652F0] disabled:opacity-40 disabled:hover:bg-[#0052FF] px-3 py-1.5 rounded-xl text-xs font-black transition-all whitespace-nowrap">
+                                className="bg-[#0052FF] hover:bg-[#1652F0] text-white disabled:opacity-40 disabled:hover:bg-[#0052FF] px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap shadow-sm">
                                 {isTipping ? '...' : '💸 Tip'}
                               </button>
                             </div>
                           </div>
 
                           {post.tips > 0n && (
-                            <p className="text-xs text-[#4D8FFF]/70 mt-0.5 ml-1">{parseFloat(formatEther(post.tips)).toFixed(4)} ETH tip toplamı</p>
+                            <p className="text-xs text-[#0052FF] mt-1 ml-1 font-semibold">{parseFloat(formatEther(post.tips)).toFixed(4)} ETH tip toplamı</p>
                           )}
                         </div>
                       </div>
 
                       {expandedComments[key] && (
-                        <div className="mt-4 ml-[52px] border-l-2 border-[#1E2128] pl-3 space-y-1">
+                        <div className="mt-4 ml-[52px] border-l-2 border-[#E4E7EB] pl-3 space-y-1">
                           {comments.length === 0 && (
-                            <p className="text-[#5B6271] text-sm py-2">Henüz yorum yok. İlk sen yaz!</p>
+                            <p className="text-[#8A919E] text-sm py-2">Henüz yorum yok. İlk sen yaz!</p>
                           )}
                           {comments.map((c, idx) => (
-                            <div key={idx} className="flex items-start gap-2 py-2 px-2 hover:bg-[#16181D] rounded-xl transition-colors group">
+                            <div key={idx} className="flex items-start gap-2 py-2 px-2 hover:bg-[#F7F9FC] rounded-xl transition-colors group">
                               <Avatar addr={c.commenter} profiles={profiles} size="sm" />
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 mb-0.5">
-                                  <span className="font-bold text-sm text-white">{getUsername(c.commenter)}</span>
-                                  <span className="text-[#5B6271] text-xs">{timeAgo(c.timestamp)}</span>
+                                  <span className="font-bold text-sm text-[#0A0B0D]">{getUsername(c.commenter)}</span>
+                                  <span className="text-[#8A919E] text-xs">{timeAgo(c.timestamp)}</span>
                                 </div>
-                                <p className="text-[#E5E7EB] text-sm leading-relaxed">{c.text}</p>
+                                <p className="text-[#0A0B0D] text-sm leading-relaxed">{c.text}</p>
                               </div>
                               {isConnected && (
                                 <button onClick={() => setReply(key, c.commenter)}
-                                  className="opacity-0 group-hover:opacity-100 text-[#8A919E] hover:text-[#4D8FFF] text-xs transition-all px-2 py-1 rounded-lg hover:bg-[#0052FF]/10 flex-shrink-0">
+                                  className="opacity-0 group-hover:opacity-100 text-[#8A919E] hover:text-[#0052FF] text-xs transition-all px-2 py-1 rounded-lg hover:bg-[#E6EEFF] flex-shrink-0">
                                   Yanıtla
                                 </button>
                               )}
@@ -469,18 +480,18 @@ export default function Home() {
                                   value={commentTexts[key] || ''}
                                   onChange={e => setCommentTexts(prev => ({ ...prev, [key]: e.target.value }))}
                                   onKeyDown={e => e.key === 'Enter' && handleComment(post.id)}
-                                  className="flex-1 bg-[#16181D] border border-[#2C2D33] rounded-xl px-3 py-2 text-sm text-white placeholder-[#5B6271] focus:outline-none focus:border-[#0052FF]"
+                                  className="flex-1 bg-white border border-[#E4E7EB] rounded-xl px-3 py-2 text-sm text-[#0A0B0D] placeholder-[#8A919E] focus:outline-none focus:border-[#0052FF]"
                                 />
                                 <button onClick={() => handleComment(post.id)} disabled={isCommenting || !commentTexts[key]}
-                                  className="bg-[#0052FF] hover:bg-[#1652F0] disabled:opacity-40 px-4 py-2 rounded-xl text-sm font-black transition-colors">
+                                  className="bg-[#0052FF] hover:bg-[#1652F0] text-white disabled:opacity-40 px-4 py-2 rounded-xl text-sm font-bold transition-colors">
                                   {isCommenting ? '...' : '↑'}
                                 </button>
                               </div>
                             </div>
                           ) : (
                             <div className="pt-3 px-2">
-                              <div className="flex items-center justify-between bg-[#16181D] border border-[#2C2D33] rounded-xl px-4 py-3">
-                                <p className="text-[#8A919E] text-sm">Yorum yapmak için bağlan</p>
+                              <div className="flex items-center justify-between bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-4 py-3">
+                                <p className="text-[#5B6271] text-sm">Yorum yapmak için bağlan</p>
                                 <ConnectButton accountStatus="avatar" chainStatus="none" showBalance={false} />
                               </div>
                             </div>
@@ -497,55 +508,55 @@ export default function Home() {
           {/* ══ CREATE POST ══ */}
           {activeTab === 'post' && (
             <div className="p-4 md:p-6">
-              <h1 className="text-xl font-black mb-5 hidden md:block">Yeni Post</h1>
+              <h1 className="text-xl font-black mb-5 hidden md:block text-[#0A0B0D]">Yeni Post</h1>
 
               {!isConnected ? (
                 <ConnectPrompt message="Post oluşturmak için cüzdanını bağla." />
               ) : !hasProfile ? (
-                <div className="bg-[#16181D] border border-[#2C2D33] rounded-2xl p-6">
+                <div className="bg-white border border-[#E4E7EB] rounded-2xl p-6 shadow-sm">
                   <div className="text-center mb-5">
-                    <div className="text-5xl mb-3">🔥</div>
-                    <h2 className="text-xl font-black text-white">Önce Profil Oluştur</h2>
-                    <p className="text-[#8A919E] text-sm mt-2">Kullanıcı adı seç, post atmaya başla</p>
+                    <FlameLogo size={48} />
+                    <h2 className="text-xl font-black text-[#0A0B0D] mt-3">Önce Profil Oluştur</h2>
+                    <p className="text-[#5B6271] text-sm mt-2">Kullanıcı adı seç, post atmaya başla</p>
                   </div>
                   <input
                     type="text" placeholder="Kullanıcı adı" value={newUsername}
                     onChange={e => setNewUsername(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && createProfile()}
-                    className="w-full bg-[#0A0B0D] border border-[#2C2D33] rounded-xl px-4 py-3 mb-3 text-white placeholder-[#5B6271] focus:outline-none focus:border-[#0052FF]"
+                    className="w-full bg-white border border-[#E4E7EB] rounded-xl px-4 py-3 mb-3 text-[#0A0B0D] placeholder-[#8A919E] focus:outline-none focus:border-[#0052FF]"
                   />
                   <button onClick={createProfile} disabled={loading || !newUsername}
-                    className="w-full bg-[#0052FF] hover:bg-[#1652F0] py-3 rounded-xl font-black disabled:opacity-40 transition-colors">
+                    className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white py-3 rounded-xl font-bold disabled:opacity-40 transition-colors shadow-sm">
                     {loading ? 'Oluşturuluyor...' : 'Profil Oluştur'}
                   </button>
                 </div>
               ) : (
-                <div className="bg-[#16181D] border border-[#2C2D33] rounded-2xl overflow-hidden">
-                  <div className="flex items-center gap-3 p-4 border-b border-[#1E2128]">
+                <div className="bg-white border border-[#E4E7EB] rounded-2xl overflow-hidden shadow-sm">
+                  <div className="flex items-center gap-3 p-4 border-b border-[#EEF1F5]">
                     <Avatar addr={address!} profiles={profiles} />
                     <div>
-                      <p className="font-black text-white">{myProfile?.[0]}</p>
-                      <p className="text-xs text-[#8A919E]">Post ücreti: {fmtPrice(postPrice)} ETH</p>
+                      <p className="font-bold text-[#0A0B0D]">{myProfile?.[0]}</p>
+                      <p className="text-xs text-[#5B6271]">Post ücreti: {fmtPrice(postPrice)} ETH</p>
                     </div>
                   </div>
                   <textarea placeholder="Bugün ne yanıyor? 🔥" value={newPost}
                     onChange={e => setNewPost(e.target.value)} rows={6}
-                    className="w-full bg-transparent px-5 py-4 text-white placeholder-[#5B6271] resize-none focus:outline-none text-[16px] leading-relaxed" />
+                    className="w-full bg-transparent px-5 py-4 text-[#0A0B0D] placeholder-[#8A919E] resize-none focus:outline-none text-[16px] leading-relaxed" />
                   {previewUrl && (
-                    <div className="relative mx-4 mb-4 rounded-2xl overflow-hidden border border-[#2C2D33]">
+                    <div className="relative mx-4 mb-4 rounded-2xl overflow-hidden border border-[#E4E7EB]">
                       <img src={previewUrl} className="w-full max-h-80 object-cover" alt="preview" />
                       <button onClick={() => { setSelectedFile(null); setPreviewUrl(null) }}
-                        className="absolute top-3 right-3 bg-black/80 backdrop-blur rounded-full w-8 h-8 flex items-center justify-center text-white text-sm hover:bg-black transition-colors">✕</button>
+                        className="absolute top-3 right-3 bg-black/70 backdrop-blur rounded-full w-8 h-8 flex items-center justify-center text-white text-sm hover:bg-black transition-colors">✕</button>
                     </div>
                   )}
-                  <div className="flex items-center gap-3 px-4 py-3 border-t border-[#1E2128]">
-                    <label className="cursor-pointer text-[#8A919E] hover:text-[#4D8FFF] transition-colors">
+                  <div className="flex items-center gap-3 px-4 py-3 border-t border-[#EEF1F5]">
+                    <label className="cursor-pointer text-[#5B6271] hover:text-[#0052FF] transition-colors">
                       <span className="text-2xl">📷</span>
                       <input type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
                     </label>
-                    <span className="text-[#5B6271] text-xs flex-1">{newPost.length}/500</span>
+                    <span className="text-[#8A919E] text-xs flex-1">{newPost.length}/500</span>
                     <button onClick={createPost} disabled={loading || !newPost}
-                      className="bg-[#0052FF] hover:bg-[#1652F0] px-8 py-2.5 rounded-xl font-black disabled:opacity-40 transition-colors">
+                      className="bg-[#0052FF] hover:bg-[#1652F0] text-white px-8 py-2.5 rounded-xl font-bold disabled:opacity-40 transition-colors shadow-sm">
                       {loading ? 'Gönderiliyor...' : 'Gönder'}
                     </button>
                   </div>
@@ -557,33 +568,33 @@ export default function Home() {
           {/* ══ LEADERBOARD ══ */}
           {activeTab === 'leaderboard' && (
             <div>
-              <div className="px-5 py-4 border-b border-[#1E2128] sticky top-0 bg-[#0A0B0D]/90 backdrop-blur z-10">
-                <h1 className="text-lg font-black">🏆 Leaderboard</h1>
-                <p className="text-[#8A919E] text-sm">Base'in en çok yananları</p>
+              <div className="px-5 py-4 border-b border-[#EEF1F5] sticky top-0 bg-white/95 backdrop-blur z-10">
+                <h1 className="text-lg font-black text-[#0A0B0D]">🏆 Leaderboard</h1>
+                <p className="text-[#5B6271] text-sm">Base'in en çok yananları</p>
               </div>
               {leaderboard.length === 0 ? (
-                <div className="text-center text-[#8A919E] mt-32">
+                <div className="text-center text-[#5B6271] mt-32">
                   <p className="text-5xl mb-4">🏆</p>
                   <p>Henüz yeterli veri yok</p>
                 </div>
               ) : (
-                <div className="divide-y divide-[#1E2128]">
+                <div className="divide-y divide-[#EEF1F5]">
                   {leaderboard.map(({ address: addr, profile: p }, idx) => (
-                    <div key={addr} className="flex items-center gap-4 px-5 py-4 hover:bg-[#0F1115] transition-colors">
+                    <div key={addr} className="flex items-center gap-4 px-5 py-4 hover:bg-[#F7F9FC] transition-colors">
                       <div className={`w-9 text-center font-black text-xl flex-shrink-0 ${
-                        idx === 0 ? 'text-yellow-400' : idx === 1 ? 'text-gray-300' : idx === 2 ? 'text-orange-600' : 'text-[#5B6271] text-base'
+                        idx === 0 ? 'text-yellow-500' : idx === 1 ? 'text-gray-400' : idx === 2 ? 'text-orange-500' : 'text-[#8A919E] text-base'
                       }`}>
                         {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}`}
                       </div>
                       <Avatar addr={addr} profiles={profiles} />
                       <div className="flex-1 min-w-0">
-                        <p className="font-black text-white text-[15px]">{p.username}</p>
-                        <p className="text-[#5B6271] text-xs">{addr.slice(0,6)}...{addr.slice(-4)}</p>
+                        <p className="font-bold text-[#0A0B0D] text-[15px]">{p.username}</p>
+                        <p className="text-[#8A919E] text-xs">{addr.slice(0,6)}...{addr.slice(-4)}</p>
                       </div>
                       <div className="text-right">
-                        <p className="font-black text-[#4D8FFF] text-lg">{p.flames.toString()} 🔥</p>
+                        <p className="font-black text-[#0052FF] text-lg">{p.flames.toString()} 🔥</p>
                         {p.tips > 0n && (
-                          <p className="text-[#5B6271] text-xs">{parseFloat(formatEther(p.tips)).toFixed(4)} ETH</p>
+                          <p className="text-[#8A919E] text-xs">{parseFloat(formatEther(p.tips)).toFixed(4)} ETH</p>
                         )}
                       </div>
                     </div>
@@ -596,77 +607,77 @@ export default function Home() {
           {/* ══ PROFILE ══ */}
           {activeTab === 'profile' && (
             <div className="p-4 md:p-6 space-y-4">
-              <h1 className="text-xl font-black hidden md:block">Profil</h1>
+              <h1 className="text-xl font-black hidden md:block text-[#0A0B0D]">Profil</h1>
 
               {!isConnected ? (
                 <ConnectPrompt message="Profilini görmek için cüzdanını bağla." />
               ) : !hasProfile ? (
-                <div className="bg-[#16181D] border border-[#2C2D33] rounded-2xl p-6">
+                <div className="bg-white border border-[#E4E7EB] rounded-2xl p-6 shadow-sm">
                   <div className="text-center mb-5">
-                    <div className="text-5xl mb-3">🔥</div>
-                    <h2 className="text-xl font-black text-white">Profil Oluştur</h2>
-                    <p className="text-[#8A919E] text-sm mt-2">On-chain kimliğini oluştur</p>
+                    <FlameLogo size={48} />
+                    <h2 className="text-xl font-black text-[#0A0B0D] mt-3">Profil Oluştur</h2>
+                    <p className="text-[#5B6271] text-sm mt-2">On-chain kimliğini oluştur</p>
                   </div>
                   <input
                     type="text" placeholder="Kullanıcı adı" value={newUsername}
                     onChange={e => setNewUsername(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && createProfile()}
-                    className="w-full bg-[#0A0B0D] border border-[#2C2D33] rounded-xl px-4 py-3 mb-3 text-white placeholder-[#5B6271] focus:outline-none focus:border-[#0052FF]"
+                    className="w-full bg-white border border-[#E4E7EB] rounded-xl px-4 py-3 mb-3 text-[#0A0B0D] placeholder-[#8A919E] focus:outline-none focus:border-[#0052FF]"
                   />
                   <button onClick={createProfile} disabled={loading || !newUsername}
-                    className="w-full bg-[#0052FF] hover:bg-[#1652F0] py-3 rounded-xl font-black disabled:opacity-40 transition-colors">
+                    className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white py-3 rounded-xl font-bold disabled:opacity-40 transition-colors shadow-sm">
                     {loading ? 'Oluşturuluyor...' : 'Profil Oluştur'}
                   </button>
                 </div>
               ) : myProfile ? (
                 <>
-                  <div className="bg-[#16181D] border border-[#2C2D33] rounded-2xl overflow-hidden">
-                    <div className="h-28 bg-gradient-to-r from-[#0052FF]/40 via-[#1652F0]/30 to-[#0052FF]/40" />
+                  <div className="bg-white border border-[#E4E7EB] rounded-2xl overflow-hidden shadow-sm">
+                    <div className="h-28 bg-gradient-to-r from-[#0052FF] via-[#1652F0] to-[#4D8FFF]" />
                     <div className="px-6 pb-6">
                       <div className="-mt-12 mb-4">
                         <Avatar addr={address!} profiles={profiles} size="lg" />
                       </div>
-                      <h2 className="text-2xl font-black text-white">{myProfile[0]}</h2>
-                      <p className="text-[#8A919E] text-sm mb-5">{address?.slice(0,10)}...{address?.slice(-6)}</p>
+                      <h2 className="text-2xl font-black text-[#0A0B0D]">{myProfile[0]}</h2>
+                      <p className="text-[#5B6271] text-sm mb-5">{address?.slice(0,10)}...{address?.slice(-6)}</p>
                       <div className="grid grid-cols-2 gap-3">
-                        <div className="bg-[#0A0B0D] rounded-xl p-4 text-center border border-[#1E2128]">
-                          <p className="text-3xl font-black text-[#4D8FFF]">{myProfile[3].toString()}</p>
-                          <p className="text-[#8A919E] text-sm mt-1">🔥 Flames</p>
+                        <div className="bg-[#F7F9FC] rounded-xl p-4 text-center border border-[#EEF1F5]">
+                          <p className="text-3xl font-black text-[#0052FF]">{myProfile[3].toString()}</p>
+                          <p className="text-[#5B6271] text-sm mt-1 font-semibold">🔥 Flames</p>
                         </div>
-                        <div className="bg-[#0A0B0D] rounded-xl p-4 text-center border border-[#1E2128]">
-                          <p className="text-2xl font-black text-[#4D8FFF]">{parseFloat(formatEther(myProfile[4])).toFixed(4)}</p>
-                          <p className="text-[#8A919E] text-sm mt-1">💸 ETH Kazandı</p>
+                        <div className="bg-[#F7F9FC] rounded-xl p-4 text-center border border-[#EEF1F5]">
+                          <p className="text-2xl font-black text-[#0052FF]">{parseFloat(formatEther(myProfile[4])).toFixed(4)}</p>
+                          <p className="text-[#5B6271] text-sm mt-1 font-semibold">💸 ETH</p>
                         </div>
                       </div>
                       <a href={`https://basescan.org/address/${address}`} target="_blank"
-                        className="flex items-center justify-center gap-2 mt-4 text-[#8A919E] hover:text-[#4D8FFF] text-sm transition-colors">
+                        className="flex items-center justify-center gap-2 mt-4 text-[#5B6271] hover:text-[#0052FF] text-sm transition-colors font-semibold">
                         Basescan'de Görüntüle ↗
                       </a>
                     </div>
                   </div>
 
                   {isAdmin && (
-                    <div className="bg-[#16181D] border border-[#0052FF]/40 rounded-2xl p-5">
+                    <div className="bg-white border border-[#0052FF]/30 rounded-2xl p-5 shadow-sm">
                       <div className="flex items-center gap-2 mb-3">
                         <span>👑</span>
-                        <p className="text-[#4D8FFF] font-black text-lg">Admin Paneli</p>
+                        <p className="text-[#0052FF] font-black text-lg">Admin Paneli</p>
                       </div>
-                      <p className="text-[#8A919E] text-xs mb-4">Tüm işlem ücretleri otomatik olarak cüzdanına geliyor.</p>
+                      <p className="text-[#5B6271] text-xs mb-4">Tüm işlem ücretleri otomatik olarak cüzdanına geliyor.</p>
                       <div className="space-y-2">
                         <a href={`https://basescan.org/address/${CONTRACT_ADDRESS}#writeContract`} target="_blank"
-                          className="flex items-center justify-between bg-[#0052FF]/10 border border-[#0052FF]/30 text-[#4D8FFF] py-3 px-4 rounded-xl text-sm hover:bg-[#0052FF]/20 transition-colors font-semibold">
+                          className="flex items-center justify-between bg-[#E6EEFF] border border-[#D6E2FF] text-[#0052FF] py-3 px-4 rounded-xl text-sm hover:bg-[#D6E2FF] transition-colors font-semibold">
                           <span>⚙️ Kontrat Fiyatlarını Değiştir</span><span>↗</span>
                         </a>
                         <a href={`https://basescan.org/address/${CONTRACT_ADDRESS}`} target="_blank"
-                          className="flex items-center justify-between bg-[#0A0B0D] border border-[#1E2128] text-[#8A919E] py-3 px-4 rounded-xl text-sm hover:text-white transition-colors font-semibold">
+                          className="flex items-center justify-between bg-[#F7F9FC] border border-[#E4E7EB] text-[#5B6271] py-3 px-4 rounded-xl text-sm hover:text-[#0A0B0D] transition-colors font-semibold">
                           <span>📊 Kontrat İstatistikleri</span><span>↗</span>
                         </a>
                       </div>
-                      <div className="mt-4 p-3 bg-[#0A0B0D] rounded-xl border border-[#1E2128]">
-                        <p className="text-[#5B6271] text-xs mb-1.5 font-semibold">Mevcut fiyatlar:</p>
-                        <p className="text-[#8A919E] text-xs">📝 Post: {fmtPrice(postPrice)} ETH</p>
-                        <p className="text-[#8A919E] text-xs">🔥 Like: {fmtPrice(likePrice)} ETH</p>
-                        <p className="text-[#8A919E] text-xs">💬 Yorum: {fmtPrice(commentPrice)} ETH</p>
+                      <div className="mt-4 p-3 bg-[#F7F9FC] rounded-xl border border-[#EEF1F5]">
+                        <p className="text-[#8A919E] text-xs mb-1.5 font-semibold">Mevcut fiyatlar:</p>
+                        <p className="text-[#5B6271] text-xs">📝 Post: {fmtPrice(postPrice)} ETH</p>
+                        <p className="text-[#5B6271] text-xs">🔥 Like: {fmtPrice(likePrice)} ETH</p>
+                        <p className="text-[#5B6271] text-xs">💬 Yorum: {fmtPrice(commentPrice)} ETH</p>
                       </div>
                     </div>
                   )}
@@ -678,39 +689,39 @@ export default function Home() {
       </main>
 
       {/* ── Right Sidebar — Leaderboard preview (xl+) ── */}
-      <aside className="hidden xl:flex flex-col fixed right-0 top-0 h-full w-72 bg-[#0F1115] border-l border-[#1E2128] z-40 px-4 py-6">
-        <h2 className="text-base font-black mb-4 px-2 text-white">🏆 Top Flamers</h2>
+      <aside className="hidden xl:flex flex-col fixed right-0 top-0 h-full w-72 bg-white border-l border-[#E4E7EB] z-40 px-4 py-6">
+        <h2 className="text-base font-black mb-4 px-2 text-[#0A0B0D]">🏆 Top Flamers</h2>
         <div className="flex-1 space-y-1 overflow-y-auto">
           {leaderboard.slice(0, 12).map(({ address: addr, profile: p }, idx) => (
             <button key={addr} onClick={() => setActiveTab('leaderboard')}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-[#16181D] transition-colors text-left">
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-[#F7F9FC] transition-colors text-left">
               <span className={`text-sm font-black w-5 text-center flex-shrink-0 ${
-                idx === 0 ? 'text-yellow-400' : idx === 1 ? 'text-gray-300' : idx === 2 ? 'text-orange-600' : 'text-[#5B6271]'
+                idx === 0 ? 'text-yellow-500' : idx === 1 ? 'text-gray-400' : idx === 2 ? 'text-orange-500' : 'text-[#8A919E]'
               }`}>{idx + 1}</span>
               <Avatar addr={addr} profiles={profiles} size="sm" />
-              <p className="font-semibold text-sm text-white truncate flex-1">{p.username}</p>
-              <p className="text-[#4D8FFF] text-sm font-black flex-shrink-0">{p.flames.toString()} 🔥</p>
+              <p className="font-semibold text-sm text-[#0A0B0D] truncate flex-1">{p.username}</p>
+              <p className="text-[#0052FF] text-sm font-black flex-shrink-0">{p.flames.toString()} 🔥</p>
             </button>
           ))}
-          {leaderboard.length === 0 && <p className="text-[#5B6271] text-sm px-3">Henüz veri yok</p>}
+          {leaderboard.length === 0 && <p className="text-[#8A919E] text-sm px-3">Henüz veri yok</p>}
         </div>
-        <div className="border-t border-[#1E2128] pt-4 mt-4 space-y-1.5 px-2">
-          <p className="text-[#5B6271] text-xs font-semibold mb-2">Güncel ücretler</p>
-          <p className="text-[#8A919E] text-xs flex justify-between"><span>📝 Post</span><span className="text-white">{fmtPrice(postPrice)} ETH</span></p>
-          <p className="text-[#8A919E] text-xs flex justify-between"><span>🔥 Like</span><span className="text-white">{fmtPrice(likePrice)} ETH</span></p>
-          <p className="text-[#8A919E] text-xs flex justify-between"><span>💬 Yorum</span><span className="text-white">{fmtPrice(commentPrice)} ETH</span></p>
-          <p className="text-[#8A919E] text-xs flex justify-between"><span>💸 Tip</span><span className="text-white">serbest</span></p>
+        <div className="border-t border-[#EEF1F5] pt-4 mt-4 space-y-1.5 px-2">
+          <p className="text-[#8A919E] text-xs font-bold mb-2 uppercase tracking-wider">Güncel ücretler</p>
+          <p className="text-[#5B6271] text-xs flex justify-between"><span>📝 Post</span><span className="text-[#0A0B0D] font-semibold">{fmtPrice(postPrice)} ETH</span></p>
+          <p className="text-[#5B6271] text-xs flex justify-between"><span>🔥 Like</span><span className="text-[#0A0B0D] font-semibold">{fmtPrice(likePrice)} ETH</span></p>
+          <p className="text-[#5B6271] text-xs flex justify-between"><span>💬 Yorum</span><span className="text-[#0A0B0D] font-semibold">{fmtPrice(commentPrice)} ETH</span></p>
+          <p className="text-[#5B6271] text-xs flex justify-between"><span>💸 Tip</span><span className="text-[#0A0B0D] font-semibold">serbest</span></p>
         </div>
       </aside>
 
       {/* ── Mobile bottom nav ── */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-[#0F1115]/95 backdrop-blur border-t border-[#1E2128] z-50">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t border-[#E4E7EB] z-50 shadow-[0_-4px_20px_-4px_rgba(0,0,0,0.05)]">
         <div className="flex">
           {navItems.map(({ tab, icon, label }) => (
             <button key={tab} onClick={() => setActiveTab(tab)}
-              className={`flex-1 py-3 flex flex-col items-center gap-0.5 transition-colors ${activeTab === tab ? 'text-[#4D8FFF]' : 'text-[#5B6271]'}`}>
+              className={`flex-1 py-3 flex flex-col items-center gap-0.5 transition-colors ${activeTab === tab ? 'text-[#0052FF]' : 'text-[#8A919E]'}`}>
               <span className="text-xl">{icon}</span>
-              <span className="text-[10px] font-semibold">{label}</span>
+              <span className="text-[10px] font-bold">{label}</span>
             </button>
           ))}
         </div>
