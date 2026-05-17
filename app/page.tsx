@@ -114,8 +114,25 @@ export default function Home() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [leaderboard, setLeaderboard] = useState<Array<{ address: string; profile: ProfileData }>>([])
   const [ethPrice, setEthPrice] = useState(2500)
+  const [txLog, setTxLog] = useState<Array<{ hash: string; type: string; time: number }>>([])
+  const [showTerminal, setShowTerminal] = useState(false)
   const publicClient = usePublicClient()
-  const { writeContractAsync } = useWriteContract()
+  const { writeContractAsync: rawWriteContract } = useWriteContract()
+
+  // Wrap writeContractAsync to log transactions to terminal
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const writeContractAsync = async (config: any, type?: string) => {
+    const hash = await rawWriteContract(config)
+    if (hash) {
+      const entry = { hash, type: type || config?.functionName || 'tx', time: Date.now() }
+      setTxLog(prev => {
+        const next = [entry, ...prev].slice(0, 50)
+        localStorage.setItem('flamebase_tx_log', JSON.stringify(next))
+        return next
+      })
+    }
+    return hash
+  }
 
   // $0.07 fixed fee in ETH — recalculated when ETH price updates
   const fixedFeeETH = (0.07 / ethPrice).toFixed(10)
@@ -270,6 +287,10 @@ export default function Home() {
   useEffect(() => {
     const stored = localStorage.getItem('flamebase_hidden_posts')
     if (stored) setHiddenPosts(new Set(JSON.parse(stored)))
+    const txStored = localStorage.getItem('flamebase_tx_log')
+    if (txStored) {
+      try { setTxLog(JSON.parse(txStored)) } catch {}
+    }
   }, [])
 
   // Notifications: detect new likes on user posts
@@ -543,6 +564,55 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-white text-[#0A0B0D] flex flex-col">
+
+      {/* Transaction Terminal Modal */}
+      {showTerminal && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setShowTerminal(false)} />
+          <div className="relative bg-[#0A0B0D] rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden border border-green-400/30 z-10">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-green-400/20 bg-[#1a1c20]">
+              <div className="flex items-center gap-2 font-mono text-green-400 text-sm">
+                <span>●</span><span>●</span><span>●</span>
+                <span className="ml-3">flamebase@base ~ $ tx-log</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={() => { setTxLog([]); localStorage.removeItem('flamebase_tx_log') }}
+                  className="text-green-400/60 hover:text-green-400 text-xs font-mono">clear</button>
+                <button onClick={() => setShowTerminal(false)}
+                  className="text-green-400/60 hover:text-green-400 text-xs font-mono px-2">✕</button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto font-mono text-xs p-4 text-green-400 bg-[#0A0B0D]">
+              <p className="text-green-400/60 mb-3">
+                {`> Showing last ${txLog.length} on-chain transactions. Click hash to view on Basescan.`}
+              </p>
+              {txLog.length === 0 ? (
+                <p className="text-green-400/40 mt-8 text-center">No transactions yet. Press a button to start.</p>
+              ) : (
+                <div className="space-y-1">
+                  {txLog.map((tx, i) => {
+                    const time = new Date(tx.time)
+                    const hh = time.getHours().toString().padStart(2, '0')
+                    const mm = time.getMinutes().toString().padStart(2, '0')
+                    const ss = time.getSeconds().toString().padStart(2, '0')
+                    return (
+                      <div key={i} className="flex items-start gap-2 hover:bg-green-400/5 px-2 py-1 rounded">
+                        <span className="text-green-400/50 flex-shrink-0">[{hh}:{mm}:{ss}]</span>
+                        <span className="text-yellow-400 flex-shrink-0">{tx.type}</span>
+                        <a href={`https://basescan.org/tx/${tx.hash}`} target="_blank"
+                          className="text-cyan-400 hover:text-cyan-300 underline truncate">
+                          {tx.hash.slice(0,10)}...{tx.hash.slice(-8)}
+                        </a>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-1">
 
         {/* ── Left Sidebar (desktop) ── */}
@@ -572,6 +642,12 @@ export default function Home() {
               </div>
             )}
             <ConnectButton />
+            {/* Terminal button */}
+            <button onClick={() => setShowTerminal(true)}
+              className="w-full bg-[#0A0B0D] hover:bg-[#1f2125] text-green-400 font-mono text-xs px-3 py-2 rounded-xl transition-colors flex items-center justify-between gap-2">
+              <span>$ tx log</span>
+              <span className="bg-green-400 text-black px-1.5 py-0.5 rounded text-[10px] font-bold">{txLog.length}</span>
+            </button>
             {/* Language selector */}
             <div className="mt-2">
               <select value={lang} onChange={e => setLang(e.target.value as Lang)}
@@ -594,6 +670,10 @@ export default function Home() {
               <span className="font-black text-base text-[#0A0B0D]">FlameBase</span>
             </div>
             <div className="flex items-center gap-2 ml-auto">
+              <button onClick={() => setShowTerminal(true)}
+                className="bg-[#0A0B0D] text-green-400 font-mono text-[11px] px-2 py-1 rounded-lg hover:bg-[#1f2125]">
+                $ tx{txLog.length > 0 ? ` (${txLog.length})` : ''}
+              </button>
               {/* Notification bell */}
               <button
                 onClick={() => setShowNotifications(!showNotifications)}
@@ -1039,33 +1119,34 @@ export default function Home() {
                     {isConnected && activeTool === 'logbook' && (
                       <div>
                         <h3 className="font-black text-lg mb-3">[📖] LOGBOOK</h3>
+                        <p className="text-sm text-[#5B6271] mb-4">One-click on-chain log. Auto-stamps timestamp + your address.</p>
                         <textarea
                           value={logText}
                           onChange={e => setLogText(e.target.value)}
-                          placeholder="Write your on-chain log entry (1-280 chars)..."
-                          rows={4}
+                          placeholder="Optional: custom log text (or leave empty for auto)"
+                          rows={3}
                           maxLength={280}
-                          className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-4 py-3 text-sm text-[#0A0B0D] placeholder-[#8A919E] resize-none focus:outline-none focus:border-[#0052FF] mb-2"
+                          className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-4 py-3 text-sm text-[#0A0B0D] placeholder-[#8A919E] resize-none focus:outline-none focus:border-[#0052FF] mb-3"
                         />
-                        <p className="text-xs text-[#8A919E] mb-3">{logText.length}/280</p>
                         <button
                           onClick={() => {
-                            if (!TOOLS_DEPLOYED || !logText) return
+                            if (!TOOLS_DEPLOYED) return
                             toolAction(async () => {
+                              const auto = `Log @ ${new Date().toISOString()} by ${address?.slice(0,8)}`
                               await writeContractAsync({
                                 address: TOOLS_ADDRESS,
                                 abi: TOOLS_ABI,
                                 functionName: 'log',
-                                args: [logText],
+                                args: [logText || auto],
                                 value: effectiveFee(parseEther('0.0001')),
-                              })
+                              }, 'log')
                               setLogText('')
                             }, setLogLoading)
                           }}
-                          disabled={logLoading || !logText}
+                          disabled={logLoading}
                           className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white py-3 rounded-xl font-bold disabled:opacity-40 transition-colors"
                         >
-                          {logLoading ? 'Writing...' : 'Write to Blockchain ($0.07)'}
+                          {logLoading ? 'Writing...' : '📝 Log on-chain ($0.07)'}
                         </button>
                       </div>
                     )}
