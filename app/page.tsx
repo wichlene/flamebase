@@ -142,6 +142,13 @@ export default function Home() {
     if (!contractFee || contractFee === 0n) return fixedFee
     return contractFee > fixedFee ? contractFee : fixedFee
   }
+  // Show real USD price based on what's actually sent
+  const usdLabel = (ethAmount: bigint) => {
+    const eth = Number(formatEther(ethAmount))
+    const usd = eth * ethPrice
+    return `$${usd.toFixed(2)}`
+  }
+  const toolFeeLabel = usdLabel(effectiveFee(parseEther('0.0001')))
 
   // New state variables
   const [hiddenPosts, setHiddenPosts] = useState<Set<string>>(new Set())
@@ -835,7 +842,7 @@ export default function Home() {
                                 className="flex items-center gap-1.5 text-[#5B6271] hover:text-[#FF6B35] hover:bg-[#FFF0EB] rounded-xl px-3 py-2 text-sm transition-all group disabled:opacity-50 disabled:hover:bg-transparent">
                                 <span className="text-lg group-hover:scale-125 transition-transform">🔥</span>
                                 <span className="font-bold">{post.likes.toString()}</span>
-                                <span className="text-[11px] opacity-60 hidden sm:inline">$0.07</span>
+                                <span className="text-[11px] opacity-60 hidden sm:inline">{usdLabel(effectiveFee(likePrice as bigint | undefined))}</span>
                               </button>
 
                               <button onClick={() => toggleComments(key)}
@@ -894,7 +901,7 @@ export default function Home() {
                                 <Avatar addr={address!} profiles={profiles} size="sm" />
                                 <div className="flex-1 flex gap-2">
                                   <input type="text"
-                                    placeholder={replyingTo[key] ? t('replyPlaceholder', { user: replyingTo[key] }) : `${t('commentPlaceholder')} ($0.07)`}
+                                    placeholder={replyingTo[key] ? t('replyPlaceholder', { user: replyingTo[key] }) : `${t('commentPlaceholder')} (${usdLabel(effectiveFee(commentPrice as bigint | undefined))})`}
                                     value={commentTexts[key] || ''}
                                     onChange={e => setCommentTexts(prev => ({ ...prev, [key]: e.target.value }))}
                                     onKeyDown={e => e.key === 'Enter' && handleComment(post.id)}
@@ -952,7 +959,7 @@ export default function Home() {
                       <Avatar addr={address!} profiles={profiles} />
                       <div>
                         <p className="font-bold text-[#0A0B0D]">{myProfile?.[0]}</p>
-                        <p className="text-xs text-[#5B6271]">{t('postFee')}: $0.07</p>
+                        <p className="text-xs text-[#5B6271]">{t('postFee')}: {usdLabel(effectiveFee(postPrice as bigint | undefined))}</p>
                       </div>
                     </div>
                     <textarea placeholder={t('postPlaceholder')} value={newPost}
@@ -1078,7 +1085,7 @@ export default function Home() {
                           disabled={counterLoading}
                           className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white py-3 rounded-xl font-bold disabled:opacity-40 transition-colors"
                         >
-                          {counterLoading ? 'Counting...' : 'Count ($0.07)'}
+                          {counterLoading ? 'Counting...' : 'Count ({toolFeeLabel})'}
                         </button>
                       </div>
                     )}
@@ -1111,7 +1118,7 @@ export default function Home() {
                           disabled={streakLoading || canCheckIn === false}
                           className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white py-3 rounded-xl font-bold disabled:opacity-40 transition-colors"
                         >
-                          {streakLoading ? 'Checking in...' : canCheckIn === false ? 'Already checked in today' : 'Check In ($0.07)'}
+                          {streakLoading ? 'Checking in...' : canCheckIn === false ? 'Already checked in today' : 'Check In ({toolFeeLabel})'}
                         </button>
                       </div>
                     )}
@@ -1146,7 +1153,7 @@ export default function Home() {
                           disabled={logLoading}
                           className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white py-3 rounded-xl font-bold disabled:opacity-40 transition-colors"
                         >
-                          {logLoading ? 'Writing...' : '📝 Log on-chain ($0.07)'}
+                          {logLoading ? 'Writing...' : '📝 Log on-chain ({toolFeeLabel})'}
                         </button>
                       </div>
                     )}
@@ -1184,7 +1191,7 @@ export default function Home() {
                           disabled={greetLoading || !greetText}
                           className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white py-3 rounded-xl font-bold disabled:opacity-40 transition-colors"
                         >
-                          {greetLoading ? 'Setting...' : 'Set Greeting ($0.07)'}
+                          {greetLoading ? 'Setting...' : 'Set Greeting ({toolFeeLabel})'}
                         </button>
                       </div>
                     )}
@@ -1235,7 +1242,7 @@ export default function Home() {
                           disabled={tokenLoading || !tokenName || !tokenSymbol || !tokenSupply}
                           className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white py-3 rounded-xl font-bold disabled:opacity-40 transition-colors"
                         >
-                          {tokenLoading ? 'Deploying...' : 'Deploy Token ($0.07)'}
+                          {tokenLoading ? 'Deploying...' : 'Deploy Token ({toolFeeLabel})'}
                         </button>
                       </div>
                     )}
@@ -1295,7 +1302,7 @@ export default function Home() {
                           disabled={nftLoading || !nftName || !nftSymbol || !nftMaxSupply || !nftMintPrice}
                           className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white py-3 rounded-xl font-bold disabled:opacity-40 transition-colors"
                         >
-                          {nftLoading ? 'Deploying...' : 'Deploy NFT Collection ($0.07)'}
+                          {nftLoading ? 'Deploying...' : 'Deploy NFT Collection ({toolFeeLabel})'}
                         </button>
                       </div>
                     )}
@@ -1339,7 +1346,7 @@ export default function Home() {
                           disabled={daoLoading || !daoTitle}
                           className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white py-3 rounded-xl font-bold disabled:opacity-40 transition-colors"
                         >
-                          {daoLoading ? 'Creating...' : 'Create Proposal ($0.07)'}
+                          {daoLoading ? 'Creating...' : 'Create Proposal ({toolFeeLabel})'}
                         </button>
                       </div>
                     )}
