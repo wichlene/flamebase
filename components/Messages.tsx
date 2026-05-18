@@ -27,9 +27,11 @@ type Profile = { username: string; avatarHash: string; exists: boolean; flames: 
 type Props = {
   profiles: Record<string, Profile>
   fixedFee: bigint
+  pendingTarget?: string | null
+  onPendingHandled?: () => void
 }
 
-export default function Messages({ profiles, fixedFee }: Props) {
+export default function Messages({ profiles, fixedFee, pendingTarget, onPendingHandled }: Props) {
   const { address } = useAccount()
   const { signMessageAsync } = useSignMessage()
 
@@ -58,6 +60,21 @@ export default function Messages({ profiles, fixedFee }: Props) {
       refreshConversations()
     }
   }, [])
+
+  // Handle "Send Message" trigger from another tab
+  useEffect(() => {
+    if (!pendingTarget) return
+    if (status !== 'ready') {
+      setShowNew(true)
+      setSearch(pendingTarget)
+      onPendingHandled?.()
+      return
+    }
+    ;(async () => {
+      await startDm(pendingTarget)
+      onPendingHandled?.()
+    })()
+  }, [pendingTarget, status])
 
   const connect = async () => {
     if (!address) return

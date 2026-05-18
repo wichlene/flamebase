@@ -152,6 +152,7 @@ export default function Home() {
   // New state variables
   const [hiddenPosts, setHiddenPosts] = useState<Set<string>>(new Set())
   const [selectedUser, setSelectedUser] = useState<string | null>(null)
+  const [pendingDmTarget, setPendingDmTarget] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [notifications, setNotifications] = useState<Array<{type: string; postId: string; from: string; timestamp: number}>>([])
   const [showNotifications, setShowNotifications] = useState(false)
@@ -1084,7 +1085,7 @@ export default function Home() {
             {activeTab === 'messages' && (
               <div>
                 <h1 className="text-xl font-black px-4 md:px-6 pt-4 md:pt-6 text-[#0A0B0D]">{t('navMessages')}</h1>
-                <Messages profiles={profiles} fixedFee={fixedFee} />
+                <Messages profiles={profiles} fixedFee={fixedFee} pendingTarget={pendingDmTarget} onPendingHandled={() => setPendingDmTarget(null)} />
               </div>
             )}
 
@@ -1468,17 +1469,23 @@ export default function Home() {
                   <a href={`https://basescan.org/address/${selectedUser}`} target="_blank" className="text-[#0052FF] text-xs hover:underline">View on Basescan ↗</a>
                 </div>
                 {isConnected && address && selectedUser.toLowerCase() !== address.toLowerCase() && (
-                  following.has(selectedUser.toLowerCase()) ? (
-                    <button onClick={() => unfollowUser(selectedUser)}
-                      className="px-4 py-1.5 rounded-xl border-2 border-[#0052FF] text-[#0052FF] text-sm font-black hover:bg-red-50 hover:border-red-500 hover:text-red-500 transition-colors">
-                      Friends ✓
+                  <div className="flex flex-col gap-1.5">
+                    {following.has(selectedUser.toLowerCase()) ? (
+                      <button onClick={() => unfollowUser(selectedUser)}
+                        className="px-4 py-1.5 rounded-xl border-2 border-[#0052FF] text-[#0052FF] text-xs font-black hover:bg-red-50 hover:border-red-500 hover:text-red-500 transition-colors">
+                        Friends ✓
+                      </button>
+                    ) : (
+                      <button onClick={() => followUser(selectedUser)}
+                        className="px-4 py-1.5 rounded-xl bg-[#0052FF] text-white text-xs font-black hover:bg-[#1652F0] transition-colors">
+                        + Add Friend
+                      </button>
+                    )}
+                    <button onClick={() => { setPendingDmTarget(selectedUser); setActiveTab('messages'); setSelectedUser(null) }}
+                      className="px-4 py-1.5 rounded-xl bg-[#F0F4FF] text-[#0052FF] text-xs font-black hover:bg-[#E6EEFF] transition-colors">
+                      💬 Message
                     </button>
-                  ) : (
-                    <button onClick={() => followUser(selectedUser)}
-                      className="px-4 py-1.5 rounded-xl bg-[#0052FF] text-white text-sm font-black hover:bg-[#1652F0] transition-colors">
-                      + Add Friend
-                    </button>
-                  )
+                  </div>
                 )}
               </div>
 
