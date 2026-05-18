@@ -166,7 +166,7 @@ export default function Messages({ profiles, fixedFee }: Props) {
         alert("This user hasn't activated XMTP yet. They need to open Messages and connect first.")
         setSending(false); return
       }
-      const dm = await _xmtpClient.conversations.newDmWithIdentifier({ identifier: peer, identifierKind: 0 })
+      const dm = await _xmtpClient.conversations.createDmWithIdentifier({ identifier: peer, identifierKind: 0 })
       setShowNew(false); setSearch('')
       await refreshConversations()
       await openConversation(dm.id)
