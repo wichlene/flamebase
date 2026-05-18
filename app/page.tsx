@@ -421,7 +421,7 @@ export default function Home() {
       }
       await writeContractAsync({
         address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'createPost',
-        args: [newPost, ipfsHash], value: fixedFee,
+        args: [newPost, ipfsHash], value: effectiveFee(postPrice as bigint | undefined),
       })
       setNewPost(''); setSelectedFile(null); setPreviewUrl(null)
       setTimeout(() => refetchCount(), 3000)
@@ -434,7 +434,7 @@ export default function Home() {
     if (!isConnected) return
     setLoadingAction(`like-${postId}`)
     try {
-      await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'like', args: [postId], value: fixedFee })
+      await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'like', args: [postId], value: effectiveFee(likePrice as bigint | undefined) })
       setPosts(prev => prev.map(p => p.id === postId ? { ...p, likes: p.likes + 1n } : p))
     } catch (e) { console.error(e) }
     setLoadingAction(null)
@@ -446,7 +446,7 @@ export default function Home() {
     if (!text) return
     setLoadingAction(`comment-${postId}`)
     try {
-      await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'comment', args: [postId, text], value: fixedFee })
+      await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'comment', args: [postId, text], value: effectiveFee(commentPrice as bigint | undefined) })
       setCommentTexts(prev => ({ ...prev, [key]: '' }))
       setReplyingTo(prev => ({ ...prev, [key]: '' }))
       await loadComments(key)
@@ -652,7 +652,7 @@ export default function Home() {
         </aside>
 
         {/* ── Main Content ── */}
-        <main className="flex-1 md:ml-60 xl:mr-72 min-h-screen border-x border-[#EEF1F5]">
+        <main className="flex-1 md:ml-60 xl:mr-80 min-h-screen border-x border-[#EEF1F5]">
 
           {/* Mobile header */}
           <header className="md:hidden fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur border-b border-[#E4E7EB] px-4 py-3 flex items-center justify-between gap-2">
@@ -1137,7 +1137,7 @@ export default function Home() {
         </main>
 
         {/* ── Right Sidebar ── */}
-        <aside className="hidden xl:flex flex-col fixed right-0 top-0 h-full w-72 bg-white border-l border-[#E4E7EB] z-40 overflow-y-auto">
+        <aside className="hidden xl:flex flex-col fixed right-0 top-0 h-full w-80 bg-white border-l border-[#E4E7EB] z-40 overflow-y-auto">
 
           {/* Tool Buttons — 3-column grid */}
           <div className="px-3 pt-4 pb-2">
@@ -1147,57 +1147,57 @@ export default function Home() {
               {/* Counter */}
               <button onClick={() => { if (!TOOLS_DEPLOYED) return; toolAction(async () => { await writeContractAsync({ address: TOOLS_ADDRESS, abi: TOOLS_ABI, functionName: 'count', value: fixedFee }) }, setCounterLoading) }}
                 disabled={!TOOLS_DEPLOYED || counterLoading}
-                className="flex flex-col items-center gap-1 py-3 px-1 rounded-xl bg-white border border-[#E4E7EB] hover:border-[#0052FF] hover:bg-[#F0F4FF] disabled:opacity-40 transition-all">
-                <span className="font-mono text-[#0052FF] font-black text-base">[##]</span>
-                <span className="text-[11px] font-bold text-[#0A0B0D]">{counterLoading ? '…' : 'Counter'}</span>
+                className="flex flex-col items-center gap-1.5 py-4 px-1 rounded-xl bg-white border border-[#E4E7EB] hover:border-[#0052FF] hover:bg-[#F0F4FF] disabled:opacity-40 transition-all">
+                <span className="font-mono text-[#0052FF] font-black text-lg">[##]</span>
+                <span className="text-xs font-bold text-[#0A0B0D]">{counterLoading ? '…' : 'Counter'}</span>
               </button>
 
               {/* Streak */}
               <button onClick={() => { if (!TOOLS_DEPLOYED || canCheckIn === false) return; toolAction(async () => { await writeContractAsync({ address: TOOLS_ADDRESS, abi: TOOLS_ABI, functionName: 'checkIn', value: fixedFee }) }, setStreakLoading) }}
                 disabled={!TOOLS_DEPLOYED || streakLoading || canCheckIn === false}
-                className="flex flex-col items-center gap-1 py-3 px-1 rounded-xl bg-white border border-[#E4E7EB] hover:border-[#0052FF] hover:bg-[#F0F4FF] disabled:opacity-40 transition-all">
-                <span className="font-mono text-[#0052FF] font-black text-base">[~]</span>
-                <span className="text-[11px] font-bold text-[#0A0B0D]">{streakLoading ? '…' : canCheckIn === false ? '✓ Done' : 'Streak'}</span>
+                className="flex flex-col items-center gap-1.5 py-4 px-1 rounded-xl bg-white border border-[#E4E7EB] hover:border-[#0052FF] hover:bg-[#F0F4FF] disabled:opacity-40 transition-all">
+                <span className="font-mono text-[#0052FF] font-black text-lg">[~]</span>
+                <span className="text-xs font-bold text-[#0A0B0D]">{streakLoading ? '…' : canCheckIn === false ? '✓ Done' : 'Streak'}</span>
               </button>
 
               {/* Logbook */}
               <button onClick={() => setActiveTool(activeTool === 'logbook' ? null : 'logbook')}
                 disabled={!TOOLS_DEPLOYED}
-                className={`flex flex-col items-center gap-1 py-3 px-1 rounded-xl border transition-all disabled:opacity-40 ${activeTool === 'logbook' ? 'bg-[#E6EEFF] border-[#0052FF]' : 'bg-white border-[#E4E7EB] hover:border-[#0052FF] hover:bg-[#F0F4FF]'}`}>
-                <span className="font-mono text-[#0052FF] font-black text-base">[📖]</span>
-                <span className="text-[11px] font-bold text-[#0A0B0D]">Logbook</span>
+                className={`flex flex-col items-center gap-1.5 py-4 px-1 rounded-xl border transition-all disabled:opacity-40 ${activeTool === 'logbook' ? 'bg-[#E6EEFF] border-[#0052FF]' : 'bg-white border-[#E4E7EB] hover:border-[#0052FF] hover:bg-[#F0F4FF]'}`}>
+                <span className="font-mono text-[#0052FF] font-black text-lg">[📖]</span>
+                <span className="text-xs font-bold text-[#0A0B0D]">Logbook</span>
               </button>
 
               {/* Greeter */}
               <button onClick={() => setActiveTool(activeTool === 'greeter' ? null : 'greeter')}
                 disabled={!TOOLS_DEPLOYED}
-                className={`flex flex-col items-center gap-1 py-3 px-1 rounded-xl border transition-all disabled:opacity-40 ${activeTool === 'greeter' ? 'bg-[#E6EEFF] border-[#0052FF]' : 'bg-white border-[#E4E7EB] hover:border-[#0052FF] hover:bg-[#F0F4FF]'}`}>
-                <span className="font-mono text-[#0052FF] font-black text-base">[👋]</span>
-                <span className="text-[11px] font-bold text-[#0A0B0D]">Greeter</span>
+                className={`flex flex-col items-center gap-1.5 py-4 px-1 rounded-xl border transition-all disabled:opacity-40 ${activeTool === 'greeter' ? 'bg-[#E6EEFF] border-[#0052FF]' : 'bg-white border-[#E4E7EB] hover:border-[#0052FF] hover:bg-[#F0F4FF]'}`}>
+                <span className="font-mono text-[#0052FF] font-black text-lg">[👋]</span>
+                <span className="text-xs font-bold text-[#0A0B0D]">Greeter</span>
               </button>
 
               {/* Token */}
               <button onClick={() => setActiveTool(activeTool === 'token' ? null : 'token')}
                 disabled={!TOKEN_FACTORY_DEPLOYED}
-                className={`flex flex-col items-center gap-1 py-3 px-1 rounded-xl border transition-all disabled:opacity-40 ${activeTool === 'token' ? 'bg-[#E6EEFF] border-[#0052FF]' : 'bg-white border-[#E4E7EB] hover:border-[#0052FF] hover:bg-[#F0F4FF]'}`}>
-                <span className="font-mono text-[#0052FF] font-black text-base">[$]</span>
-                <span className="text-[11px] font-bold text-[#0A0B0D]">Token</span>
+                className={`flex flex-col items-center gap-1.5 py-4 px-1 rounded-xl border transition-all disabled:opacity-40 ${activeTool === 'token' ? 'bg-[#E6EEFF] border-[#0052FF]' : 'bg-white border-[#E4E7EB] hover:border-[#0052FF] hover:bg-[#F0F4FF]'}`}>
+                <span className="font-mono text-[#0052FF] font-black text-lg">[$]</span>
+                <span className="text-xs font-bold text-[#0A0B0D]">Token</span>
               </button>
 
               {/* NFT */}
               <button onClick={() => setActiveTool(activeTool === 'nft' ? null : 'nft')}
                 disabled={!NFT_FACTORY_DEPLOYED}
-                className={`flex flex-col items-center gap-1 py-3 px-1 rounded-xl border transition-all disabled:opacity-40 ${activeTool === 'nft' ? 'bg-[#E6EEFF] border-[#0052FF]' : 'bg-white border-[#E4E7EB] hover:border-[#0052FF] hover:bg-[#F0F4FF]'}`}>
-                <span className="font-mono text-[#0052FF] font-black text-base">[*]</span>
-                <span className="text-[11px] font-bold text-[#0A0B0D]">NFT</span>
+                className={`flex flex-col items-center gap-1.5 py-4 px-1 rounded-xl border transition-all disabled:opacity-40 ${activeTool === 'nft' ? 'bg-[#E6EEFF] border-[#0052FF]' : 'bg-white border-[#E4E7EB] hover:border-[#0052FF] hover:bg-[#F0F4FF]'}`}>
+                <span className="font-mono text-[#0052FF] font-black text-lg">[*]</span>
+                <span className="text-xs font-bold text-[#0A0B0D]">NFT</span>
               </button>
 
               {/* DAO */}
               <button onClick={() => setActiveTool(activeTool === 'dao' ? null : 'dao')}
                 disabled={!DAO_DEPLOYED}
-                className={`flex flex-col items-center gap-1 py-3 px-1 rounded-xl border transition-all disabled:opacity-40 ${activeTool === 'dao' ? 'bg-[#E6EEFF] border-[#0052FF]' : 'bg-white border-[#E4E7EB] hover:border-[#0052FF] hover:bg-[#F0F4FF]'}`}>
-                <span className="font-mono text-[#0052FF] font-black text-base">[△]</span>
-                <span className="text-[11px] font-bold text-[#0A0B0D]">DAO</span>
+                className={`flex flex-col items-center gap-1.5 py-4 px-1 rounded-xl border transition-all disabled:opacity-40 ${activeTool === 'dao' ? 'bg-[#E6EEFF] border-[#0052FF]' : 'bg-white border-[#E4E7EB] hover:border-[#0052FF] hover:bg-[#F0F4FF]'}`}>
+                <span className="font-mono text-[#0052FF] font-black text-lg">[△]</span>
+                <span className="text-xs font-bold text-[#0A0B0D]">DAO</span>
               </button>
 
             </div>
