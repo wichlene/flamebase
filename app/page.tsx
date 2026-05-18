@@ -10,7 +10,7 @@ import { CONTRACT_ADDRESS, CONTRACT_ABI } from '../lib/contract'
 import { T, LANG_LABELS, type Lang } from '../lib/i18n'
 import { TOOLS_ADDRESS, TOKEN_FACTORY_ADDRESS, NFT_FACTORY_ADDRESS, DAO_ADDRESS, TOOLS_ABI, TOKEN_FACTORY_ABI, NFT_FACTORY_ABI, DAO_ABI } from '../lib/toolsContracts'
 
-const Messages = dynamic(() => import('../components/Messages'), { ssr: false, loading: () => <div className="p-8 text-center text-[#5B6271]">💬 Yükleniyor…</div> })
+const Messages = dynamic(() => import('../components/Messages'), { ssr: false, loading: () => <div className="p-8 text-center text-[#5B6271]">💬 Loading…</div> })
 
 const TOOLS_DEPLOYED = TOOLS_ADDRESS.length > 0
 const TOKEN_FACTORY_DEPLOYED = TOKEN_FACTORY_ADDRESS.length > 0
@@ -177,6 +177,9 @@ export default function Home() {
   const [daoLoading, setDaoLoading] = useState(false)
   const [proposalLoading, setProposalLoading] = useState<string | null>(null)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
+
+  // Unread message count from Messages component
+  const [unreadMessages, setUnreadMessages] = useState(0)
 
   // Friends system (stored in localStorage)
   const [following, setFollowing] = useState<Set<string>>(new Set())
@@ -433,7 +436,7 @@ export default function Home() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] || null
     if (file && file.size > 50 * 1024 * 1024) {
-      alert('Dosya 50MB\'tan büyük. Lütfen daha kısa bir video seç (~1 dk).')
+      alert('File too large (max 50 MB). Please use a shorter video (~1 min).')
       e.target.value = ''
       return
     }
@@ -462,7 +465,7 @@ export default function Home() {
         const res = await fetch('/api/upload', { method: 'POST', body: fd })
         const data = await res.json()
         if (!res.ok || !data.ipfsHash) {
-          alert('Dosya yüklenemedi: ' + JSON.stringify(data.error || data))
+          alert('Upload failed: ' + JSON.stringify(data.error || data))
           setLoading(false)
           return
         }
@@ -672,6 +675,7 @@ export default function Home() {
                   myPosts.forEach(p => { snapshot[p.id.toString()] = Number(p.likes) + Number(p.tips) })
                   setSeenActivity(snapshot)
                   localStorage.setItem('flamebase_seen_activity', JSON.stringify(snapshot))
+                  myPosts.forEach(p => { if (!postComments[p.id.toString()]) loadComments(p.id.toString()) })
                 }
               }}
                 className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl font-semibold transition-all text-left text-sm ${
@@ -681,6 +685,9 @@ export default function Home() {
                 <span className="flex-1">{t(labelKey)}</span>
                 {tab === 'activity' && activityCount > 0 && (
                   <span className="bg-red-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center">{activityCount > 99 ? '99+' : activityCount}</span>
+                )}
+                {tab === 'messages' && unreadMessages > 0 && activeTab !== 'messages' && (
+                  <span className="bg-red-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center">{unreadMessages > 99 ? '99+' : unreadMessages}</span>
                 )}
               </button>
             ))}
@@ -1059,17 +1066,20 @@ export default function Home() {
                 ) : (
                   <div className="space-y-3">
                     {myPosts.slice().sort((a, b) => Number(b.likes + b.tips) - Number(a.likes + a.tips)).map(post => {
-                      const prev = seenActivity[post.id.toString()] ?? 0
+                      const key = post.id.toString()
+                      const prev = seenActivity[key] ?? 0
                       const current = Number(post.likes) + Number(post.tips)
                       const isNew = current > prev
+                      const commentCount = postComments[key]?.length ?? 0
                       return (
-                        <div key={post.id.toString()} className={`flex items-start gap-3 p-4 rounded-2xl border transition-colors ${isNew ? 'border-[#0052FF] bg-[#F0F4FF]' : 'border-[#EEF1F5] bg-white'}`}>
+                        <div key={key} className={`flex items-start gap-3 p-4 rounded-2xl border transition-colors ${isNew ? 'border-[#0052FF] bg-[#F0F4FF]' : 'border-[#EEF1F5] bg-white'}`}>
                           {isNew && <span className="w-2 h-2 rounded-full bg-red-500 mt-1.5 flex-shrink-0" />}
                           <div className="flex-1 min-w-0">
                             <p className="text-sm text-[#0A0B0D] truncate font-medium">{post.content.slice(0, 80)}{post.content.length > 80 ? '…' : ''}</p>
-                            <div className="flex items-center gap-3 mt-1.5">
+                            <div className="flex items-center gap-3 mt-1.5 flex-wrap">
                               <span className="text-xs text-[#5B6271]">🔥 {post.likes.toString()} flames</span>
-                              <span className="text-xs text-[#5B6271]">💰 {post.tips.toString()} tips</span>
+                              <span className="text-xs text-[#5B6271]">💬 {commentCount} comments</span>
+                              <span className="text-xs text-[#5B6271]">💸 {parseFloat(formatEther(post.tips)).toFixed(4)} ETH</span>
                               {isNew && <span className="text-xs font-black text-[#0052FF]">+{current - prev} new</span>}
                             </div>
                           </div>
@@ -1085,7 +1095,7 @@ export default function Home() {
             {activeTab === 'messages' && (
               <div>
                 <h1 className="text-xl font-black px-4 md:px-6 pt-4 md:pt-6 text-[#0A0B0D]">{t('navMessages')}</h1>
-                <Messages profiles={profiles} fixedFee={fixedFee} pendingTarget={pendingDmTarget} onPendingHandled={() => setPendingDmTarget(null)} />
+                <Messages profiles={profiles} fixedFee={fixedFee} pendingTarget={pendingDmTarget} onPendingHandled={() => setPendingDmTarget(null)} onUnreadCount={setUnreadMessages} />
               </div>
             )}
 
@@ -1436,6 +1446,7 @@ export default function Home() {
                 myPosts.forEach(p => { snapshot[p.id.toString()] = Number(p.likes) + Number(p.tips) })
                 setSeenActivity(snapshot)
                 localStorage.setItem('flamebase_seen_activity', JSON.stringify(snapshot))
+                myPosts.forEach(p => { if (!postComments[p.id.toString()]) loadComments(p.id.toString()) })
               }
             }}
               className={`flex-1 py-3 flex flex-col items-center gap-0.5 transition-colors relative ${activeTab === tab ? 'text-[#0052FF]' : 'text-[#8A919E]'}`}>
@@ -1443,6 +1454,9 @@ export default function Home() {
                 {icon}
                 {tab === 'activity' && activityCount > 0 && (
                   <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] font-black px-1 py-0.5 rounded-full min-w-[14px] text-center leading-none">{activityCount > 9 ? '9+' : activityCount}</span>
+                )}
+                {tab === 'messages' && unreadMessages > 0 && activeTab !== 'messages' && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] font-black px-1 py-0.5 rounded-full min-w-[14px] text-center leading-none">{unreadMessages > 9 ? '9+' : unreadMessages}</span>
                 )}
               </span>
               <span className="text-[10px] font-bold">{t(labelKey)}</span>

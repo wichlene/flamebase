@@ -29,9 +29,20 @@ type Props = {
   fixedFee: bigint
   pendingTarget?: string | null
   onPendingHandled?: () => void
+  onUnreadCount?: (count: number) => void
 }
 
-export default function Messages({ profiles, fixedFee, pendingTarget, onPendingHandled }: Props) {
+const SEEN_KEY = 'flamebase_msg_seen'
+
+function getSeenMap(): Record<string, number> {
+  try { return JSON.parse(localStorage.getItem(SEEN_KEY) || '{}') } catch { return {} }
+}
+
+function saveSeenMap(m: Record<string, number>) {
+  localStorage.setItem(SEEN_KEY, JSON.stringify(m))
+}
+
+export default function Messages({ profiles, fixedFee, pendingTarget, onPendingHandled, onUnreadCount }: Props) {
   const { address } = useAccount()
   const { signMessageAsync } = useSignMessage()
 
@@ -47,6 +58,7 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
   const activeConvRef = useRef<any>(null)
   const streamRef = useRef<any>(null)
   const endRef = useRef<HTMLDivElement>(null)
+  const connectingRef = useRef(false)
 
   // Build username → address reverse lookup
   const usernameToAddress: Record<string, string> = {}
@@ -54,16 +66,33 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
     if (p?.username) usernameToAddress[p.username.toLowerCase()] = addr
   })
 
+  const reportUnread = (convs: Conv[], seenMap?: Record<string, number>) => {
+    const seen = seenMap ?? getSeenMap()
+    const count = convs.filter(c => c.lastSentAt > 0 && c.lastSentAt > (seen[c.id] ?? 0)).length
+    onUnreadCount?.(count)
+  }
+
+  // On mount: if client already exists (tab switch), sync + load conversations immediately
   useEffect(() => {
-    if (_xmtpClient && status !== 'ready') {
-      setStatus('ready')
+    if (_xmtpClient) {
+      if (status !== 'ready') setStatus('ready')
       refreshConversations()
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Auto-connect when a pending DM target arrives and we're not yet connected
+  useEffect(() => {
+    if (pendingTarget && status === 'idle' && !connectingRef.current) {
+      connect()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingTarget])
 
   // Handle "Send Message" trigger from another tab
   useEffect(() => {
     if (!pendingTarget) return
+    if (status === 'connecting') return
     if (status !== 'ready') {
       setShowNew(true)
       setSearch(pendingTarget)
@@ -74,11 +103,14 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
       await startDm(pendingTarget)
       onPendingHandled?.()
     })()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingTarget, status])
 
   const connect = async () => {
     if (!address) return
     if (_xmtpClient) { setStatus('ready'); await refreshConversations(); return }
+    if (connectingRef.current) return
+    connectingRef.current = true
     setStatus('connecting'); setError('')
     try {
       const { Client } = await import('@xmtp/browser-sdk')
@@ -99,6 +131,7 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
       setError(e?.message || 'Connection failed')
       setStatus('error')
     }
+    connectingRef.current = false
   }
 
   const refreshConversations = async () => {
@@ -120,11 +153,17 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
     }
     out.sort((a, b) => b.lastSentAt - a.lastSentAt)
     setConversations(out)
+    reportUnread(out)
   }
 
   const openConversation = async (id: string) => {
     if (!_xmtpClient) return
+    // Mark this conversation as read
+    const seen = getSeenMap()
+    seen[id] = Date.now()
+    saveSeenMap(seen)
     setActiveId(id); setMessages([])
+    reportUnread(conversations, seen)
     const dm = await _xmtpClient.conversations.getConversationById(id)
     activeConvRef.current = dm
     if (!dm) return
@@ -228,6 +267,8 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
     return <div className="p-8 text-center text-[#5B6271]">Connecting… sign the request in your wallet</div>
   }
 
+  const seenMap = getSeenMap()
+
   return (
     <div className="flex h-[calc(100vh-120px)]">
       {/* Sidebar */}
@@ -239,15 +280,23 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
         <div className="overflow-y-auto flex-1">
           {conversations.length === 0 ? (
             <p className="p-4 text-xs text-[#8A919E] text-center">No conversations yet</p>
-          ) : conversations.map(c => (
-            <button key={c.id} onClick={() => openConversation(c.id)}
-              className={`w-full text-left p-3 border-b border-[#F7F9FC] hover:bg-[#F7F9FC] transition-colors ${activeId === c.id ? 'bg-[#E6EEFF]' : ''}`}>
-              <p className="font-bold text-sm text-[#0A0B0D] truncate">
-                {c.peerAddress.slice(0, 8)}…{c.peerAddress.slice(-4)}
-              </p>
-              {c.lastMessage && <p className="text-xs text-[#5B6271] truncate mt-0.5">{c.lastMessage}</p>}
-            </button>
-          ))}
+          ) : conversations.map(c => {
+            const isUnread = c.lastSentAt > 0 && c.lastSentAt > (seenMap[c.id] ?? 0)
+            return (
+              <button key={c.id} onClick={() => openConversation(c.id)}
+                className={`w-full text-left p-3 border-b border-[#F7F9FC] hover:bg-[#F7F9FC] transition-colors ${activeId === c.id ? 'bg-[#E6EEFF]' : ''}`}>
+                <div className="flex items-center gap-2">
+                  {isUnread && <span className="w-2 h-2 rounded-full bg-[#0052FF] flex-shrink-0" />}
+                  <div className="min-w-0 flex-1">
+                    <p className={`text-sm truncate ${isUnread ? 'font-black' : 'font-bold'} text-[#0A0B0D]`}>
+                      {c.peerAddress.slice(0, 8)}…{c.peerAddress.slice(-4)}
+                    </p>
+                    {c.lastMessage && <p className={`text-xs truncate mt-0.5 ${isUnread ? 'text-[#0A0B0D] font-semibold' : 'text-[#5B6271]'}`}>{c.lastMessage}</p>}
+                  </div>
+                </div>
+              </button>
+            )
+          })}
         </div>
       </div>
 
