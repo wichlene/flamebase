@@ -638,12 +638,6 @@ export default function Home() {
               </div>
             )}
             <ConnectButton />
-            {/* Terminal button */}
-            <button onClick={() => setShowTerminal(true)}
-              className="w-full bg-[#0A0B0D] hover:bg-[#1f2125] text-green-400 font-mono text-xs px-3 py-2 rounded-xl transition-colors flex items-center justify-between gap-2">
-              <span>$ tx log</span>
-              <span className="bg-green-400 text-black px-1.5 py-0.5 rounded text-[10px] font-bold">{txLog.length}</span>
-            </button>
             {/* Language selector */}
             <div className="mt-2">
               <select value={lang} onChange={e => setLang(e.target.value as Lang)}
@@ -657,7 +651,7 @@ export default function Home() {
         </aside>
 
         {/* ── Main Content ── */}
-        <main className="flex-1 md:ml-60 xl:mr-80 min-h-screen border-x border-[#EEF1F5]">
+        <main className="flex-1 md:ml-60 xl:mr-96 min-h-screen border-x border-[#EEF1F5]">
 
           {/* Mobile header */}
           <header className="md:hidden fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur border-b border-[#E4E7EB] px-4 py-3 flex items-center justify-between gap-2">
@@ -1142,7 +1136,7 @@ export default function Home() {
         </main>
 
         {/* ── Right Sidebar ── */}
-        <aside className="hidden xl:flex flex-col fixed right-0 top-0 h-full w-80 bg-white border-l border-[#E4E7EB] z-40 overflow-y-auto">
+        <aside className="hidden xl:flex flex-col fixed right-0 top-0 h-full w-96 bg-white border-l border-[#E4E7EB] z-40 overflow-y-auto">
 
           {/* Tool Buttons — 3-column grid */}
           <div className="px-3 pt-4 pb-2">
@@ -1264,24 +1258,6 @@ export default function Home() {
 
           </div>
 
-          {/* Admin Withdraw */}
-          {isAdmin && isConnected && (
-            <div className="mx-3 my-2 bg-amber-50 border border-amber-200 rounded-xl p-3">
-              <p className="text-xs font-black text-amber-800 mb-1">💰 Withdraw</p>
-              <p className="text-[10px] text-amber-600 mb-2">
-                {walletBalance ? `Wallet: ${parseFloat(formatEther(walletBalance.value)).toFixed(4)} ETH` : '—'}
-              </p>
-              <button
-                onClick={async () => {
-                  try {
-                    await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'withdraw' }, 'withdraw')
-                  } catch { alert('Kontrat bakiyesi zaten 0. Ücretler her işlemde direkt cüzdanına gidiyor.') }
-                }}
-                className="w-full bg-amber-500 hover:bg-amber-600 text-white text-xs py-2 rounded-lg font-bold transition-colors">
-                Withdraw from Contract
-              </button>
-            </div>
-          )}
 
           {/* Terminal */}
           <div className="mx-3 mb-3 mt-2 bg-[#0A0B0D] rounded-xl overflow-hidden flex-1 flex flex-col min-h-[140px]">
