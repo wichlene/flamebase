@@ -149,6 +149,9 @@ export default function Home() {
     return `$${usd.toFixed(2)}`
   }
   const toolFeeLabel = usdLabel(effectiveFee(parseEther('0.0001')))
+  // NFT mint price fixed at $0.50 in ETH
+  const nftMintPriceETH = (0.50 / ethPrice).toFixed(10)
+  const nftMintPriceWei = parseEther(nftMintPriceETH)
 
   // New state variables
   const [hiddenPosts, setHiddenPosts] = useState<Set<string>>(new Set())
@@ -171,7 +174,6 @@ export default function Home() {
   const [nftName, setNftName] = useState('')
   const [nftSymbol, setNftSymbol] = useState('')
   const [nftMaxSupply, setNftMaxSupply] = useState('1000')
-  const [nftMintPrice, setNftMintPrice] = useState('0.001')
   const [nftLoading, setNftLoading] = useState(false)
   const [daoTitle, setDaoTitle] = useState('')
   const [daoDesc, setDaoDesc] = useState('')
@@ -566,8 +568,7 @@ export default function Home() {
     { tab: 'post' as Tab, icon: '✏️', labelKey: 'navNewPost' },
     { tab: 'leaderboard' as Tab, icon: '🏆', labelKey: 'navLeaderboard' },
     { tab: 'profile' as Tab, icon: '👤', labelKey: 'navProfile' },
-    // Tools tab hidden for launch — only visible to admin
-    ...(isAdmin ? [{ tab: 'tools' as Tab, icon: '🔧', labelKey: 'navTools' }] : []),
+    ...(TOOLS_DEPLOYED || isAdmin ? [{ tab: 'tools' as Tab, icon: '🔧', labelKey: 'navTools' }] : []),
   ]
 
   return (
@@ -1273,37 +1274,31 @@ export default function Home() {
                             max="10000"
                             className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-4 py-3 text-sm text-[#0A0B0D] placeholder-[#8A919E] focus:outline-none focus:border-[#0052FF]"
                           />
-                          <input
-                            value={nftMintPrice}
-                            onChange={e => setNftMintPrice(e.target.value)}
-                            placeholder="Mint price in ETH"
-                            type="number"
-                            step="0.001"
-                            min="0"
-                            className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-4 py-3 text-sm text-[#0A0B0D] placeholder-[#8A919E] focus:outline-none focus:border-[#0052FF]"
-                          />
+                          <div className="w-full bg-[#F0F4FF] border border-[#0052FF]/30 rounded-xl px-4 py-3 text-sm text-[#0052FF] font-bold">
+                            Mint price: $0.50 per NFT ({nftMintPriceETH.slice(0,8)} ETH)
+                          </div>
                         </div>
                         {nftCollectionCount !== undefined && (
                           <p className="text-xs text-[#5B6271] mb-3">Collections deployed: {nftCollectionCount.toString()}</p>
                         )}
                         <button
                           onClick={() => {
-                            if (!NFT_FACTORY_DEPLOYED || !nftName || !nftSymbol || !nftMaxSupply || !nftMintPrice) return
+                            if (!NFT_FACTORY_DEPLOYED || !nftName || !nftSymbol || !nftMaxSupply) return
                             toolAction(async () => {
                               await writeContractAsync({
                                 address: NFT_FACTORY_ADDRESS,
                                 abi: NFT_FACTORY_ABI,
                                 functionName: 'deployNFT',
-                                args: [nftName, nftSymbol, BigInt(nftMaxSupply), parseEther(nftMintPrice), ''],
+                                args: [nftName, nftSymbol, BigInt(nftMaxSupply), nftMintPriceWei, ''],
                                 value: effectiveFee(parseEther('0.0001')),
                               })
-                              setNftName(''); setNftSymbol(''); setNftMaxSupply('1000'); setNftMintPrice('0.001')
+                              setNftName(''); setNftSymbol(''); setNftMaxSupply('1000')
                             }, setNftLoading)
                           }}
-                          disabled={nftLoading || !nftName || !nftSymbol || !nftMaxSupply || !nftMintPrice}
+                          disabled={nftLoading || !nftName || !nftSymbol || !nftMaxSupply}
                           className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white py-3 rounded-xl font-bold disabled:opacity-40 transition-colors"
                         >
-                          {nftLoading ? 'Deploying...' : 'Deploy NFT Collection ({toolFeeLabel})'}
+                          {nftLoading ? 'Deploying...' : `Deploy NFT Collection (${toolFeeLabel})`}
                         </button>
                       </div>
                     )}
@@ -1347,7 +1342,7 @@ export default function Home() {
                           disabled={daoLoading || !daoTitle}
                           className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white py-3 rounded-xl font-bold disabled:opacity-40 transition-colors"
                         >
-                          {daoLoading ? 'Creating...' : 'Create Proposal ({toolFeeLabel})'}
+                          {daoLoading ? 'Creating...' : `Create Proposal (${toolFeeLabel})`}
                         </button>
                       </div>
                     )}

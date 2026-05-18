@@ -16,7 +16,6 @@ export const TOOLS_ABI = [
   { name: 'getLogs', type: 'function', stateMutability: 'view', inputs: [{ name: 'user', type: 'address' }], outputs: [{ components: [{ name: 'text', type: 'string' }, { name: 'timestamp', type: 'uint256' }], internalType: 'struct FlameBaseTools.LogEntry[]', type: 'tuple[]' }] },
   { name: 'greet', type: 'function', stateMutability: 'payable', inputs: [{ name: '_greeting', type: 'string' }], outputs: [] },
   { name: 'greetings', type: 'function', stateMutability: 'view', inputs: [{ name: '', type: 'address' }], outputs: [{ type: 'string' }] },
-  { name: 'ACTION_FEE', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
 ] as const
 
 export const TOKEN_FACTORY_ABI = [
