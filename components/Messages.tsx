@@ -1,12 +1,15 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { useAccount, useSignMessage, useWriteContract } from 'wagmi'
+import { useAccount, useSignMessage } from 'wagmi'
 import { hexToBytes } from 'viem'
-import { TOOLS_ADDRESS, TOOLS_ABI } from '@/lib/toolsContracts'
+
+// Global client — survives tab switches, only one signature per browser session
+let _xmtpClient: any = null
 
 type Conv = {
   id: string
+  peerInboxId: string
   peerAddress: string
   lastMessage: string
   lastSentAt: number
@@ -14,54 +17,51 @@ type Conv = {
 
 type Msg = {
   id: string
-  sender: string
+  senderInboxId: string
   content: string
   sentAt: number
 }
 
+type Profile = { username: string; avatarHash: string; exists: boolean; flames: bigint; tips: bigint }
+
 type Props = {
+  profiles: Record<string, Profile>
   fixedFee: bigint
-  logTx: (hash: string, type: string) => void
 }
 
-export default function Messages({ fixedFee, logTx }: Props) {
+export default function Messages({ profiles, fixedFee }: Props) {
   const { address } = useAccount()
   const { signMessageAsync } = useSignMessage()
-  const { writeContractAsync } = useWriteContract()
 
-  const [status, setStatus] = useState<'idle' | 'connecting' | 'ready' | 'error'>('idle')
-  const [error, setError] = useState<string>('')
+  const [status, setStatus] = useState<'idle' | 'connecting' | 'ready' | 'error'>(() => _xmtpClient ? 'ready' : 'idle')
+  const [error, setError] = useState('')
   const [conversations, setConversations] = useState<Conv[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [messages, setMessages] = useState<Msg[]>([])
   const [draft, setDraft] = useState('')
-  const [newPeer, setNewPeer] = useState('')
+  const [search, setSearch] = useState('')
   const [showNew, setShowNew] = useState(false)
   const [sending, setSending] = useState(false)
-  const [paidPeers, setPaidPeers] = useState<Set<string>>(new Set())
-  const clientRef = useRef<any>(null)
   const activeConvRef = useRef<any>(null)
   const streamRef = useRef<any>(null)
   const endRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    if (!address) return
-    try {
-      const raw = localStorage.getItem(`flamebase_paid_peers_${address.toLowerCase()}`)
-      if (raw) setPaidPeers(new Set(JSON.parse(raw)))
-    } catch {}
-  }, [address])
+  // Build username → address reverse lookup
+  const usernameToAddress: Record<string, string> = {}
+  Object.entries(profiles).forEach(([addr, p]) => {
+    if (p?.username) usernameToAddress[p.username.toLowerCase()] = addr
+  })
 
-  const markPeerPaid = (peer: string) => {
-    if (!address) return
-    const key = `flamebase_paid_peers_${address.toLowerCase()}`
-    const next = new Set(paidPeers); next.add(peer.toLowerCase())
-    setPaidPeers(next)
-    localStorage.setItem(key, JSON.stringify([...next]))
-  }
+  useEffect(() => {
+    if (_xmtpClient && status !== 'ready') {
+      setStatus('ready')
+      refreshConversations()
+    }
+  }, [])
 
   const connect = async () => {
     if (!address) return
+    if (_xmtpClient) { setStatus('ready'); await refreshConversations(); return }
     setStatus('connecting'); setError('')
     try {
       const { Client } = await import('@xmtp/browser-sdk')
@@ -73,9 +73,8 @@ export default function Messages({ fixedFee, logTx }: Props) {
           return hexToBytes(sig as `0x${string}`)
         },
       }
-      const client = await (Client as any).create(signer, { env: 'production' })
-      clientRef.current = client
-      await client.conversations.sync()
+      _xmtpClient = await (Client as any).create(signer, { env: 'production' })
+      await _xmtpClient.conversations.sync()
       await refreshConversations()
       setStatus('ready')
     } catch (e: any) {
@@ -86,19 +85,19 @@ export default function Messages({ fixedFee, logTx }: Props) {
   }
 
   const refreshConversations = async () => {
-    const client = clientRef.current
-    if (!client) return
-    const dms = await client.conversations.listDms()
+    if (!_xmtpClient) return
+    const dms = await _xmtpClient.conversations.listDms()
     const out: Conv[] = []
     for (const dm of dms) {
       try {
-        const peerInbox = await dm.peerInboxId?.()
         const msgs = await dm.messages({ limit: 1 })
         const last = msgs[0]
+        const peerInboxId = dm.peerInboxId ?? ''
         out.push({
           id: dm.id,
-          peerAddress: peerInbox || dm.id.slice(0, 10),
-          lastMessage: last?.content?.toString() || '(no messages)',
+          peerInboxId,
+          peerAddress: peerInboxId,
+          lastMessage: last?.content?.toString() || '',
           lastSentAt: last ? Number(last.sentAtNs / 1_000_000n) : 0,
         })
       } catch {}
@@ -108,17 +107,16 @@ export default function Messages({ fixedFee, logTx }: Props) {
   }
 
   const openConversation = async (id: string) => {
-    const client = clientRef.current
-    if (!client) return
+    if (!_xmtpClient) return
     setActiveId(id); setMessages([])
-    const dm = await client.conversations.getConversationById(id)
+    const dm = await _xmtpClient.conversations.getConversationById(id)
     activeConvRef.current = dm
     if (!dm) return
     const raw = await dm.messages()
     const mapped: Msg[] = raw.map((m: any) => ({
       id: m.id,
-      sender: m.senderInboxId || '?',
-      content: typeof m.content === 'string' ? m.content : '(unsupported)',
+      senderInboxId: m.senderInboxId || '',
+      content: typeof m.content === 'string' ? m.content : '',
       sentAt: Number(m.sentAtNs / 1_000_000n),
     })).sort((a: Msg, b: Msg) => a.sentAt - b.sentAt)
     setMessages(mapped)
@@ -128,8 +126,9 @@ export default function Messages({ fixedFee, logTx }: Props) {
       try {
         for await (const m of streamRef.current as AsyncIterable<any>) {
           setMessages(prev => [...prev, {
-            id: m.id, sender: m.senderInboxId || '?',
-            content: typeof m.content === 'string' ? m.content : '(unsupported)',
+            id: m.id,
+            senderInboxId: m.senderInboxId || '',
+            content: typeof m.content === 'string' ? m.content : '',
             sentAt: Number(m.sentAtNs / 1_000_000n),
           }])
         }
@@ -147,42 +146,46 @@ export default function Messages({ fixedFee, logTx }: Props) {
     setSending(false)
   }
 
-  const startNew = async () => {
-    if (!newPeer || !address || !clientRef.current) return
-    const peer = newPeer.trim().toLowerCase()
-    if (!/^0x[a-f0-9]{40}$/.test(peer)) { alert('Enter a valid 0x address'); return }
-    if (peer === address.toLowerCase()) { alert("You can't message yourself"); return }
+  const startDm = async (query: string) => {
+    if (!query || !_xmtpClient) return
     setSending(true)
     try {
-      if (!paidPeers.has(peer)) {
-        const hash = await writeContractAsync({
-          address: TOOLS_ADDRESS, abi: TOOLS_ABI, functionName: 'log',
-          args: [`dm:${peer}`], value: fixedFee,
-        })
-        logTx(hash, 'dm-open')
-        markPeerPaid(peer)
-      }
-      const client = clientRef.current
-      const canMessage = await client.canMessage([{ identifier: peer, identifierKind: 0 }])
-      const reachable = canMessage.get(peer) ?? canMessage.get(peer.toLowerCase())
-      if (!reachable) {
-        alert("This address hasn't activated XMTP yet. They need to open the Messages tab and connect first.")
+      // Resolve: username → address, or use raw 0x address
+      const q = query.trim()
+      let peer = usernameToAddress[q.toLowerCase()] ?? q
+      if (!/^0x[a-fA-F0-9]{40}$/.test(peer)) {
+        alert('User not found. Enter an exact username or 0x address.')
         setSending(false); return
       }
-      const dm = await client.conversations.newDmWithIdentifier({ identifier: peer, identifierKind: 0 })
-      setShowNew(false); setNewPeer('')
+      peer = peer.toLowerCase()
+      if (peer === address?.toLowerCase()) { alert("You can't message yourself"); setSending(false); return }
+
+      const canMessage = await _xmtpClient.canMessage([{ identifier: peer, identifierKind: 0 }])
+      const reachable = canMessage.get(peer) ?? canMessage.get(peer.toLowerCase())
+      if (!reachable) {
+        alert("This user hasn't activated XMTP yet. They need to open Messages and connect first.")
+        setSending(false); return
+      }
+      const dm = await _xmtpClient.conversations.newDmWithIdentifier({ identifier: peer, identifierKind: 0 })
+      setShowNew(false); setSearch('')
       await refreshConversations()
       await openConversation(dm.id)
     } catch (e: any) {
-      console.error(e)
-      alert(e?.message || 'Could not open conversation')
+      alert(e?.message || 'Could not start conversation')
     }
     setSending(false)
   }
 
-  if (!address) {
-    return <div className="p-8 text-center text-[#8A919E]">Connect your wallet to use messages.</div>
-  }
+  // Search suggestions from profiles
+  const suggestions = search.length > 1 ? Object.entries(profiles)
+    .filter(([addr, p]) => {
+      const name = p?.username?.toLowerCase() || ''
+      const q = search.toLowerCase()
+      return name.includes(q) || addr.toLowerCase().includes(q)
+    })
+    .slice(0, 5) : []
+
+  if (!address) return <div className="p-8 text-center text-[#8A919E]">Connect your wallet to use messages.</div>
 
   if (status === 'idle' || status === 'error') {
     return (
@@ -199,29 +202,33 @@ export default function Messages({ fixedFee, logTx }: Props) {
   }
 
   if (status === 'connecting') {
-    return <div className="p-8 text-center text-[#5B6271]">Connecting to XMTP… sign in your wallet</div>
+    return <div className="p-8 text-center text-[#5B6271]">Connecting… sign the request in your wallet</div>
   }
 
   return (
     <div className="flex h-[calc(100vh-120px)]">
-      {/* Conversation list */}
-      <div className="w-72 border-r border-[#EEF1F5] overflow-y-auto">
+      {/* Sidebar */}
+      <div className="w-72 border-r border-[#EEF1F5] flex flex-col">
         <div className="p-3 border-b border-[#EEF1F5] flex items-center justify-between">
-          <h3 className="font-black text-[#0A0B0D]">Conversations</h3>
+          <h3 className="font-black text-[#0A0B0D]">Messages</h3>
           <button onClick={() => setShowNew(true)} className="bg-[#0052FF] hover:bg-[#1652F0] text-white px-3 py-1.5 rounded-lg text-xs font-bold">+ New</button>
         </div>
-        {conversations.length === 0 ? (
-          <p className="p-4 text-xs text-[#8A919E] text-center">No conversations yet</p>
-        ) : conversations.map(c => (
-          <button key={c.id} onClick={() => openConversation(c.id)}
-            className={`w-full text-left p-3 border-b border-[#F7F9FC] hover:bg-[#F7F9FC] transition-colors ${activeId === c.id ? 'bg-[#E6EEFF]' : ''}`}>
-            <p className="font-bold text-sm text-[#0A0B0D] truncate">{c.peerAddress.slice(0, 8)}…{c.peerAddress.slice(-4)}</p>
-            <p className="text-xs text-[#5B6271] truncate mt-0.5">{c.lastMessage}</p>
-          </button>
-        ))}
+        <div className="overflow-y-auto flex-1">
+          {conversations.length === 0 ? (
+            <p className="p-4 text-xs text-[#8A919E] text-center">No conversations yet</p>
+          ) : conversations.map(c => (
+            <button key={c.id} onClick={() => openConversation(c.id)}
+              className={`w-full text-left p-3 border-b border-[#F7F9FC] hover:bg-[#F7F9FC] transition-colors ${activeId === c.id ? 'bg-[#E6EEFF]' : ''}`}>
+              <p className="font-bold text-sm text-[#0A0B0D] truncate">
+                {c.peerAddress.slice(0, 8)}…{c.peerAddress.slice(-4)}
+              </p>
+              {c.lastMessage && <p className="text-xs text-[#5B6271] truncate mt-0.5">{c.lastMessage}</p>}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Active conversation */}
+      {/* Chat area */}
       <div className="flex-1 flex flex-col">
         {!activeId ? (
           <div className="flex-1 flex items-center justify-center text-[#8A919E] text-sm">Select a conversation</div>
@@ -229,7 +236,7 @@ export default function Messages({ fixedFee, logTx }: Props) {
           <>
             <div className="flex-1 overflow-y-auto p-4 space-y-2">
               {messages.map(m => {
-                const mine = address && m.sender && clientRef.current?.inboxId && m.sender === clientRef.current.inboxId
+                const mine = _xmtpClient?.inboxId && m.senderInboxId === _xmtpClient.inboxId
                 return (
                   <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
                     <div className={`max-w-[70%] px-3 py-2 rounded-2xl text-sm ${mine ? 'bg-[#0052FF] text-white' : 'bg-[#F0F2F5] text-[#0A0B0D]'}`}>
@@ -258,15 +265,34 @@ export default function Messages({ fixedFee, logTx }: Props) {
       {showNew && (
         <div className="fixed inset-0 bg-black/50 z-[300] flex items-center justify-center p-4" onClick={() => setShowNew(false)}>
           <div className="bg-white rounded-2xl p-5 max-w-sm w-full" onClick={e => e.stopPropagation()}>
-            <h3 className="font-black text-lg mb-2 text-[#0A0B0D]">New Conversation</h3>
-            <p className="text-xs text-[#5B6271] mb-3">Starting a new conversation costs <b>$0.04</b> (one-time). All messages after are free.</p>
-            <input value={newPeer} onChange={e => setNewPeer(e.target.value)} placeholder="0x… address"
-              className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-4 py-2.5 text-sm font-mono focus:outline-none focus:border-[#0052FF] mb-3" />
-            <div className="flex gap-2">
-              <button onClick={() => setShowNew(false)} className="flex-1 bg-[#F0F2F5] text-[#0A0B0D] py-2.5 rounded-xl font-bold text-sm">Cancel</button>
-              <button onClick={startNew} disabled={sending || !newPeer}
+            <h3 className="font-black text-lg mb-2 text-[#0A0B0D]">New Message</h3>
+            <p className="text-xs text-[#5B6271] mb-3">Search by username or enter a 0x address.</p>
+            <div className="relative">
+              <input value={search} onChange={e => setSearch(e.target.value)}
+                placeholder="Username or 0x address…"
+                className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#0052FF] mb-1" />
+              {suggestions.length > 0 && (
+                <div className="border border-[#E4E7EB] rounded-xl overflow-hidden mb-2">
+                  {suggestions.map(([addr, p]) => (
+                    <button key={addr} onClick={() => setSearch(p?.username || addr)}
+                      className="w-full flex items-center gap-2 px-3 py-2 hover:bg-[#F0F4FF] text-left">
+                      <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#0052FF] to-[#7B3FE4] flex items-center justify-center text-white text-xs font-black flex-shrink-0">
+                        {(p?.username || addr)[0].toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-[#0A0B0D] truncate">{p?.username || addr.slice(0,10)}</p>
+                        <p className="text-xs text-[#8A919E] truncate">{addr.slice(0,8)}…</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="flex gap-2 mt-2">
+              <button onClick={() => { setShowNew(false); setSearch('') }} className="flex-1 bg-[#F0F2F5] text-[#0A0B0D] py-2.5 rounded-xl font-bold text-sm">Cancel</button>
+              <button onClick={() => startDm(search)} disabled={sending || !search}
                 className="flex-1 bg-[#0052FF] hover:bg-[#1652F0] text-white py-2.5 rounded-xl font-bold text-sm disabled:opacity-40">
-                {sending ? '…' : (paidPeers.has(newPeer.trim().toLowerCase()) ? 'Open' : 'Pay & Open')}
+                {sending ? '…' : 'Message'}
               </button>
             </div>
           </div>

@@ -177,11 +177,8 @@ export default function Home() {
   const [proposalLoading, setProposalLoading] = useState<string | null>(null)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
 
-  // Follow system
+  // Friends system (stored in localStorage)
   const [following, setFollowing] = useState<Set<string>>(new Set())
-  const [walletTxCount, setWalletTxCount] = useState<number | null>(null)
-  const [walletAnalysis, setWalletAnalysis] = useState<{ firstTx: string; txCount: number; score: number } | null>(null)
-  const [analysisLoading, setAnalysisLoading] = useState(false)
 
   useEffect(() => {
     if (!address) return
@@ -191,19 +188,11 @@ export default function Home() {
     } catch {}
   }, [address])
 
-  useEffect(() => {
-    if (!address || !publicClient) return
-    publicClient.getTransactionCount({ address: address as `0x${string}` }).then(n => setWalletTxCount(n)).catch(() => {})
-  }, [address, publicClient])
-
-  const followUser = async (target: string) => {
+  const followUser = (target: string) => {
     const t = target.toLowerCase()
-    try {
-      await writeContractAsync({ address: TOOLS_ADDRESS, abi: TOOLS_ABI, functionName: 'log', args: [`follow:${t}`], value: fixedFee })
-      const next = new Set(following); next.add(t)
-      setFollowing(next)
-      localStorage.setItem(`flamebase_following_${address!.toLowerCase()}`, JSON.stringify([...next]))
-    } catch (e: any) { console.error(e) }
+    const next = new Set(following); next.add(t)
+    setFollowing(next)
+    localStorage.setItem(`flamebase_following_${address!.toLowerCase()}`, JSON.stringify([...next]))
   }
 
   const unfollowUser = (target: string) => {
@@ -211,26 +200,6 @@ export default function Home() {
     const next = new Set(following); next.delete(t)
     setFollowing(next)
     localStorage.setItem(`flamebase_following_${address!.toLowerCase()}`, JSON.stringify([...next]))
-  }
-
-  const runWalletAnalysis = async () => {
-    if (!address || !publicClient) return
-    setAnalysisLoading(true)
-    try {
-      await writeContractAsync({ address: TOOLS_ADDRESS, abi: TOOLS_ABI, functionName: 'log', args: [`wallet-analysis:${address}`], value: parseEther((0.09 / ethPrice).toFixed(10)) })
-      const txCount = await publicClient.getTransactionCount({ address: address as `0x${string}` })
-      let firstTx = 'Unknown'
-      try {
-        const res = await fetch(`https://api.basescan.org/api?module=account&action=txlist&address=${address}&startblock=0&endblock=99999999&page=1&offset=1&sort=asc&apikey=YourApiKeyToken`)
-        const data = await res.json()
-        if (data.result?.[0]?.timeStamp) {
-          firstTx = new Date(parseInt(data.result[0].timeStamp) * 1000).toLocaleDateString()
-        }
-      } catch {}
-      const score = Math.min(100, Math.round(Math.log10(txCount + 1) * 35))
-      setWalletAnalysis({ firstTx, txCount, score })
-    } catch (e: any) { console.error(e) }
-    setAnalysisLoading(false)
   }
 
   const { data: myProfile, refetch: refetchProfile } = useReadContract({
@@ -715,42 +684,6 @@ export default function Home() {
               </button>
             ))}
           </nav>
-          {/* Base Network Stats */}
-          {isConnected && address && (
-            <div className="mx-2 mb-2 bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl p-3">
-              <p className="text-[10px] font-black text-[#8A919E] uppercase tracking-wider mb-2">⛓️ Base Stats</p>
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-xs text-[#5B6271]">Transactions</span>
-                <span className="text-xs font-black text-[#0052FF]">{walletTxCount ?? '…'}</span>
-              </div>
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-xs text-[#5B6271]">Following</span>
-                <span className="text-xs font-black text-[#0052FF]">{following.size}</span>
-              </div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs text-[#5B6271]">Score</span>
-                <span className="text-xs font-black text-[#0052FF]">{walletTxCount !== null ? Math.min(100, Math.round(Math.log10(walletTxCount + 1) * 35)) : '…'}</span>
-              </div>
-              {walletAnalysis ? (
-                <div className="bg-white rounded-lg p-2 border border-[#E4E7EB] space-y-1">
-                  <p className="text-[10px] font-black text-[#0052FF]">💎 Full Analysis</p>
-                  <p className="text-[10px] text-[#5B6271]">First tx: {walletAnalysis.firstTx}</p>
-                  <p className="text-[10px] text-[#5B6271]">Total txs: {walletAnalysis.txCount}</p>
-                  <div className="flex items-center gap-1.5">
-                    <div className="flex-1 bg-[#E4E7EB] rounded-full h-1.5">
-                      <div className="bg-[#0052FF] h-1.5 rounded-full" style={{ width: `${walletAnalysis.score}%` }} />
-                    </div>
-                    <span className="text-[10px] font-black text-[#0052FF]">{walletAnalysis.score}/100</span>
-                  </div>
-                </div>
-              ) : (
-                <button onClick={runWalletAnalysis} disabled={analysisLoading || !TOOLS_DEPLOYED}
-                  className="w-full bg-gradient-to-r from-[#0052FF] to-[#7B3FE4] text-white text-[10px] font-black py-2 rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity">
-                  {analysisLoading ? 'Analyzing…' : '💎 Wallet Analysis — $0.09'}
-                </button>
-              )}
-            </div>
-          )}
 
           <div className="border-t border-[#EEF1F5] pt-4 mt-4 space-y-3">
             {isConnected && address && (
@@ -1151,7 +1084,7 @@ export default function Home() {
             {activeTab === 'messages' && (
               <div>
                 <h1 className="text-xl font-black px-4 md:px-6 pt-4 md:pt-6 text-[#0A0B0D]">{t('navMessages')}</h1>
-                <Messages fixedFee={fixedFee} logTx={(hash, type) => setTxLog(prev => { const next = [{ hash, type, time: Date.now() }, ...prev].slice(0, 50); localStorage.setItem('flamebase_tx_log', JSON.stringify(next)); return next }) } />
+                <Messages profiles={profiles} fixedFee={fixedFee} />
               </div>
             )}
 
@@ -1215,11 +1148,7 @@ export default function Home() {
                           </div>
                           <div className="bg-[#F7F9FC] rounded-xl p-4 text-center border border-[#EEF1F5]">
                             <p className="text-3xl font-black text-[#0052FF]">{following.size}</p>
-                            <p className="text-[#5B6271] text-sm mt-1 font-semibold">Following</p>
-                          </div>
-                          <div className="bg-[#F7F9FC] rounded-xl p-4 text-center border border-[#EEF1F5]">
-                            <p className="text-3xl font-black text-[#0052FF]">{walletTxCount ?? '…'}</p>
-                            <p className="text-[#5B6271] text-sm mt-1 font-semibold">⛓️ Txs</p>
+                            <p className="text-[#5B6271] text-sm mt-1 font-semibold">Friends</p>
                           </div>
                         </div>
                         <a href={`https://basescan.org/address/${address}`} target="_blank"
@@ -1228,6 +1157,30 @@ export default function Home() {
                         </a>
                       </div>
                     </div>
+
+                    {/* Friends list */}
+                    {following.size > 0 && (
+                      <div className="bg-white border border-[#E4E7EB] rounded-2xl p-5 shadow-sm mb-4">
+                        <h3 className="font-black text-[#0A0B0D] mb-3">Friends ({following.size})</h3>
+                        <div className="space-y-2">
+                          {[...following].map(addr => (
+                            <div key={addr} className="flex items-center gap-3">
+                              <button onClick={() => setSelectedUser(addr)} className="flex items-center gap-2 flex-1 min-w-0 hover:opacity-80 transition-opacity">
+                                <Avatar addr={addr} profiles={profiles} size="sm" />
+                                <div className="min-w-0">
+                                  <p className="text-sm font-bold truncate text-[#0A0B0D]">{profiles[addr]?.username || `${addr.slice(0,6)}…${addr.slice(-4)}`}</p>
+                                  <p className="text-xs text-[#8A919E] truncate">{addr.slice(0,8)}…</p>
+                                </div>
+                              </button>
+                              <button onClick={() => unfollowUser(addr)}
+                                className="text-xs text-red-400 hover:text-red-600 font-bold px-2 py-1 rounded-lg hover:bg-red-50 transition-colors flex-shrink-0">
+                                Remove
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Admin only */}
                     {isAdmin && (
@@ -1518,12 +1471,12 @@ export default function Home() {
                   following.has(selectedUser.toLowerCase()) ? (
                     <button onClick={() => unfollowUser(selectedUser)}
                       className="px-4 py-1.5 rounded-xl border-2 border-[#0052FF] text-[#0052FF] text-sm font-black hover:bg-red-50 hover:border-red-500 hover:text-red-500 transition-colors">
-                      Following
+                      Friends ✓
                     </button>
                   ) : (
                     <button onClick={() => followUser(selectedUser)}
                       className="px-4 py-1.5 rounded-xl bg-[#0052FF] text-white text-sm font-black hover:bg-[#1652F0] transition-colors">
-                      Follow
+                      + Add Friend
                     </button>
                   )
                 )}
