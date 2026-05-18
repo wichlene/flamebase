@@ -393,6 +393,11 @@ export default function Home() {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] || null
+    if (file && file.size > 50 * 1024 * 1024) {
+      alert('Dosya 50MB\'tan büyük. Lütfen daha kısa bir video seç (~1 dk).')
+      e.target.value = ''
+      return
+    }
     setSelectedFile(file)
     setPreviewUrl(file ? URL.createObjectURL(file) : null)
   }
@@ -418,11 +423,11 @@ export default function Home() {
         const res = await fetch('/api/upload', { method: 'POST', body: fd })
         const data = await res.json()
         if (!res.ok || !data.ipfsHash) {
-          alert('Resim yüklenemedi: ' + JSON.stringify(data.error || data))
+          alert('Dosya yüklenemedi: ' + JSON.stringify(data.error || data))
           setLoading(false)
           return
         }
-        ipfsHash = data.ipfsHash
+        ipfsHash = selectedFile.type.startsWith('video/') ? `vid_${data.ipfsHash}` : data.ipfsHash
       }
       await writeContractAsync({
         address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'createPost',
@@ -814,8 +819,13 @@ export default function Home() {
 
                             {post.ipfsHash && (
                               <div className="rounded-2xl overflow-hidden mb-3 border border-[#E4E7EB]">
-                                <img src={`https://gateway.pinata.cloud/ipfs/${post.ipfsHash}`}
-                                  className="w-full max-h-[520px] object-cover" alt="post" />
+                                {post.ipfsHash.startsWith('vid_') ? (
+                                  <video src={`https://gateway.pinata.cloud/ipfs/${post.ipfsHash.slice(4)}`}
+                                    controls playsInline className="w-full max-h-[520px] bg-black" />
+                                ) : (
+                                  <img src={`https://gateway.pinata.cloud/ipfs/${post.ipfsHash}`}
+                                    className="w-full max-h-[520px] object-cover" alt="post" />
+                                )}
                               </div>
                             )}
 
@@ -958,7 +968,11 @@ export default function Home() {
                       className="w-full bg-transparent px-5 py-4 text-[#0A0B0D] placeholder-[#8A919E] resize-none focus:outline-none text-[16px] leading-relaxed" />
                     {previewUrl && (
                       <div className="relative mx-4 mb-4 rounded-2xl overflow-hidden border border-[#E4E7EB]">
-                        <img src={previewUrl} className="w-full max-h-80 object-cover" alt="preview" />
+                        {selectedFile?.type.startsWith('video/') ? (
+                          <video src={previewUrl} controls className="w-full max-h-80 bg-black" />
+                        ) : (
+                          <img src={previewUrl} className="w-full max-h-80 object-cover" alt="preview" />
+                        )}
                         <button onClick={() => { setSelectedFile(null); setPreviewUrl(null) }}
                           className="absolute top-3 right-3 bg-black/70 backdrop-blur rounded-full w-8 h-8 flex items-center justify-center text-white text-sm hover:bg-black transition-colors">✕</button>
                       </div>
@@ -966,7 +980,7 @@ export default function Home() {
                     <div className="flex items-center gap-3 px-4 py-3 border-t border-[#EEF1F5]">
                       <label className="cursor-pointer text-[#5B6271] hover:text-[#0052FF] transition-colors">
                         <span className="text-2xl">📷</span>
-                        <input type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+                        <input type="file" accept="image/*,video/*" className="hidden" onChange={handleFileChange} />
                       </label>
                       <span className="text-[#8A919E] text-xs flex-1">{newPost.length}/500</span>
                       <button onClick={createPost} disabled={loading || !newPost}
@@ -1336,7 +1350,9 @@ export default function Home() {
                 {posts.filter(p => p.author.toLowerCase() === selectedUser.toLowerCase()).map(post => (
                   <div key={post.id.toString()} className="bg-[#F7F9FC] rounded-2xl p-4 border border-[#EEF1F5]">
                     {post.content && <p className="text-sm text-[#0A0B0D] mb-2">{post.content}</p>}
-                    {post.ipfsHash && <img src={`https://gateway.pinata.cloud/ipfs/${post.ipfsHash}`} className="w-full max-h-40 object-cover rounded-xl mb-2" alt="" />}
+                    {post.ipfsHash && (post.ipfsHash.startsWith('vid_')
+                      ? <video src={`https://gateway.pinata.cloud/ipfs/${post.ipfsHash.slice(4)}`} controls playsInline className="w-full max-h-40 bg-black rounded-xl mb-2" />
+                      : <img src={`https://gateway.pinata.cloud/ipfs/${post.ipfsHash}`} className="w-full max-h-40 object-cover rounded-xl mb-2" alt="" />)}
                     <div className="flex items-center gap-3 text-xs text-[#8A919E]">
                       <span>🔥 {post.likes.toString()}</span>
                       <span>💸 {parseFloat(formatEther(post.tips)).toFixed(4)} ETH</span>
