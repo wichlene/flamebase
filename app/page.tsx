@@ -40,18 +40,7 @@ interface ProfileData {
   tips: bigint
 }
 
-type Tab = 'feed' | 'post' | 'leaderboard' | 'profile' | 'tools'
-
-const FAKE_LEADERBOARD = [
-  { address: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045', username: 'vitalik.eth', flames: 2847 },
-  { address: '0x220866b1a2219f40e72f5c628b65d54268ca3a9d', username: 'basegod', flames: 1203 },
-  { address: '0x71660c4005ba85c37ccec55d0c4493e66fe775d3', username: 'cryptoflame', flames: 887 },
-  { address: '0xab5801a7d398351b8be11c439e05c5b3259aec9b', username: 'onchainvibes', flames: 654 },
-  { address: '0x1db3439a222c519ab44bb1144fc28167b4fa6ee6', username: 'basebuilder', flames: 521 },
-  { address: '0x6b175474e89094c44da98b954eedeac495271d0f', username: 'flamecatcher', flames: 398 },
-  { address: '0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9', username: 'web3native', flames: 312 },
-  { address: '0xc00e94cb662c3520282e6f5717214004a7f26888', username: 'degenflame', flames: 187 },
-]
+type Tab = 'feed' | 'post' | 'profile'
 
 function Avatar({ addr, profiles, size = 'md' }: { addr: string; profiles: Record<string, ProfileData>; size?: 'sm' | 'md' | 'lg' }) {
   const p = profiles[addr.toLowerCase()]
@@ -112,7 +101,6 @@ export default function Home() {
   const [loadingAction, setLoadingAction] = useState<string | null>(null)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
-  const [leaderboard, setLeaderboard] = useState<Array<{ address: string; profile: ProfileData }>>([])
   const [ethPrice, setEthPrice] = useState(2500)
   const [txLog, setTxLog] = useState<Array<{ hash: string; type: string; time: number }>>([])
   const [showTerminal, setShowTerminal] = useState(false)
@@ -365,11 +353,6 @@ export default function Home() {
         if (p) map[a] = p
       }
       setProfiles(map)
-      const lb = Object.entries(map)
-        .filter(([, p]) => p.exists)
-        .sort(([, a], [, b]) => Number(b.flames) - Number(a.flames))
-        .map(([addr, profile]) => ({ address: addr, profile }))
-      setLeaderboard(lb)
     }
     run()
   }, [postCount, publicClient, fetchProfileData])
@@ -564,10 +547,8 @@ export default function Home() {
 
   const navItems: { tab: Tab; icon: string; labelKey: string }[] = [
     { tab: 'feed', icon: '🏠', labelKey: 'navFeed' },
-    { tab: 'post' as Tab, icon: '✏️', labelKey: 'navNewPost' },
-    { tab: 'leaderboard' as Tab, icon: '🏆', labelKey: 'navLeaderboard' },
-    { tab: 'profile' as Tab, icon: '👤', labelKey: 'navProfile' },
-    ...(TOOLS_DEPLOYED || isAdmin ? [{ tab: 'tools' as Tab, icon: '🔧', labelKey: 'navTools' }] : []),
+    { tab: 'post', icon: '✏️', labelKey: 'navNewPost' },
+    { tab: 'profile', icon: '👤', labelKey: 'navProfile' },
   ]
 
   return (
@@ -989,359 +970,6 @@ export default function Home() {
               </div>
             )}
 
-            {/* ══ TOOLS ══ */}
-            {activeTab === 'tools' && (
-              <div>
-                <div className="px-5 py-4 border-b border-[#EEF1F5] sticky top-0 bg-white/95 backdrop-blur z-10">
-                  <h1 className="text-lg font-black text-[#0A0B0D]">🔧 {t('toolsTitle')}</h1>
-                  <p className="text-[#5B6271] text-sm">{t('toolsSub')}</p>
-                </div>
-
-
-                {/* Tool cards grid */}
-                <div className="grid grid-cols-2 gap-3 px-4 py-4">
-                  {TOOL_CARDS.map(tool => {
-                    const isDeployed = tool.deployed
-                    const isActive = activeTool === tool.id
-                    const isLoading = (tool.id === 'counter' && counterLoading) || (tool.id === 'streak' && streakLoading)
-                    return (
-                      <button
-                        key={tool.id}
-                        onClick={() => {
-                          if (!isDeployed || isLoading) return
-                          if (tool.id === 'counter') {
-                            if (!TOOLS_DEPLOYED) return
-                            toolAction(async () => {
-                              await writeContractAsync({ address: TOOLS_ADDRESS, abi: TOOLS_ABI, functionName: 'count', value: fixedFee })
-                            }, setCounterLoading)
-                            return
-                          }
-                          if (tool.id === 'streak') {
-                            if (!TOOLS_DEPLOYED || canCheckIn === false) return
-                            toolAction(async () => {
-                              await writeContractAsync({ address: TOOLS_ADDRESS, abi: TOOLS_ABI, functionName: 'checkIn', value: fixedFee })
-                            }, setStreakLoading)
-                            return
-                          }
-                          setActiveTool(isActive ? null : tool.id)
-                        }}
-                        className={`rounded-2xl p-4 text-left border transition-all ${
-                          isDeployed
-                            ? isActive
-                              ? 'bg-[#E6EEFF] border-[#0052FF] shadow-sm'
-                              : isLoading
-                                ? 'bg-[#E6EEFF] border-[#0052FF] opacity-70'
-                                : 'bg-white border-[#E4E7EB] hover:border-[#0052FF] hover:bg-[#F0F4FF]'
-                            : 'bg-[#F7F9FC] border-[#E4E7EB] opacity-60 cursor-not-allowed'
-                        }`}
-                      >
-                        <p className="font-mono text-2xl font-bold text-[#0052FF] mb-1">{tool.symbol}</p>
-                        <p className="font-black text-[#0A0B0D] text-sm">{tool.label}</p>
-                        <p className="text-[#5B6271] text-xs mt-0.5 leading-relaxed">{tool.desc}</p>
-                        {!isDeployed && (
-                          <a
-                            href="https://remix.ethereum.org"
-                            target="_blank"
-                            onClick={e => e.stopPropagation()}
-                            className="mt-2 inline-block text-[#0052FF] text-xs font-semibold hover:underline"
-                          >
-                            {t('deployViaRemix')}
-                          </a>
-                        )}
-                      </button>
-                    )
-                  })}
-                </div>
-
-                {/* Active tool panel */}
-                {activeTool && (
-                  <div className="mx-4 mb-4 bg-white border border-[#E4E7EB] rounded-2xl p-5 shadow-sm">
-                    {!isConnected && (
-                      <ConnectPrompt message="Connect your wallet to use tools." label={t('connectWallet')} />
-                    )}
-
-
-                    {isConnected && activeTool === 'logbook' && (
-                      <div>
-                        <h3 className="font-black text-lg mb-3">[📖] LOGBOOK</h3>
-                        <p className="text-sm text-[#5B6271] mb-4">One-click on-chain log. Auto-stamps timestamp + your address.</p>
-                        <textarea
-                          value={logText}
-                          onChange={e => setLogText(e.target.value)}
-                          placeholder="Optional: custom log text (or leave empty for auto)"
-                          rows={3}
-                          maxLength={280}
-                          className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-4 py-3 text-sm text-[#0A0B0D] placeholder-[#8A919E] resize-none focus:outline-none focus:border-[#0052FF] mb-3"
-                        />
-                        <button
-                          onClick={() => {
-                            if (!TOOLS_DEPLOYED) return
-                            toolAction(async () => {
-                              const auto = `Log @ ${new Date().toISOString()} by ${address?.slice(0,8)}`
-                              await writeContractAsync({
-                                address: TOOLS_ADDRESS,
-                                abi: TOOLS_ABI,
-                                functionName: 'log',
-                                args: [logText || auto],
-                                value: fixedFee,
-                              }, 'log')
-                              setLogText('')
-                            }, setLogLoading)
-                          }}
-                          disabled={logLoading}
-                          className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white py-3 rounded-xl font-bold disabled:opacity-40 transition-colors"
-                        >
-                          {logLoading ? 'Writing...' : '📝 Log on-chain'}
-                        </button>
-                      </div>
-                    )}
-
-                    {isConnected && activeTool === 'greeter' && (
-                      <div>
-                        <h3 className="font-black text-lg mb-3">[👋] GREETER</h3>
-                        {userGreeting && (
-                          <div className="bg-[#F0F4FF] border border-[#D6E2FF] rounded-xl p-3 mb-3">
-                            <p className="text-xs text-[#5B6271] font-semibold mb-1">Current greeting:</p>
-                            <p className="text-sm text-[#0A0B0D] font-bold">{userGreeting as string}</p>
-                          </div>
-                        )}
-                        <input
-                          value={greetText}
-                          onChange={e => setGreetText(e.target.value)}
-                          placeholder="Set your on-chain greeting (max 100 chars)..."
-                          maxLength={100}
-                          className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-4 py-3 text-sm text-[#0A0B0D] placeholder-[#8A919E] focus:outline-none focus:border-[#0052FF] mb-3"
-                        />
-                        <button
-                          onClick={() => {
-                            if (!TOOLS_DEPLOYED || !greetText) return
-                            toolAction(async () => {
-                              await writeContractAsync({
-                                address: TOOLS_ADDRESS,
-                                abi: TOOLS_ABI,
-                                functionName: 'greet',
-                                args: [greetText],
-                                value: fixedFee,
-                              })
-                              setGreetText('')
-                            }, setGreetLoading)
-                          }}
-                          disabled={greetLoading || !greetText}
-                          className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white py-3 rounded-xl font-bold disabled:opacity-40 transition-colors"
-                        >
-                          {greetLoading ? 'Setting...' : 'Set Greeting'}
-                        </button>
-                      </div>
-                    )}
-
-                    {isConnected && activeTool === 'token' && (
-                      <div>
-                        <h3 className="font-black text-lg mb-3">[$] TOKEN FACTORY</h3>
-                        <div className="space-y-3 mb-4">
-                          <input
-                            value={tokenName}
-                            onChange={e => setTokenName(e.target.value)}
-                            placeholder="Token name (e.g. MyToken)"
-                            className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-4 py-3 text-sm text-[#0A0B0D] placeholder-[#8A919E] focus:outline-none focus:border-[#0052FF]"
-                          />
-                          <input
-                            value={tokenSymbol}
-                            onChange={e => setTokenSymbol(e.target.value)}
-                            placeholder="Symbol (e.g. MTK)"
-                            className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-4 py-3 text-sm text-[#0A0B0D] placeholder-[#8A919E] focus:outline-none focus:border-[#0052FF]"
-                          />
-                          <input
-                            value={tokenSupply}
-                            onChange={e => setTokenSupply(e.target.value)}
-                            placeholder="Total supply (1 - 1,000,000,000)"
-                            type="number"
-                            min="1"
-                            max="1000000000"
-                            className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-4 py-3 text-sm text-[#0A0B0D] placeholder-[#8A919E] focus:outline-none focus:border-[#0052FF]"
-                          />
-                        </div>
-                        {tokenCount !== undefined && (
-                          <p className="text-xs text-[#5B6271] mb-3">Tokens deployed: {tokenCount.toString()}</p>
-                        )}
-                        <button
-                          onClick={() => {
-                            if (!TOKEN_FACTORY_DEPLOYED || !tokenName || !tokenSymbol || !tokenSupply) return
-                            toolAction(async () => {
-                              await writeContractAsync({
-                                address: TOKEN_FACTORY_ADDRESS,
-                                abi: TOKEN_FACTORY_ABI,
-                                functionName: 'deployToken',
-                                args: [tokenName, tokenSymbol, BigInt(tokenSupply)],
-                                value: fixedFee,
-                              })
-                              setTokenName('FlameBase'); setTokenSymbol('FLAME'); setTokenSupply('1000000')
-                            }, setTokenLoading)
-                          }}
-                          disabled={tokenLoading || !tokenName || !tokenSymbol || !tokenSupply}
-                          className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white py-3 rounded-xl font-bold disabled:opacity-40 transition-colors"
-                        >
-                          {tokenLoading ? 'Deploying...' : 'Deploy Token'}
-                        </button>
-                      </div>
-                    )}
-
-                    {isConnected && activeTool === 'nft' && (
-                      <div>
-                        <h3 className="font-black text-lg mb-3">[*] NFT FACTORY</h3>
-                        <div className="space-y-3 mb-4">
-                          <input
-                            value={nftName}
-                            onChange={e => setNftName(e.target.value)}
-                            placeholder="Collection name"
-                            className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-4 py-3 text-sm text-[#0A0B0D] placeholder-[#8A919E] focus:outline-none focus:border-[#0052FF]"
-                          />
-                          <input
-                            value={nftSymbol}
-                            onChange={e => setNftSymbol(e.target.value)}
-                            placeholder="Symbol (e.g. FNFT)"
-                            className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-4 py-3 text-sm text-[#0A0B0D] placeholder-[#8A919E] focus:outline-none focus:border-[#0052FF]"
-                          />
-                          <input
-                            value={nftMaxSupply}
-                            onChange={e => setNftMaxSupply(e.target.value)}
-                            placeholder="Max supply (1 - 10,000)"
-                            type="number"
-                            min="1"
-                            max="10000"
-                            className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-4 py-3 text-sm text-[#0A0B0D] placeholder-[#8A919E] focus:outline-none focus:border-[#0052FF]"
-                          />
-                          <div className="w-full bg-[#F0F4FF] border border-[#0052FF]/30 rounded-xl px-4 py-3 text-sm text-[#0052FF] font-bold">
-                            Mint price: $0.50 per NFT ({nftMintPriceETH.slice(0,8)} ETH)
-                          </div>
-                        </div>
-                        {nftCollectionCount !== undefined && (
-                          <p className="text-xs text-[#5B6271] mb-3">Collections deployed: {nftCollectionCount.toString()}</p>
-                        )}
-                        <button
-                          onClick={() => {
-                            if (!NFT_FACTORY_DEPLOYED || !nftName || !nftSymbol || !nftMaxSupply) return
-                            toolAction(async () => {
-                              await writeContractAsync({
-                                address: NFT_FACTORY_ADDRESS,
-                                abi: NFT_FACTORY_ABI,
-                                functionName: 'deployNFT',
-                                args: [nftName, nftSymbol, BigInt(nftMaxSupply), nftMintPriceWei, ''],
-                                value: fixedFee,
-                              })
-                              setNftName('FlameBase NFT'); setNftSymbol('FNFT'); setNftMaxSupply('1000')
-                            }, setNftLoading)
-                          }}
-                          disabled={nftLoading || !nftName || !nftSymbol || !nftMaxSupply}
-                          className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white py-3 rounded-xl font-bold disabled:opacity-40 transition-colors"
-                        >
-                          {nftLoading ? 'Deploying...' : 'Deploy NFT Collection'}
-                        </button>
-                      </div>
-                    )}
-
-                    {isConnected && activeTool === 'dao' && (
-                      <div>
-                        <h3 className="font-black text-lg mb-3">[△] SIMPLE DAO</h3>
-                        {proposalCount !== undefined && (
-                          <p className="text-xs text-[#5B6271] mb-3">Active proposals: {proposalCount.toString()}</p>
-                        )}
-                        <div className="space-y-3 mb-4">
-                          <input
-                            value={daoTitle}
-                            onChange={e => setDaoTitle(e.target.value)}
-                            placeholder="Proposal title (1-100 chars)"
-                            maxLength={100}
-                            className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-4 py-3 text-sm text-[#0A0B0D] placeholder-[#8A919E] focus:outline-none focus:border-[#0052FF]"
-                          />
-                          <textarea
-                            value={daoDesc}
-                            onChange={e => setDaoDesc(e.target.value)}
-                            placeholder="Proposal description..."
-                            rows={3}
-                            className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-4 py-3 text-sm text-[#0A0B0D] placeholder-[#8A919E] resize-none focus:outline-none focus:border-[#0052FF]"
-                          />
-                        </div>
-                        <button
-                          onClick={() => {
-                            if (!DAO_DEPLOYED || !daoTitle) return
-                            toolAction(async () => {
-                              await writeContractAsync({
-                                address: DAO_ADDRESS,
-                                abi: DAO_ABI,
-                                functionName: 'propose',
-                                args: [daoTitle, daoDesc],
-                                value: fixedFee,
-                              })
-                              setDaoTitle(''); setDaoDesc('')
-                            }, setDaoLoading)
-                          }}
-                          disabled={daoLoading || !daoTitle}
-                          className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white py-3 rounded-xl font-bold disabled:opacity-40 transition-colors"
-                        >
-                          {daoLoading ? 'Creating...' : 'Create Proposal'}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* ══ LEADERBOARD ══ */}
-            {activeTab === 'leaderboard' && (
-              <div>
-                {/* Terminal */}
-                <div className="mx-4 mt-4 mb-3 bg-[#0A0B0D] rounded-xl border border-green-400/20 overflow-hidden">
-                  <div className="flex items-center justify-between px-3 py-2 bg-[#1a1c20] border-b border-green-400/10">
-                    <span className="font-mono text-green-400 text-xs">flamebase@base ~ $ tx-log</span>
-                    <button onClick={() => { setTxLog([]); localStorage.removeItem('flamebase_tx_log') }}
-                      className="text-green-400/50 hover:text-green-400 text-xs font-mono">clear</button>
-                  </div>
-                  <div className="font-mono text-xs p-3 text-green-400 max-h-32 overflow-y-auto">
-                    {txLog.length === 0 ? (
-                      <p className="text-green-400/40">No transactions yet.</p>
-                    ) : txLog.slice(0, 6).map((tx, i) => {
-                      const time = new Date(tx.time)
-                      const hh = time.getHours().toString().padStart(2, '0')
-                      const mm = time.getMinutes().toString().padStart(2, '0')
-                      return (
-                        <div key={i} className="flex gap-2 items-center">
-                          <span className="text-green-400/50">{hh}:{mm}</span>
-                          <span className="text-green-300">{tx.type}</span>
-                          <a href={`https://basescan.org/tx/${tx.hash}`} target="_blank" rel="noreferrer"
-                            className="text-green-400/70 hover:text-green-400 truncate">{tx.hash.slice(0, 18)}...</a>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-
-                {/* Leaderboard */}
-                <div className="px-4 py-2 border-b border-[#EEF1F5]">
-                  <h1 className="text-base font-black text-[#0A0B0D]">🏆 {t('leaderboardTitle')}</h1>
-                </div>
-                <div className="divide-y divide-[#EEF1F5]">
-                  {(leaderboard.length > 0 ? leaderboard : FAKE_LEADERBOARD.map(f => ({
-                    address: f.address,
-                    profile: { username: f.username, avatarHash: '', exists: true, flames: BigInt(f.flames), tips: 0n }
-                  }))).map(({ address: addr, profile: p }, idx) => (
-                    <div key={addr} className="flex items-center gap-3 px-4 py-2.5 hover:bg-[#F7F9FC] transition-colors">
-                      <div className={`w-7 text-center font-black flex-shrink-0 ${
-                        idx === 0 ? 'text-yellow-500 text-lg' : idx === 1 ? 'text-gray-400 text-lg' : idx === 2 ? 'text-orange-500 text-lg' : 'text-[#8A919E] text-sm'
-                      }`}>
-                        {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}`}
-                      </div>
-                      <Avatar addr={addr} profiles={profiles} size="sm" />
-                      <div className="flex-1 min-w-0">
-                        <p className="font-bold text-[#0A0B0D] text-sm">{p.username}</p>
-                        <p className="text-[#8A919E] text-xs">{addr.slice(0,6)}...{addr.slice(-4)}</p>
-                      </div>
-                      <p className="font-black text-[#0052FF] text-sm">{p.flames.toString()} 🔥</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
 
             {/* ══ PROFILE ══ */}
             {activeTab === 'profile' && (
@@ -1499,65 +1127,180 @@ export default function Home() {
         </main>
 
         {/* ── Right Sidebar ── */}
-        <aside className="hidden xl:flex flex-col fixed right-0 top-0 h-full w-72 bg-white border-l border-[#E4E7EB] z-40">
+        <aside className="hidden xl:flex flex-col fixed right-0 top-0 h-full w-72 bg-white border-l border-[#E4E7EB] z-40 overflow-y-auto">
+
+          {/* Tool Buttons */}
+          <div className="px-3 pt-4 pb-2">
+            <p className="text-xs font-black text-[#8A919E] uppercase tracking-wider px-1 mb-2">🔧 Tools</p>
+            <div className="space-y-1">
+
+              {/* Counter — direct */}
+              <button onClick={() => { if (!TOOLS_DEPLOYED) return; toolAction(async () => { await writeContractAsync({ address: TOOLS_ADDRESS, abi: TOOLS_ABI, functionName: 'count', value: fixedFee }) }, setCounterLoading) }}
+                disabled={!TOOLS_DEPLOYED || counterLoading}
+                className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl bg-white border border-[#E4E7EB] hover:border-[#0052FF] hover:bg-[#F0F4FF] disabled:opacity-40 transition-all text-left">
+                <span className="font-mono text-[#0052FF] font-bold text-sm w-8">[##]</span>
+                <span className="text-xs font-bold text-[#0A0B0D]">{counterLoading ? 'Counting…' : 'Counter'}</span>
+              </button>
+
+              {/* Streak — direct */}
+              <button onClick={() => { if (!TOOLS_DEPLOYED || canCheckIn === false) return; toolAction(async () => { await writeContractAsync({ address: TOOLS_ADDRESS, abi: TOOLS_ABI, functionName: 'checkIn', value: fixedFee }) }, setStreakLoading) }}
+                disabled={!TOOLS_DEPLOYED || streakLoading || canCheckIn === false}
+                className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl bg-white border border-[#E4E7EB] hover:border-[#0052FF] hover:bg-[#F0F4FF] disabled:opacity-40 transition-all text-left">
+                <span className="font-mono text-[#0052FF] font-bold text-sm w-8">[~]</span>
+                <span className="text-xs font-bold text-[#0A0B0D]">{streakLoading ? 'Checking…' : canCheckIn === false ? 'Checked in ✓' : 'Streak'}</span>
+              </button>
+
+              {/* Logbook */}
+              <div>
+                <button onClick={() => setActiveTool(activeTool === 'logbook' ? null : 'logbook')}
+                  disabled={!TOOLS_DEPLOYED}
+                  className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl border transition-all text-left disabled:opacity-40 ${activeTool === 'logbook' ? 'bg-[#E6EEFF] border-[#0052FF]' : 'bg-white border-[#E4E7EB] hover:border-[#0052FF] hover:bg-[#F0F4FF]'}`}>
+                  <span className="font-mono text-[#0052FF] font-bold text-sm w-8">[📖]</span>
+                  <span className="text-xs font-bold text-[#0A0B0D]">Logbook</span>
+                </button>
+                {activeTool === 'logbook' && (
+                  <div className="mt-1 px-1 space-y-1">
+                    <textarea value={logText} onChange={e => setLogText(e.target.value)} placeholder="Log text (or leave empty)" rows={2} maxLength={280}
+                      className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs text-[#0A0B0D] placeholder-[#8A919E] resize-none focus:outline-none focus:border-[#0052FF]" />
+                    <button onClick={() => { if (!TOOLS_DEPLOYED) return; toolAction(async () => { const auto = `Log @ ${new Date().toISOString()} by ${address?.slice(0,8)}`; await writeContractAsync({ address: TOOLS_ADDRESS, abi: TOOLS_ABI, functionName: 'log', args: [logText || auto], value: fixedFee }, 'log'); setLogText('') }, setLogLoading) }}
+                      disabled={logLoading} className="w-full bg-[#0052FF] text-white text-xs py-1.5 rounded-lg font-bold disabled:opacity-40">
+                      {logLoading ? 'Writing…' : 'Log on-chain'}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Greeter */}
+              <div>
+                <button onClick={() => setActiveTool(activeTool === 'greeter' ? null : 'greeter')}
+                  disabled={!TOOLS_DEPLOYED}
+                  className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl border transition-all text-left disabled:opacity-40 ${activeTool === 'greeter' ? 'bg-[#E6EEFF] border-[#0052FF]' : 'bg-white border-[#E4E7EB] hover:border-[#0052FF] hover:bg-[#F0F4FF]'}`}>
+                  <span className="font-mono text-[#0052FF] font-bold text-sm w-8">[👋]</span>
+                  <span className="text-xs font-bold text-[#0A0B0D]">Greeter</span>
+                </button>
+                {activeTool === 'greeter' && (
+                  <div className="mt-1 px-1 space-y-1">
+                    <input value={greetText} onChange={e => setGreetText(e.target.value)} placeholder="Your on-chain greeting" maxLength={100}
+                      className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs text-[#0A0B0D] placeholder-[#8A919E] focus:outline-none focus:border-[#0052FF]" />
+                    <button onClick={() => { if (!TOOLS_DEPLOYED || !greetText) return; toolAction(async () => { await writeContractAsync({ address: TOOLS_ADDRESS, abi: TOOLS_ABI, functionName: 'greet', args: [greetText], value: fixedFee }); setGreetText('') }, setGreetLoading) }}
+                      disabled={greetLoading || !greetText} className="w-full bg-[#0052FF] text-white text-xs py-1.5 rounded-lg font-bold disabled:opacity-40">
+                      {greetLoading ? 'Setting…' : 'Set Greeting'}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Token */}
+              <div>
+                <button onClick={() => setActiveTool(activeTool === 'token' ? null : 'token')}
+                  disabled={!TOKEN_FACTORY_DEPLOYED}
+                  className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl border transition-all text-left disabled:opacity-40 ${activeTool === 'token' ? 'bg-[#E6EEFF] border-[#0052FF]' : 'bg-white border-[#E4E7EB] hover:border-[#0052FF] hover:bg-[#F0F4FF]'}`}>
+                  <span className="font-mono text-[#0052FF] font-bold text-sm w-8">[$]</span>
+                  <span className="text-xs font-bold text-[#0A0B0D]">Token</span>
+                </button>
+                {activeTool === 'token' && (
+                  <div className="mt-1 px-1 space-y-1">
+                    <input value={tokenName} onChange={e => setTokenName(e.target.value)} placeholder="Token name" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
+                    <input value={tokenSymbol} onChange={e => setTokenSymbol(e.target.value)} placeholder="Symbol" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
+                    <input value={tokenSupply} onChange={e => setTokenSupply(e.target.value)} placeholder="Supply" type="number" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
+                    <button onClick={() => { if (!TOKEN_FACTORY_DEPLOYED || !tokenName || !tokenSymbol || !tokenSupply) return; toolAction(async () => { await writeContractAsync({ address: TOKEN_FACTORY_ADDRESS, abi: TOKEN_FACTORY_ABI, functionName: 'deployToken', args: [tokenName, tokenSymbol, BigInt(tokenSupply)], value: fixedFee }); setTokenName('FlameBase'); setTokenSymbol('FLAME'); setTokenSupply('1000000') }, setTokenLoading) }}
+                      disabled={tokenLoading || !tokenName || !tokenSymbol || !tokenSupply} className="w-full bg-[#0052FF] text-white text-xs py-1.5 rounded-lg font-bold disabled:opacity-40">
+                      {tokenLoading ? 'Deploying…' : 'Deploy Token'}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* NFT */}
+              <div>
+                <button onClick={() => setActiveTool(activeTool === 'nft' ? null : 'nft')}
+                  disabled={!NFT_FACTORY_DEPLOYED}
+                  className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl border transition-all text-left disabled:opacity-40 ${activeTool === 'nft' ? 'bg-[#E6EEFF] border-[#0052FF]' : 'bg-white border-[#E4E7EB] hover:border-[#0052FF] hover:bg-[#F0F4FF]'}`}>
+                  <span className="font-mono text-[#0052FF] font-bold text-sm w-8">[*]</span>
+                  <span className="text-xs font-bold text-[#0A0B0D]">NFT</span>
+                </button>
+                {activeTool === 'nft' && (
+                  <div className="mt-1 px-1 space-y-1">
+                    <input value={nftName} onChange={e => setNftName(e.target.value)} placeholder="Collection name" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
+                    <input value={nftSymbol} onChange={e => setNftSymbol(e.target.value)} placeholder="Symbol" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
+                    <input value={nftMaxSupply} onChange={e => setNftMaxSupply(e.target.value)} placeholder="Max supply" type="number" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
+                    <div className="text-[10px] text-[#0052FF] font-bold px-1">Mint price: $0.50 fixed</div>
+                    <button onClick={() => { if (!NFT_FACTORY_DEPLOYED || !nftName || !nftSymbol || !nftMaxSupply) return; toolAction(async () => { await writeContractAsync({ address: NFT_FACTORY_ADDRESS, abi: NFT_FACTORY_ABI, functionName: 'deployNFT', args: [nftName, nftSymbol, BigInt(nftMaxSupply), nftMintPriceWei, ''], value: fixedFee }); setNftName('FlameBase NFT'); setNftSymbol('FNFT'); setNftMaxSupply('1000') }, setNftLoading) }}
+                      disabled={nftLoading || !nftName || !nftSymbol || !nftMaxSupply} className="w-full bg-[#0052FF] text-white text-xs py-1.5 rounded-lg font-bold disabled:opacity-40">
+                      {nftLoading ? 'Deploying…' : 'Deploy NFT'}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* DAO */}
+              <div>
+                <button onClick={() => setActiveTool(activeTool === 'dao' ? null : 'dao')}
+                  disabled={!DAO_DEPLOYED}
+                  className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl border transition-all text-left disabled:opacity-40 ${activeTool === 'dao' ? 'bg-[#E6EEFF] border-[#0052FF]' : 'bg-white border-[#E4E7EB] hover:border-[#0052FF] hover:bg-[#F0F4FF]'}`}>
+                  <span className="font-mono text-[#0052FF] font-bold text-sm w-8">[△]</span>
+                  <span className="text-xs font-bold text-[#0A0B0D]">DAO</span>
+                </button>
+                {activeTool === 'dao' && (
+                  <div className="mt-1 px-1 space-y-1">
+                    <input value={daoTitle} onChange={e => setDaoTitle(e.target.value)} placeholder="Proposal title" maxLength={100} className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
+                    <textarea value={daoDesc} onChange={e => setDaoDesc(e.target.value)} placeholder="Description" rows={2} className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs resize-none focus:outline-none focus:border-[#0052FF]" />
+                    <button onClick={() => { if (!DAO_DEPLOYED || !daoTitle) return; toolAction(async () => { await writeContractAsync({ address: DAO_ADDRESS, abi: DAO_ABI, functionName: 'propose', args: [daoTitle, daoDesc], value: fixedFee }); setDaoTitle(''); setDaoDesc('') }, setDaoLoading) }}
+                      disabled={daoLoading || !daoTitle} className="w-full bg-[#0052FF] text-white text-xs py-1.5 rounded-lg font-bold disabled:opacity-40">
+                      {daoLoading ? 'Creating…' : 'Create Proposal'}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+            </div>
+          </div>
+
+          {/* Admin Withdraw */}
+          {isAdmin && isConnected && (
+            <div className="mx-3 my-2 bg-amber-50 border border-amber-200 rounded-xl p-3">
+              <p className="text-xs font-black text-amber-800 mb-1">💰 Withdraw</p>
+              <p className="text-[10px] text-amber-600 mb-2">
+                {walletBalance ? `Wallet: ${parseFloat(formatEther(walletBalance.value)).toFixed(4)} ETH` : '—'}
+              </p>
+              <button
+                onClick={async () => {
+                  try {
+                    await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'withdraw' }, 'withdraw')
+                  } catch { alert('Kontrat bakiyesi zaten 0. Ücretler her işlemde direkt cüzdanına gidiyor.') }
+                }}
+                className="w-full bg-amber-500 hover:bg-amber-600 text-white text-xs py-2 rounded-lg font-bold transition-colors">
+                Withdraw from Contract
+              </button>
+            </div>
+          )}
 
           {/* Terminal */}
-          <div className="bg-[#0A0B0D] flex flex-col" style={{minHeight: '180px', maxHeight: '220px'}}>
+          <div className="mx-3 mb-3 mt-2 bg-[#0A0B0D] rounded-xl overflow-hidden flex-1 flex flex-col min-h-[140px]">
             <div className="flex items-center justify-between px-3 py-2 border-b border-green-400/10">
-              <span className="font-mono text-green-400 text-xs font-bold">$ tx log</span>
+              <span className="font-mono text-green-400 text-xs">$ tx log</span>
               <button onClick={() => { setTxLog([]); localStorage.removeItem('flamebase_tx_log') }}
-                className="text-green-400/40 hover:text-green-400 text-xs font-mono">clear</button>
+                className="text-green-400/40 hover:text-green-400 text-[10px] font-mono">clear</button>
             </div>
-            <div className="flex-1 overflow-y-auto font-mono text-[11px] p-3 text-green-400 space-y-1">
+            <div className="overflow-y-auto font-mono text-[10px] p-2 text-green-400 space-y-0.5 flex-1">
               {txLog.length === 0 ? (
-                <p className="text-green-400/30 mt-4 text-center">No transactions yet</p>
-              ) : txLog.slice(0, 10).map((tx, i) => {
+                <p className="text-green-400/30 pt-3 text-center">No transactions yet</p>
+              ) : txLog.map((tx, i) => {
                 const time = new Date(tx.time)
                 const hh = time.getHours().toString().padStart(2, '0')
                 const mm = time.getMinutes().toString().padStart(2, '0')
                 return (
-                  <div key={i} className="flex gap-1.5 items-start">
+                  <div key={i} className="flex gap-1 items-start leading-relaxed">
                     <span className="text-green-400/40 flex-shrink-0">{hh}:{mm}</span>
-                    <span className="text-green-300 flex-shrink-0">{tx.type}</span>
+                    <span className="text-green-300 flex-shrink-0 max-w-[50px] truncate">{tx.type}</span>
                     <a href={`https://basescan.org/tx/${tx.hash}`} target="_blank" rel="noreferrer"
-                      className="text-green-400/70 hover:text-green-300 underline truncate">{tx.hash.slice(0,14)}…</a>
+                      className="text-green-400 hover:text-white underline truncate">{tx.hash.slice(0,12)}…</a>
                   </div>
                 )
               })}
             </div>
           </div>
 
-          {/* Admin withdraw — only when admin wallet connected */}
-          {isAdmin && isConnected && (
-            <div className="px-4 py-3 bg-[#FFF8E6] border-b border-amber-200">
-              <p className="text-xs font-black text-amber-800 mb-1">💰 Admin Wallet</p>
-              <p className="text-xs text-amber-700 mb-2">
-                Balance: {walletBalance ? `${parseFloat(formatEther(walletBalance.value)).toFixed(4)} ETH` : '—'}
-              </p>
-              <p className="text-[10px] text-amber-600">Fees auto-forwarded to this wallet on every tx.</p>
-            </div>
-          )}
-
-          {/* Top Flamers */}
-          <div className="px-4 pt-3 pb-1">
-            <h2 className="text-sm font-black text-[#0A0B0D]">🏆 {t('topFlamers')}</h2>
-          </div>
-          <div className="flex-1 overflow-y-auto">
-            {(leaderboard.length > 0 ? leaderboard.slice(0, 10) : FAKE_LEADERBOARD.map(f => ({
-              address: f.address,
-              profile: { username: f.username, avatarHash: '', exists: true, flames: BigInt(f.flames), tips: 0n }
-            }))).map(({ address: addr, profile: p }, idx) => (
-              <button key={addr} onClick={() => setActiveTab('leaderboard')}
-                className="w-full flex items-center gap-2 px-4 py-2 hover:bg-[#F7F9FC] transition-colors text-left">
-                <span className={`text-xs font-black w-4 text-center flex-shrink-0 ${
-                  idx === 0 ? 'text-yellow-500' : idx === 1 ? 'text-gray-400' : idx === 2 ? 'text-orange-500' : 'text-[#C5CBD3]'
-                }`}>{idx + 1}</span>
-                <Avatar addr={addr} profiles={profiles} size="sm" />
-                <p className="font-semibold text-xs text-[#0A0B0D] truncate flex-1">{p.username}</p>
-                <p className="text-[#0052FF] text-xs font-black flex-shrink-0">{p.flames.toString()} 🔥</p>
-              </button>
-            ))}
-          </div>
         </aside>
       </div>
 
