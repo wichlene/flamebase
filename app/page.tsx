@@ -5,9 +5,12 @@ import { useAccount, useWriteContract, useReadContract, usePublicClient, useBala
 import { useState, useEffect, useCallback } from 'react'
 import { parseEther, formatEther } from 'viem'
 import { base } from 'wagmi/chains'
+import dynamic from 'next/dynamic'
 import { CONTRACT_ADDRESS, CONTRACT_ABI } from '../lib/contract'
 import { T, LANG_LABELS, type Lang } from '../lib/i18n'
 import { TOOLS_ADDRESS, TOKEN_FACTORY_ADDRESS, NFT_FACTORY_ADDRESS, DAO_ADDRESS, TOOLS_ABI, TOKEN_FACTORY_ABI, NFT_FACTORY_ABI, DAO_ABI } from '../lib/toolsContracts'
+
+const Messages = dynamic(() => import('../components/Messages'), { ssr: false, loading: () => <div className="p-8 text-center text-[#5B6271]">💬 Yükleniyor…</div> })
 
 const TOOLS_DEPLOYED = TOOLS_ADDRESS.length > 0
 const TOKEN_FACTORY_DEPLOYED = TOKEN_FACTORY_ADDRESS.length > 0
@@ -40,7 +43,7 @@ interface ProfileData {
   tips: bigint
 }
 
-type Tab = 'feed' | 'post' | 'profile'
+type Tab = 'feed' | 'post' | 'messages' | 'profile'
 
 function Avatar({ addr, profiles, size = 'md' }: { addr: string; profiles: Record<string, ProfileData>; size?: 'sm' | 'md' | 'lg' }) {
   const p = profiles[addr.toLowerCase()]
@@ -122,8 +125,8 @@ export default function Home() {
     return hash
   }
 
-  // $0.07 fixed fee in ETH — recalculated when ETH price updates
-  const fixedFeeETH = (0.07 / ethPrice).toFixed(10)
+  // $0.04 fixed fee in ETH — recalculated when ETH price updates
+  const fixedFeeETH = (0.04 / ethPrice).toFixed(10)
   const fixedFee = parseEther(fixedFeeETH)
   // Use the higher of contract price or fixedFee so transactions always pass
   const effectiveFee = (contractFee?: bigint) => {
@@ -264,7 +267,7 @@ export default function Home() {
   const isAdmin = address?.toLowerCase() === ADMIN_ADDRESS.toLowerCase()
   const isWrongNetwork = isConnected && chainId !== base.id
 
-  // Fetch ETH price for $0.07 calculation
+  // Fetch ETH price for $0.04 calculation
   useEffect(() => {
     fetch('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd')
       .then(r => r.json())
@@ -560,6 +563,7 @@ export default function Home() {
   const navItems: { tab: Tab; icon: string; labelKey: string }[] = [
     { tab: 'feed', icon: '🏠', labelKey: 'navFeed' },
     { tab: 'post', icon: '✏️', labelKey: 'navNewPost' },
+    { tab: 'messages', icon: '💬', labelKey: 'navMessages' },
     { tab: 'profile', icon: '👤', labelKey: 'navProfile' },
   ]
 
@@ -960,7 +964,7 @@ export default function Home() {
                       <Avatar addr={address!} profiles={profiles} />
                       <div>
                         <p className="font-bold text-[#0A0B0D]">{myProfile?.[0]}</p>
-                        <p className="text-xs text-[#5B6271]">Post fee: $0.07</p>
+                        <p className="text-xs text-[#5B6271]">Post fee: $0.04</p>
                       </div>
                     </div>
                     <textarea placeholder={t('postPlaceholder')} value={newPost}
@@ -993,6 +997,14 @@ export default function Home() {
               </div>
             )}
 
+
+            {/* ══ MESSAGES ══ */}
+            {activeTab === 'messages' && (
+              <div>
+                <h1 className="text-xl font-black px-4 md:px-6 pt-4 md:pt-6 text-[#0A0B0D]">{t('navMessages')}</h1>
+                <Messages fixedFee={fixedFee} logTx={(hash, type) => setTxLog(prev => { const next = [{ hash, type, time: Date.now() }, ...prev].slice(0, 50); localStorage.setItem('flamebase_tx_log', JSON.stringify(next)); return next }) } />
+              </div>
+            )}
 
             {/* ══ PROFILE ══ */}
             {activeTab === 'profile' && (
@@ -1094,7 +1106,7 @@ export default function Home() {
                         {/* One-click price setup */}
                         <div className="bg-gradient-to-br from-[#0052FF] to-[#1652F0] rounded-xl p-4 mb-3 text-white">
                           <p className="font-black text-sm mb-1">⚡ One-Click Setup</p>
-                          <p className="text-white/80 text-xs mb-3">Her işlemi $0.07'ye sabitler — 4 MetaMask onayı gerekir, hepsini onayla.</p>
+                          <p className="text-white/80 text-xs mb-3">Her işlemi $0.04'e sabitler — 4 MetaMask onayı gerekir, hepsini onayla.</p>
                           <button
                             onClick={async () => {
                               if (loading) return
@@ -1111,7 +1123,7 @@ export default function Home() {
                             disabled={loading}
                             className="w-full bg-white text-[#0052FF] py-2.5 rounded-lg font-black text-sm hover:bg-white/90 disabled:opacity-50 transition-colors"
                           >
-                            {loading ? 'Ayarlanıyor... (4 işlem)' : '🚀 Tüm ücretleri $0.07\'ye sabitle'}
+                            {loading ? 'Ayarlanıyor... (4 işlem)' : '🚀 Tüm ücretleri $0.04\'e sabitle'}
                           </button>
                         </div>
                         <div className="space-y-2">

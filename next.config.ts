@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  transpilePackages: ['@xmtp/browser-sdk', '@xmtp/wasm-bindings', '@xmtp/proto'],
 };
 
 export default nextConfig;
