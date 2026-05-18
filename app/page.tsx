@@ -59,11 +59,7 @@ function Avatar({ addr, profiles, size = 'md' }: { addr: string; profiles: Recor
 
 function FlameLogo({ size = 32 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 32 32" className="flex-shrink-0">
-      <rect width="32" height="32" rx="8" fill="#0052FF" />
-      <path d="M16 6.5c1.8 3.5-2 5.4-2 9.5a4 4 0 0 0 8 0c0-1.8-1-2.7-2-3.7 1 3.7-2.7 3.7-2.7 1.7 0-2.7 1.7-4.7-1.3-7.5z" fill="#fff" />
-      <path d="M14.5 19c-1 1.5.5 4 1.5 4s2.5-2.5 1.5-4c-.5 1.2-2 1.2-3 0z" fill="#fff" opacity="0.85" />
-    </svg>
+    <img src="/logo.png" alt="FlameBase" width={size} height={size} className="flex-shrink-0 object-contain" />
   )
 }
 

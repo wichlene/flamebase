@@ -7,11 +7,18 @@ const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 
 export const metadata: Metadata = {
   title: 'FlameBase — On-chain social on Base',
-  description: 'Her like, yorum ve tip Base ağında gerçek bir transaction. Web3 sosyal medya.',
+  description: 'Every like, comment, and tip is a real transaction on Base. Web3 social media.',
   openGraph: {
     title: 'FlameBase',
     description: 'On-chain social on Base.',
     type: 'website',
+    images: ['/logo.png'],
+  },
+  twitter: {
+    card: 'summary',
+    title: 'FlameBase',
+    description: 'On-chain social on Base.',
+    images: ['/logo.png'],
   },
 }
 
@@ -23,7 +30,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="tr">
+    <html lang="en">
       <body className={`${inter.variable} font-sans antialiased bg-white text-[#0A0B0D]`}>
         <Providers>{children}</Providers>
       </body>
