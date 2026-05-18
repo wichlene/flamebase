@@ -177,6 +177,62 @@ export default function Home() {
   const [proposalLoading, setProposalLoading] = useState<string | null>(null)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
 
+  // Follow system
+  const [following, setFollowing] = useState<Set<string>>(new Set())
+  const [walletTxCount, setWalletTxCount] = useState<number | null>(null)
+  const [walletAnalysis, setWalletAnalysis] = useState<{ firstTx: string; txCount: number; score: number } | null>(null)
+  const [analysisLoading, setAnalysisLoading] = useState(false)
+
+  useEffect(() => {
+    if (!address) return
+    try {
+      const raw = localStorage.getItem(`flamebase_following_${address.toLowerCase()}`)
+      if (raw) setFollowing(new Set(JSON.parse(raw)))
+    } catch {}
+  }, [address])
+
+  useEffect(() => {
+    if (!address || !publicClient) return
+    publicClient.getTransactionCount({ address: address as `0x${string}` }).then(n => setWalletTxCount(n)).catch(() => {})
+  }, [address, publicClient])
+
+  const followUser = async (target: string) => {
+    const t = target.toLowerCase()
+    try {
+      await writeContractAsync({ address: TOOLS_ADDRESS, abi: TOOLS_ABI, functionName: 'log', args: [`follow:${t}`], value: fixedFee })
+      const next = new Set(following); next.add(t)
+      setFollowing(next)
+      localStorage.setItem(`flamebase_following_${address!.toLowerCase()}`, JSON.stringify([...next]))
+    } catch (e: any) { console.error(e) }
+  }
+
+  const unfollowUser = (target: string) => {
+    const t = target.toLowerCase()
+    const next = new Set(following); next.delete(t)
+    setFollowing(next)
+    localStorage.setItem(`flamebase_following_${address!.toLowerCase()}`, JSON.stringify([...next]))
+  }
+
+  const runWalletAnalysis = async () => {
+    if (!address || !publicClient) return
+    setAnalysisLoading(true)
+    try {
+      await writeContractAsync({ address: TOOLS_ADDRESS, abi: TOOLS_ABI, functionName: 'log', args: [`wallet-analysis:${address}`], value: parseEther((0.09 / ethPrice).toFixed(10)) })
+      const txCount = await publicClient.getTransactionCount({ address: address as `0x${string}` })
+      let firstTx = 'Unknown'
+      try {
+        const res = await fetch(`https://api.basescan.org/api?module=account&action=txlist&address=${address}&startblock=0&endblock=99999999&page=1&offset=1&sort=asc&apikey=YourApiKeyToken`)
+        const data = await res.json()
+        if (data.result?.[0]?.timeStamp) {
+          firstTx = new Date(parseInt(data.result[0].timeStamp) * 1000).toLocaleDateString()
+        }
+      } catch {}
+      const score = Math.min(100, Math.round(Math.log10(txCount + 1) * 35))
+      setWalletAnalysis({ firstTx, txCount, score })
+    } catch (e: any) { console.error(e) }
+    setAnalysisLoading(false)
+  }
+
   const { data: myProfile, refetch: refetchProfile } = useReadContract({
     address: CONTRACT_ADDRESS,
     abi: CONTRACT_ABI,
@@ -659,6 +715,43 @@ export default function Home() {
               </button>
             ))}
           </nav>
+          {/* Base Network Stats */}
+          {isConnected && address && (
+            <div className="mx-2 mb-2 bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl p-3">
+              <p className="text-[10px] font-black text-[#8A919E] uppercase tracking-wider mb-2">⛓️ Base Stats</p>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs text-[#5B6271]">Transactions</span>
+                <span className="text-xs font-black text-[#0052FF]">{walletTxCount ?? '…'}</span>
+              </div>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs text-[#5B6271]">Following</span>
+                <span className="text-xs font-black text-[#0052FF]">{following.size}</span>
+              </div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs text-[#5B6271]">Score</span>
+                <span className="text-xs font-black text-[#0052FF]">{walletTxCount !== null ? Math.min(100, Math.round(Math.log10(walletTxCount + 1) * 35)) : '…'}</span>
+              </div>
+              {walletAnalysis ? (
+                <div className="bg-white rounded-lg p-2 border border-[#E4E7EB] space-y-1">
+                  <p className="text-[10px] font-black text-[#0052FF]">💎 Full Analysis</p>
+                  <p className="text-[10px] text-[#5B6271]">First tx: {walletAnalysis.firstTx}</p>
+                  <p className="text-[10px] text-[#5B6271]">Total txs: {walletAnalysis.txCount}</p>
+                  <div className="flex items-center gap-1.5">
+                    <div className="flex-1 bg-[#E4E7EB] rounded-full h-1.5">
+                      <div className="bg-[#0052FF] h-1.5 rounded-full" style={{ width: `${walletAnalysis.score}%` }} />
+                    </div>
+                    <span className="text-[10px] font-black text-[#0052FF]">{walletAnalysis.score}/100</span>
+                  </div>
+                </div>
+              ) : (
+                <button onClick={runWalletAnalysis} disabled={analysisLoading || !TOOLS_DEPLOYED}
+                  className="w-full bg-gradient-to-r from-[#0052FF] to-[#7B3FE4] text-white text-[10px] font-black py-2 rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity">
+                  {analysisLoading ? 'Analyzing…' : '💎 Wallet Analysis — $0.09'}
+                </button>
+              )}
+            </div>
+          )}
+
           <div className="border-t border-[#EEF1F5] pt-4 mt-4 space-y-3">
             {isConnected && address && (
               <div className="flex items-center gap-2.5 px-2 mb-1">
@@ -1111,7 +1204,7 @@ export default function Home() {
                             <span className="text-[#8A919E] font-normal ml-1">{t('balance')}</span>
                           </p>
                         )}
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-2 gap-3 mb-3">
                           <div className="bg-[#F7F9FC] rounded-xl p-4 text-center border border-[#EEF1F5]">
                             <p className="text-3xl font-black text-[#0052FF]">{myProfile[3].toString()}</p>
                             <p className="text-[#5B6271] text-sm mt-1 font-semibold">🔥 {t('flames')}</p>
@@ -1119,6 +1212,14 @@ export default function Home() {
                           <div className="bg-[#F7F9FC] rounded-xl p-4 text-center border border-[#EEF1F5]">
                             <p className="text-2xl font-black text-[#0052FF]">{parseFloat(formatEther(myProfile[4])).toFixed(4)}</p>
                             <p className="text-[#5B6271] text-sm mt-1 font-semibold">💸 {t('ethEarned')}</p>
+                          </div>
+                          <div className="bg-[#F7F9FC] rounded-xl p-4 text-center border border-[#EEF1F5]">
+                            <p className="text-3xl font-black text-[#0052FF]">{following.size}</p>
+                            <p className="text-[#5B6271] text-sm mt-1 font-semibold">Following</p>
+                          </div>
+                          <div className="bg-[#F7F9FC] rounded-xl p-4 text-center border border-[#EEF1F5]">
+                            <p className="text-3xl font-black text-[#0052FF]">{walletTxCount ?? '…'}</p>
+                            <p className="text-[#5B6271] text-sm mt-1 font-semibold">⛓️ Txs</p>
                           </div>
                         </div>
                         <a href={`https://basescan.org/address/${address}`} target="_blank"
@@ -1408,24 +1509,41 @@ export default function Home() {
             <div className="p-5">
               <div className="flex items-center gap-4 mb-4">
                 <Avatar addr={selectedUser} profiles={profiles} size="lg" />
-                <div>
+                <div className="flex-1">
                   <h3 className="text-xl font-black">{getUsername(selectedUser)}</h3>
                   <p className="text-[#8A919E] text-sm">{selectedUser.slice(0,8)}...{selectedUser.slice(-6)}</p>
                   <a href={`https://basescan.org/address/${selectedUser}`} target="_blank" className="text-[#0052FF] text-xs hover:underline">View on Basescan ↗</a>
                 </div>
+                {isConnected && address && selectedUser.toLowerCase() !== address.toLowerCase() && (
+                  following.has(selectedUser.toLowerCase()) ? (
+                    <button onClick={() => unfollowUser(selectedUser)}
+                      className="px-4 py-1.5 rounded-xl border-2 border-[#0052FF] text-[#0052FF] text-sm font-black hover:bg-red-50 hover:border-red-500 hover:text-red-500 transition-colors">
+                      Following
+                    </button>
+                  ) : (
+                    <button onClick={() => followUser(selectedUser)}
+                      className="px-4 py-1.5 rounded-xl bg-[#0052FF] text-white text-sm font-black hover:bg-[#1652F0] transition-colors">
+                      Follow
+                    </button>
+                  )
+                )}
               </div>
-              {profiles[selectedUser.toLowerCase()] && (
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                  <div className="bg-[#F7F9FC] rounded-xl p-3 text-center border border-[#EEF1F5]">
-                    <p className="text-2xl font-black text-[#0052FF]">{profiles[selectedUser.toLowerCase()].flames.toString()}</p>
-                    <p className="text-[#5B6271] text-xs font-semibold">🔥 Flames</p>
-                  </div>
-                  <div className="bg-[#F7F9FC] rounded-xl p-3 text-center border border-[#EEF1F5]">
-                    <p className="text-2xl font-black text-[#0052FF]">{parseFloat(formatEther(profiles[selectedUser.toLowerCase()].tips)).toFixed(4)}</p>
-                    <p className="text-[#5B6271] text-xs font-semibold">💸 ETH</p>
-                  </div>
+
+              {/* Stats row */}
+              <div className="grid grid-cols-3 gap-2 mb-4">
+                <div className="bg-[#F7F9FC] rounded-xl p-3 text-center border border-[#EEF1F5]">
+                  <p className="text-xl font-black text-[#0052FF]">{posts.filter(p => p.author.toLowerCase() === selectedUser.toLowerCase()).length}</p>
+                  <p className="text-[#5B6271] text-[10px] font-semibold">Posts</p>
                 </div>
-              )}
+                <div className="bg-[#F7F9FC] rounded-xl p-3 text-center border border-[#EEF1F5]">
+                  <p className="text-xl font-black text-[#0052FF]">{profiles[selectedUser.toLowerCase()]?.flames?.toString() ?? '0'}</p>
+                  <p className="text-[#5B6271] text-[10px] font-semibold">🔥 Flames</p>
+                </div>
+                <div className="bg-[#F7F9FC] rounded-xl p-3 text-center border border-[#EEF1F5]">
+                  <p className="text-xl font-black text-[#0052FF]">{parseFloat(formatEther(profiles[selectedUser.toLowerCase()]?.tips ?? 0n)).toFixed(3)}</p>
+                  <p className="text-[#5B6271] text-[10px] font-semibold">💸 ETH</p>
+                </div>
+              </div>
               {/* User's posts */}
               <div className="space-y-3">
                 {posts.filter(p => p.author.toLowerCase() === selectedUser.toLowerCase()).map(post => (
