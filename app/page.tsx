@@ -148,7 +148,6 @@ export default function Home() {
     const usd = eth * ethPrice
     return `$${usd.toFixed(2)}`
   }
-  const toolFeeLabel = usdLabel(effectiveFee(parseEther('0.0001')))
   // NFT mint price fixed at $0.50 in ETH
   const nftMintPriceETH = (0.50 / ethPrice).toFixed(10)
   const nftMintPriceWei = parseEther(nftMintPriceETH)
@@ -167,12 +166,12 @@ export default function Home() {
   const [logLoading, setLogLoading] = useState(false)
   const [greetText, setGreetText] = useState('')
   const [greetLoading, setGreetLoading] = useState(false)
-  const [tokenName, setTokenName] = useState('')
-  const [tokenSymbol, setTokenSymbol] = useState('')
+  const [tokenName, setTokenName] = useState('FlameBase')
+  const [tokenSymbol, setTokenSymbol] = useState('FLAME')
   const [tokenSupply, setTokenSupply] = useState('1000000')
   const [tokenLoading, setTokenLoading] = useState(false)
-  const [nftName, setNftName] = useState('')
-  const [nftSymbol, setNftSymbol] = useState('')
+  const [nftName, setNftName] = useState('FlameBase NFT')
+  const [nftSymbol, setNftSymbol] = useState('FNFT')
   const [nftMaxSupply, setNftMaxSupply] = useState('1000')
   const [nftLoading, setNftLoading] = useState(false)
   const [daoTitle, setDaoTitle] = useState('')
@@ -1080,14 +1079,14 @@ export default function Home() {
                                 address: TOOLS_ADDRESS,
                                 abi: TOOLS_ABI,
                                 functionName: 'count',
-                                value: effectiveFee(parseEther('0.0001')),
+                                value: fixedFee,
                               })
                             }, setCounterLoading)
                           }}
                           disabled={counterLoading}
                           className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white py-3 rounded-xl font-bold disabled:opacity-40 transition-colors"
                         >
-                          {counterLoading ? 'Counting...' : 'Count ({toolFeeLabel})'}
+                          {counterLoading ? 'Counting...' : 'Count'}
                         </button>
                       </div>
                     )}
@@ -1113,14 +1112,14 @@ export default function Home() {
                                 address: TOOLS_ADDRESS,
                                 abi: TOOLS_ABI,
                                 functionName: 'checkIn',
-                                value: effectiveFee(parseEther('0.0001')),
+                                value: fixedFee,
                               })
                             }, setStreakLoading)
                           }}
                           disabled={streakLoading || canCheckIn === false}
                           className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white py-3 rounded-xl font-bold disabled:opacity-40 transition-colors"
                         >
-                          {streakLoading ? 'Checking in...' : canCheckIn === false ? 'Already checked in today' : 'Check In ({toolFeeLabel})'}
+                          {streakLoading ? 'Checking in...' : canCheckIn === false ? 'Already checked in today' : 'Check In'}
                         </button>
                       </div>
                     )}
@@ -1147,7 +1146,7 @@ export default function Home() {
                                 abi: TOOLS_ABI,
                                 functionName: 'log',
                                 args: [logText || auto],
-                                value: effectiveFee(parseEther('0.0001')),
+                                value: fixedFee,
                               }, 'log')
                               setLogText('')
                             }, setLogLoading)
@@ -1155,7 +1154,7 @@ export default function Home() {
                           disabled={logLoading}
                           className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white py-3 rounded-xl font-bold disabled:opacity-40 transition-colors"
                         >
-                          {logLoading ? 'Writing...' : '📝 Log on-chain ({toolFeeLabel})'}
+                          {logLoading ? 'Writing...' : '📝 Log on-chain'}
                         </button>
                       </div>
                     )}
@@ -1185,7 +1184,7 @@ export default function Home() {
                                 abi: TOOLS_ABI,
                                 functionName: 'greet',
                                 args: [greetText],
-                                value: effectiveFee(parseEther('0.0001')),
+                                value: fixedFee,
                               })
                               setGreetText('')
                             }, setGreetLoading)
@@ -1193,7 +1192,7 @@ export default function Home() {
                           disabled={greetLoading || !greetText}
                           className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white py-3 rounded-xl font-bold disabled:opacity-40 transition-colors"
                         >
-                          {greetLoading ? 'Setting...' : 'Set Greeting ({toolFeeLabel})'}
+                          {greetLoading ? 'Setting...' : 'Set Greeting'}
                         </button>
                       </div>
                     )}
@@ -1236,15 +1235,15 @@ export default function Home() {
                                 abi: TOKEN_FACTORY_ABI,
                                 functionName: 'deployToken',
                                 args: [tokenName, tokenSymbol, BigInt(tokenSupply)],
-                                value: effectiveFee(parseEther('0.0001')),
+                                value: fixedFee,
                               })
-                              setTokenName(''); setTokenSymbol(''); setTokenSupply('1000000')
+                              setTokenName('FlameBase'); setTokenSymbol('FLAME'); setTokenSupply('1000000')
                             }, setTokenLoading)
                           }}
                           disabled={tokenLoading || !tokenName || !tokenSymbol || !tokenSupply}
                           className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white py-3 rounded-xl font-bold disabled:opacity-40 transition-colors"
                         >
-                          {tokenLoading ? 'Deploying...' : 'Deploy Token ({toolFeeLabel})'}
+                          {tokenLoading ? 'Deploying...' : 'Deploy Token'}
                         </button>
                       </div>
                     )}
@@ -1290,15 +1289,15 @@ export default function Home() {
                                 abi: NFT_FACTORY_ABI,
                                 functionName: 'deployNFT',
                                 args: [nftName, nftSymbol, BigInt(nftMaxSupply), nftMintPriceWei, ''],
-                                value: effectiveFee(parseEther('0.0001')),
+                                value: fixedFee,
                               })
-                              setNftName(''); setNftSymbol(''); setNftMaxSupply('1000')
+                              setNftName('FlameBase NFT'); setNftSymbol('FNFT'); setNftMaxSupply('1000')
                             }, setNftLoading)
                           }}
                           disabled={nftLoading || !nftName || !nftSymbol || !nftMaxSupply}
                           className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white py-3 rounded-xl font-bold disabled:opacity-40 transition-colors"
                         >
-                          {nftLoading ? 'Deploying...' : `Deploy NFT Collection (${toolFeeLabel})`}
+                          {nftLoading ? 'Deploying...' : 'Deploy NFT Collection'}
                         </button>
                       </div>
                     )}
@@ -1334,7 +1333,7 @@ export default function Home() {
                                 abi: DAO_ABI,
                                 functionName: 'propose',
                                 args: [daoTitle, daoDesc],
-                                value: effectiveFee(parseEther('0.0001')),
+                                value: fixedFee,
                               })
                               setDaoTitle(''); setDaoDesc('')
                             }, setDaoLoading)
@@ -1342,7 +1341,7 @@ export default function Home() {
                           disabled={daoLoading || !daoTitle}
                           className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white py-3 rounded-xl font-bold disabled:opacity-40 transition-colors"
                         >
-                          {daoLoading ? 'Creating...' : `Create Proposal (${toolFeeLabel})`}
+                          {daoLoading ? 'Creating...' : 'Create Proposal'}
                         </button>
                       </div>
                     )}
@@ -1354,32 +1353,53 @@ export default function Home() {
             {/* ══ LEADERBOARD ══ */}
             {activeTab === 'leaderboard' && (
               <div>
-                <div className="px-5 py-4 border-b border-[#EEF1F5] sticky top-0 bg-white/95 backdrop-blur z-10">
-                  <h1 className="text-lg font-black text-[#0A0B0D]">🏆 {t('leaderboardTitle')}</h1>
-                  <p className="text-[#5B6271] text-sm">{t('leaderboardSub')}</p>
+                {/* Terminal */}
+                <div className="mx-4 mt-4 mb-3 bg-[#0A0B0D] rounded-xl border border-green-400/20 overflow-hidden">
+                  <div className="flex items-center justify-between px-3 py-2 bg-[#1a1c20] border-b border-green-400/10">
+                    <span className="font-mono text-green-400 text-xs">flamebase@base ~ $ tx-log</span>
+                    <button onClick={() => { setTxLog([]); localStorage.removeItem('flamebase_tx_log') }}
+                      className="text-green-400/50 hover:text-green-400 text-xs font-mono">clear</button>
+                  </div>
+                  <div className="font-mono text-xs p-3 text-green-400 max-h-32 overflow-y-auto">
+                    {txLog.length === 0 ? (
+                      <p className="text-green-400/40">No transactions yet.</p>
+                    ) : txLog.slice(0, 6).map((tx, i) => {
+                      const time = new Date(tx.time)
+                      const hh = time.getHours().toString().padStart(2, '0')
+                      const mm = time.getMinutes().toString().padStart(2, '0')
+                      return (
+                        <div key={i} className="flex gap-2 items-center">
+                          <span className="text-green-400/50">{hh}:{mm}</span>
+                          <span className="text-green-300">{tx.type}</span>
+                          <a href={`https://basescan.org/tx/${tx.hash}`} target="_blank" rel="noreferrer"
+                            className="text-green-400/70 hover:text-green-400 truncate">{tx.hash.slice(0, 18)}...</a>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Leaderboard */}
+                <div className="px-4 py-2 border-b border-[#EEF1F5]">
+                  <h1 className="text-base font-black text-[#0A0B0D]">🏆 {t('leaderboardTitle')}</h1>
                 </div>
                 <div className="divide-y divide-[#EEF1F5]">
                   {(leaderboard.length > 0 ? leaderboard : FAKE_LEADERBOARD.map(f => ({
                     address: f.address,
                     profile: { username: f.username, avatarHash: '', exists: true, flames: BigInt(f.flames), tips: 0n }
                   }))).map(({ address: addr, profile: p }, idx) => (
-                    <div key={addr} className="flex items-center gap-4 px-5 py-4 hover:bg-[#F7F9FC] transition-colors">
-                      <div className={`w-9 text-center font-black text-xl flex-shrink-0 ${
-                        idx === 0 ? 'text-yellow-500' : idx === 1 ? 'text-gray-400' : idx === 2 ? 'text-orange-500' : 'text-[#8A919E] text-base'
+                    <div key={addr} className="flex items-center gap-3 px-4 py-2.5 hover:bg-[#F7F9FC] transition-colors">
+                      <div className={`w-7 text-center font-black flex-shrink-0 ${
+                        idx === 0 ? 'text-yellow-500 text-lg' : idx === 1 ? 'text-gray-400 text-lg' : idx === 2 ? 'text-orange-500 text-lg' : 'text-[#8A919E] text-sm'
                       }`}>
                         {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}`}
                       </div>
-                      <Avatar addr={addr} profiles={profiles} />
+                      <Avatar addr={addr} profiles={profiles} size="sm" />
                       <div className="flex-1 min-w-0">
-                        <p className="font-bold text-[#0A0B0D] text-[15px]">{p.username}</p>
+                        <p className="font-bold text-[#0A0B0D] text-sm">{p.username}</p>
                         <p className="text-[#8A919E] text-xs">{addr.slice(0,6)}...{addr.slice(-4)}</p>
                       </div>
-                      <div className="text-right">
-                        <p className="font-black text-[#0052FF] text-lg">{p.flames.toString()} 🔥</p>
-                        {p.tips > 0n && (
-                          <p className="text-[#8A919E] text-xs">{parseFloat(formatEther(p.tips)).toFixed(4)} ETH</p>
-                        )}
-                      </div>
+                      <p className="font-black text-[#0052FF] text-sm">{p.flames.toString()} 🔥</p>
                     </div>
                   ))}
                 </div>
