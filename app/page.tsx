@@ -997,39 +997,41 @@ export default function Home() {
                   <p className="text-[#5B6271] text-sm">{t('toolsSub')}</p>
                 </div>
 
-                {/* Stats bar */}
-                <div className="grid grid-cols-3 gap-3 px-4 pt-4 pb-2">
-                  <div className="bg-[#F7F9FC] rounded-xl p-3 text-center border border-[#EEF1F5]">
-                    <p className="text-xl font-black text-[#0052FF]">{globalCounter !== undefined ? globalCounter.toString() : '—'}</p>
-                    <p className="text-[#5B6271] text-xs font-semibold">Global Counts</p>
-                  </div>
-                  <div className="bg-[#F7F9FC] rounded-xl p-3 text-center border border-[#EEF1F5]">
-                    <p className="text-xl font-black text-[#0052FF]">{tokenCount !== undefined ? tokenCount.toString() : '—'}</p>
-                    <p className="text-[#5B6271] text-xs font-semibold">Tokens</p>
-                  </div>
-                  <div className="bg-[#F7F9FC] rounded-xl p-3 text-center border border-[#EEF1F5]">
-                    <p className="text-xl font-black text-[#0052FF]">{proposalCount !== undefined ? proposalCount.toString() : '—'}</p>
-                    <p className="text-[#5B6271] text-xs font-semibold">Proposals</p>
-                  </div>
-                </div>
 
                 {/* Tool cards grid */}
-                <div className="grid grid-cols-2 gap-3 px-4 py-3">
+                <div className="grid grid-cols-2 gap-3 px-4 py-4">
                   {TOOL_CARDS.map(tool => {
                     const isDeployed = tool.deployed
                     const isActive = activeTool === tool.id
+                    const isLoading = (tool.id === 'counter' && counterLoading) || (tool.id === 'streak' && streakLoading)
                     return (
                       <button
                         key={tool.id}
                         onClick={() => {
-                          if (!isDeployed) return
+                          if (!isDeployed || isLoading) return
+                          if (tool.id === 'counter') {
+                            if (!TOOLS_DEPLOYED) return
+                            toolAction(async () => {
+                              await writeContractAsync({ address: TOOLS_ADDRESS, abi: TOOLS_ABI, functionName: 'count', value: fixedFee })
+                            }, setCounterLoading)
+                            return
+                          }
+                          if (tool.id === 'streak') {
+                            if (!TOOLS_DEPLOYED || canCheckIn === false) return
+                            toolAction(async () => {
+                              await writeContractAsync({ address: TOOLS_ADDRESS, abi: TOOLS_ABI, functionName: 'checkIn', value: fixedFee })
+                            }, setStreakLoading)
+                            return
+                          }
                           setActiveTool(isActive ? null : tool.id)
                         }}
                         className={`rounded-2xl p-4 text-left border transition-all ${
                           isDeployed
                             ? isActive
                               ? 'bg-[#E6EEFF] border-[#0052FF] shadow-sm'
-                              : 'bg-white border-[#E4E7EB] hover:border-[#0052FF] hover:bg-[#F0F4FF]'
+                              : isLoading
+                                ? 'bg-[#E6EEFF] border-[#0052FF] opacity-70'
+                                : 'bg-white border-[#E4E7EB] hover:border-[#0052FF] hover:bg-[#F0F4FF]'
                             : 'bg-[#F7F9FC] border-[#E4E7EB] opacity-60 cursor-not-allowed'
                         }`}
                       >
@@ -1058,71 +1060,6 @@ export default function Home() {
                       <ConnectPrompt message="Connect your wallet to use tools." label={t('connectWallet')} />
                     )}
 
-                    {isConnected && activeTool === 'counter' && (
-                      <div>
-                        <h3 className="font-black text-lg mb-3">[##] COUNTER</h3>
-                        <div className="grid grid-cols-2 gap-3 mb-4">
-                          <div className="bg-[#F7F9FC] rounded-xl p-3 text-center border border-[#EEF1F5]">
-                            <p className="text-2xl font-black text-[#0052FF]">{globalCounter !== undefined ? globalCounter.toString() : '—'}</p>
-                            <p className="text-xs text-[#5B6271] font-semibold">Global Counter</p>
-                          </div>
-                          <div className="bg-[#F7F9FC] rounded-xl p-3 text-center border border-[#EEF1F5]">
-                            <p className="text-2xl font-black text-[#0052FF]">{userCounter !== undefined ? userCounter.toString() : '—'}</p>
-                            <p className="text-xs text-[#5B6271] font-semibold">Your Count</p>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => {
-                            if (!TOOLS_DEPLOYED) return
-                            toolAction(async () => {
-                              await writeContractAsync({
-                                address: TOOLS_ADDRESS,
-                                abi: TOOLS_ABI,
-                                functionName: 'count',
-                                value: fixedFee,
-                              })
-                            }, setCounterLoading)
-                          }}
-                          disabled={counterLoading}
-                          className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white py-3 rounded-xl font-bold disabled:opacity-40 transition-colors"
-                        >
-                          {counterLoading ? 'Counting...' : 'Count'}
-                        </button>
-                      </div>
-                    )}
-
-                    {isConnected && activeTool === 'streak' && (
-                      <div>
-                        <h3 className="font-black text-lg mb-3">[~] STREAK</h3>
-                        <div className="grid grid-cols-2 gap-3 mb-4">
-                          <div className="bg-[#F7F9FC] rounded-xl p-3 text-center border border-[#EEF1F5]">
-                            <p className="text-2xl font-black text-[#0052FF]">{userStreakDays !== undefined ? userStreakDays.toString() : '—'}</p>
-                            <p className="text-xs text-[#5B6271] font-semibold">Current Streak</p>
-                          </div>
-                          <div className="bg-[#F7F9FC] rounded-xl p-3 text-center border border-[#EEF1F5]">
-                            <p className="text-2xl font-black text-[#0052FF]">{userMaxStreak !== undefined ? userMaxStreak.toString() : '—'}</p>
-                            <p className="text-xs text-[#5B6271] font-semibold">Max Streak</p>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => {
-                            if (!TOOLS_DEPLOYED) return
-                            toolAction(async () => {
-                              await writeContractAsync({
-                                address: TOOLS_ADDRESS,
-                                abi: TOOLS_ABI,
-                                functionName: 'checkIn',
-                                value: fixedFee,
-                              })
-                            }, setStreakLoading)
-                          }}
-                          disabled={streakLoading || canCheckIn === false}
-                          className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white py-3 rounded-xl font-bold disabled:opacity-40 transition-colors"
-                        >
-                          {streakLoading ? 'Checking in...' : canCheckIn === false ? 'Already checked in today' : 'Check In'}
-                        </button>
-                      </div>
-                    )}
 
                     {isConnected && activeTool === 'logbook' && (
                       <div>
@@ -1561,29 +1498,65 @@ export default function Home() {
           </footer>
         </main>
 
-        {/* ── Right Sidebar — Top Flamers (xl+) ── */}
-        <aside className="hidden xl:flex flex-col fixed right-0 top-0 h-full w-72 bg-white border-l border-[#E4E7EB] z-40 px-4 py-6">
-          <h2 className="text-base font-black mb-4 px-2 text-[#0A0B0D]">🏆 {t('topFlamers')}</h2>
-          <div className="flex-1 space-y-1 overflow-y-auto">
-            {(leaderboard.length > 0 ? leaderboard.slice(0, 12) : FAKE_LEADERBOARD.map(f => ({
+        {/* ── Right Sidebar ── */}
+        <aside className="hidden xl:flex flex-col fixed right-0 top-0 h-full w-72 bg-white border-l border-[#E4E7EB] z-40">
+
+          {/* Terminal */}
+          <div className="bg-[#0A0B0D] flex flex-col" style={{minHeight: '180px', maxHeight: '220px'}}>
+            <div className="flex items-center justify-between px-3 py-2 border-b border-green-400/10">
+              <span className="font-mono text-green-400 text-xs font-bold">$ tx log</span>
+              <button onClick={() => { setTxLog([]); localStorage.removeItem('flamebase_tx_log') }}
+                className="text-green-400/40 hover:text-green-400 text-xs font-mono">clear</button>
+            </div>
+            <div className="flex-1 overflow-y-auto font-mono text-[11px] p-3 text-green-400 space-y-1">
+              {txLog.length === 0 ? (
+                <p className="text-green-400/30 mt-4 text-center">No transactions yet</p>
+              ) : txLog.slice(0, 10).map((tx, i) => {
+                const time = new Date(tx.time)
+                const hh = time.getHours().toString().padStart(2, '0')
+                const mm = time.getMinutes().toString().padStart(2, '0')
+                return (
+                  <div key={i} className="flex gap-1.5 items-start">
+                    <span className="text-green-400/40 flex-shrink-0">{hh}:{mm}</span>
+                    <span className="text-green-300 flex-shrink-0">{tx.type}</span>
+                    <a href={`https://basescan.org/tx/${tx.hash}`} target="_blank" rel="noreferrer"
+                      className="text-green-400/70 hover:text-green-300 underline truncate">{tx.hash.slice(0,14)}…</a>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Admin withdraw — only when admin wallet connected */}
+          {isAdmin && isConnected && (
+            <div className="px-4 py-3 bg-[#FFF8E6] border-b border-amber-200">
+              <p className="text-xs font-black text-amber-800 mb-1">💰 Admin Wallet</p>
+              <p className="text-xs text-amber-700 mb-2">
+                Balance: {walletBalance ? `${parseFloat(formatEther(walletBalance.value)).toFixed(4)} ETH` : '—'}
+              </p>
+              <p className="text-[10px] text-amber-600">Fees auto-forwarded to this wallet on every tx.</p>
+            </div>
+          )}
+
+          {/* Top Flamers */}
+          <div className="px-4 pt-3 pb-1">
+            <h2 className="text-sm font-black text-[#0A0B0D]">🏆 {t('topFlamers')}</h2>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            {(leaderboard.length > 0 ? leaderboard.slice(0, 10) : FAKE_LEADERBOARD.map(f => ({
               address: f.address,
               profile: { username: f.username, avatarHash: '', exists: true, flames: BigInt(f.flames), tips: 0n }
             }))).map(({ address: addr, profile: p }, idx) => (
               <button key={addr} onClick={() => setActiveTab('leaderboard')}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-[#F7F9FC] transition-colors text-left">
-                <span className={`text-sm font-black w-5 text-center flex-shrink-0 ${
-                  idx === 0 ? 'text-yellow-500' : idx === 1 ? 'text-gray-400' : idx === 2 ? 'text-orange-500' : 'text-[#8A919E]'
+                className="w-full flex items-center gap-2 px-4 py-2 hover:bg-[#F7F9FC] transition-colors text-left">
+                <span className={`text-xs font-black w-4 text-center flex-shrink-0 ${
+                  idx === 0 ? 'text-yellow-500' : idx === 1 ? 'text-gray-400' : idx === 2 ? 'text-orange-500' : 'text-[#C5CBD3]'
                 }`}>{idx + 1}</span>
                 <Avatar addr={addr} profiles={profiles} size="sm" />
-                <p className="font-semibold text-sm text-[#0A0B0D] truncate flex-1">{p.username}</p>
-                <p className="text-[#0052FF] text-sm font-black flex-shrink-0">{p.flames.toString()} 🔥</p>
+                <p className="font-semibold text-xs text-[#0A0B0D] truncate flex-1">{p.username}</p>
+                <p className="text-[#0052FF] text-xs font-black flex-shrink-0">{p.flames.toString()} 🔥</p>
               </button>
             ))}
-          </div>
-          <div className="border-t border-[#EEF1F5] pt-4 mt-4 px-2">
-            <p className="text-[#C5CBD3] text-[11px] text-center leading-relaxed">
-              {t('footerBuiltOn')}
-            </p>
           </div>
         </aside>
       </div>
