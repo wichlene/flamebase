@@ -107,14 +107,13 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
     const out: Conv[] = []
     for (const dm of dms) {
       try {
-        const msgs = await dm.messages({ limit: 1 })
-        const last = msgs[0]
-        const peerInboxId = dm.peerInboxId ?? ''
+        const last = await dm.lastMessage().catch(() => null)
+        const peerInboxId = await dm.peerInboxId().catch(() => '')
         out.push({
           id: dm.id,
           peerInboxId,
           peerAddress: peerInboxId,
-          lastMessage: last?.content?.toString() || '',
+          lastMessage: last && typeof last.content === 'string' ? last.content : '',
           lastSentAt: last ? Number(last.sentAtNs / 1_000_000n) : 0,
         })
       } catch {}
@@ -135,22 +134,23 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
       senderInboxId: m.senderInboxId || '',
       content: typeof m.content === 'string' ? m.content : '',
       sentAt: Number(m.sentAtNs / 1_000_000n),
-    })).sort((a: Msg, b: Msg) => a.sentAt - b.sentAt)
+    })).sort((a: Msg, b: Msg) => a.sentAt - b.sentAt).filter((m: Msg) => m.content)
     setMessages(mapped)
-    if (streamRef.current) try { streamRef.current.return?.() } catch {}
-    streamRef.current = dm.streamMessages()
-    ;(async () => {
-      try {
-        for await (const m of streamRef.current as AsyncIterable<any>) {
-          setMessages(prev => [...prev, {
+    if (streamRef.current) try { streamRef.current.end?.() } catch {}
+    try {
+      streamRef.current = dm.stream(
+        (m: any) => {
+          if (!m || typeof m.content !== 'string') return
+          setMessages(prev => prev.some(x => x.id === m.id) ? prev : [...prev, {
             id: m.id,
             senderInboxId: m.senderInboxId || '',
-            content: typeof m.content === 'string' ? m.content : '',
+            content: m.content,
             sentAt: Number(m.sentAtNs / 1_000_000n),
           }])
-        }
-      } catch {}
-    })()
+        },
+        () => {},
+      )
+    } catch {}
   }
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages.length])
@@ -159,7 +159,13 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
     const dm = activeConvRef.current
     if (!dm || !draft.trim()) return
     setSending(true)
-    try { await dm.send(draft); setDraft('') } catch (e: any) { alert(e?.message || 'Send failed') }
+    try {
+      await dm.sendText(draft)
+      setDraft('')
+    } catch (e: any) {
+      console.error('Send error', e)
+      alert(e?.message || 'Send failed')
+    }
     setSending(false)
   }
 
