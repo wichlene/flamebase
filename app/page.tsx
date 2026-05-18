@@ -1081,24 +1081,24 @@ export default function Home() {
                         {/* One-click price setup */}
                         <div className="bg-gradient-to-br from-[#0052FF] to-[#1652F0] rounded-xl p-4 mb-3 text-white">
                           <p className="font-black text-sm mb-1">⚡ One-Click Setup</p>
-                          <p className="text-white/80 text-xs mb-3">Sets like/comment/post/photo prices to $0.07 each. Tip stays free for users to choose amount.</p>
+                          <p className="text-white/80 text-xs mb-3">Her işlemi $0.07'ye sabitler — 4 MetaMask onayı gerekir, hepsini onayla.</p>
                           <button
                             onClick={async () => {
                               if (loading) return
                               setLoading(true)
                               try {
-                                const price = fixedFee
-                                await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'setLikePrice', args: [price] }, 'setLikePrice')
-                                await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'setCommentPrice', args: [price] }, 'setCommentPrice')
-                                await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'setPostPrice', args: [price] }, 'setPostPrice')
-                                await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'setPhotoPrice', args: [price] }, 'setPhotoPrice')
+                                const zero = 0n
+                                await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'setLikePrice', args: [zero] }, 'setLikePrice')
+                                await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'setCommentPrice', args: [zero] }, 'setCommentPrice')
+                                await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'setPostPrice', args: [zero] }, 'setPostPrice')
+                                await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'setPhotoPrice', args: [zero] }, 'setPhotoPrice')
                               } catch (e) { console.error(e) }
                               setLoading(false)
                             }}
                             disabled={loading}
                             className="w-full bg-white text-[#0052FF] py-2.5 rounded-lg font-black text-sm hover:bg-white/90 disabled:opacity-50 transition-colors"
                           >
-                            {loading ? 'Setting prices... (4 transactions)' : '🚀 Set all fees to $0.07'}
+                            {loading ? 'Ayarlanıyor... (4 işlem)' : '🚀 Tüm ücretleri $0.07\'ye sabitle'}
                           </button>
                         </div>
                         <div className="space-y-2">
