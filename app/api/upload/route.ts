@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server'
 
 export async function POST(request: Request) {
   try {
+    if (!process.env.PINATA_JWT) {
+      return NextResponse.json({ error: 'PINATA_JWT env var is missing on the server' }, { status: 500 })
+    }
+
     const formData = await request.formData() as unknown as globalThis.FormData
     const file = formData.get('file') as File
 
@@ -22,14 +26,18 @@ export async function POST(request: Request) {
       body: pinataFormData,
     })
 
-    const data = await response.json()
+    const text = await response.text()
+    let data: any
+    try { data = JSON.parse(text) } catch { data = { raw: text } }
 
     if (!response.ok) {
-      return NextResponse.json({ error: data }, { status: 500 })
+      console.error('Pinata upload failed', response.status, data)
+      return NextResponse.json({ error: data, status: response.status }, { status: 500 })
     }
 
     return NextResponse.json({ ipfsHash: data.IpfsHash })
-  } catch (error) {
-    return NextResponse.json({ error: 'Upload failed' }, { status: 500 })
+  } catch (error: any) {
+    console.error('Upload route error', error)
+    return NextResponse.json({ error: error?.message || 'Upload failed' }, { status: 500 })
   }
 }

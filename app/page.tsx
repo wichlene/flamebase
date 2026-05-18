@@ -417,7 +417,12 @@ export default function Home() {
         fd.append('file', selectedFile)
         const res = await fetch('/api/upload', { method: 'POST', body: fd })
         const data = await res.json()
-        ipfsHash = data.ipfsHash || ''
+        if (!res.ok || !data.ipfsHash) {
+          alert('Resim yüklenemedi: ' + JSON.stringify(data.error || data))
+          setLoading(false)
+          return
+        }
+        ipfsHash = data.ipfsHash
       }
       await writeContractAsync({
         address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'createPost',
