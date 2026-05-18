@@ -43,7 +43,7 @@ interface ProfileData {
   tips: bigint
 }
 
-type Tab = 'feed' | 'post' | 'messages' | 'profile'
+type Tab = 'feed' | 'post' | 'activity' | 'messages' | 'profile'
 
 function Avatar({ addr, profiles, size = 'md' }: { addr: string; profiles: Record<string, ProfileData>; size?: 'sm' | 'md' | 'lg' }) {
   const p = profiles[addr.toLowerCase()]
@@ -86,6 +86,16 @@ export default function Home() {
   const { switchChain } = useSwitchChain()
   const [activeTab, setActiveTab] = useState<Tab>('feed')
   const [posts, setPosts] = useState<Post[]>([])
+  const [seenActivity, setSeenActivity] = useState<Record<string, number>>({})
+
+  // Derive unseen activity count: likes+comments on user's posts since last visit to activity tab
+  const myPosts = address ? posts.filter(p => p.author.toLowerCase() === address.toLowerCase()) : []
+  const activityCount = myPosts.reduce((sum, p) => {
+    const key = p.id.toString()
+    const prev = seenActivity[key] ?? 0
+    const current = Number(p.likes) + Number(p.tips)
+    return sum + Math.max(0, current - prev)
+  }, 0)
   const [profiles, setProfiles] = useState<Record<string, ProfileData>>({})
   const [newPost, setNewPost] = useState('')
   const [newUsername, setNewUsername] = useState('')
@@ -289,6 +299,10 @@ export default function Home() {
     const txStored = localStorage.getItem('flamebase_tx_log')
     if (txStored) {
       try { setTxLog(JSON.parse(txStored)) } catch {}
+    }
+    const actStored = localStorage.getItem('flamebase_seen_activity')
+    if (actStored) {
+      try { setSeenActivity(JSON.parse(actStored)) } catch {}
     }
   }, [])
 
@@ -563,6 +577,7 @@ export default function Home() {
   const navItems: { tab: Tab; icon: string; labelKey: string }[] = [
     { tab: 'feed', icon: '🏠', labelKey: 'navFeed' },
     { tab: 'post', icon: '✏️', labelKey: 'navNewPost' },
+    { tab: 'activity', icon: '🔔', labelKey: 'navActivity' },
     { tab: 'messages', icon: '💬', labelKey: 'navMessages' },
     { tab: 'profile', icon: '👤', labelKey: 'navProfile' },
   ]
@@ -628,11 +643,23 @@ export default function Home() {
           </div>
           <nav className="flex-1 space-y-1">
             {navItems.map(({ tab, icon, labelKey }) => (
-              <button key={tab} onClick={() => setActiveTab(tab)}
+              <button key={tab} onClick={() => {
+                setActiveTab(tab)
+                if (tab === 'activity') {
+                  const snapshot: Record<string, number> = {}
+                  myPosts.forEach(p => { snapshot[p.id.toString()] = Number(p.likes) + Number(p.tips) })
+                  setSeenActivity(snapshot)
+                  localStorage.setItem('flamebase_seen_activity', JSON.stringify(snapshot))
+                }
+              }}
                 className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl font-semibold transition-all text-left text-sm ${
                   activeTab === tab ? 'bg-[#E6EEFF] text-[#0052FF]' : 'text-[#5B6271] hover:bg-[#F7F9FC] hover:text-[#0A0B0D]'
                 }`}>
-                <span className="text-lg">{icon}</span>{t(labelKey)}
+                <span className="text-lg">{icon}</span>
+                <span className="flex-1">{t(labelKey)}</span>
+                {tab === 'activity' && activityCount > 0 && (
+                  <span className="bg-red-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center">{activityCount > 99 ? '99+' : activityCount}</span>
+                )}
               </button>
             ))}
           </nav>
@@ -998,6 +1025,39 @@ export default function Home() {
             )}
 
 
+            {/* ══ ACTIVITY ══ */}
+            {activeTab === 'activity' && (
+              <div className="p-4 md:p-6">
+                <h1 className="text-xl font-black text-[#0A0B0D] mb-4">🔔 Activity</h1>
+                {!isConnected ? (
+                  <p className="text-[#8A919E] text-sm">Connect your wallet to see activity.</p>
+                ) : myPosts.length === 0 ? (
+                  <p className="text-[#8A919E] text-sm">No posts yet. Activity from your posts will appear here.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {myPosts.slice().sort((a, b) => Number(b.likes + b.tips) - Number(a.likes + a.tips)).map(post => {
+                      const prev = seenActivity[post.id.toString()] ?? 0
+                      const current = Number(post.likes) + Number(post.tips)
+                      const isNew = current > prev
+                      return (
+                        <div key={post.id.toString()} className={`flex items-start gap-3 p-4 rounded-2xl border transition-colors ${isNew ? 'border-[#0052FF] bg-[#F0F4FF]' : 'border-[#EEF1F5] bg-white'}`}>
+                          {isNew && <span className="w-2 h-2 rounded-full bg-red-500 mt-1.5 flex-shrink-0" />}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-[#0A0B0D] truncate font-medium">{post.content.slice(0, 80)}{post.content.length > 80 ? '…' : ''}</p>
+                            <div className="flex items-center gap-3 mt-1.5">
+                              <span className="text-xs text-[#5B6271]">🔥 {post.likes.toString()} flames</span>
+                              <span className="text-xs text-[#5B6271]">💰 {post.tips.toString()} tips</span>
+                              {isNew && <span className="text-xs font-black text-[#0052FF]">+{current - prev} new</span>}
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* ══ MESSAGES ══ */}
             {activeTab === 'messages' && (
               <div>
@@ -1106,7 +1166,7 @@ export default function Home() {
                         {/* One-click price setup */}
                         <div className="bg-gradient-to-br from-[#0052FF] to-[#1652F0] rounded-xl p-4 mb-3 text-white">
                           <p className="font-black text-sm mb-1">⚡ One-Click Setup</p>
-                          <p className="text-white/80 text-xs mb-3">Her işlemi $0.04'e sabitler — 4 MetaMask onayı gerekir, hepsini onayla.</p>
+                          <p className="text-white/80 text-xs mb-3">Sets all fees to $0.04 — approve all 4 MetaMask transactions.</p>
                           <button
                             onClick={async () => {
                               if (loading) return
@@ -1123,7 +1183,7 @@ export default function Home() {
                             disabled={loading}
                             className="w-full bg-white text-[#0052FF] py-2.5 rounded-lg font-black text-sm hover:bg-white/90 disabled:opacity-50 transition-colors"
                           >
-                            {loading ? 'Ayarlanıyor... (4 işlem)' : '🚀 Tüm ücretleri $0.04\'e sabitle'}
+                            {loading ? 'Setting prices… (4 tx)' : '🚀 Set all fees to $0.04'}
                           </button>
                         </div>
                         <div className="space-y-2">
@@ -1318,9 +1378,22 @@ export default function Home() {
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t border-[#E4E7EB] z-50 shadow-[0_-4px_20px_-4px_rgba(0,0,0,0.05)]">
         <div className="flex">
           {navItems.map(({ tab, icon, labelKey }) => (
-            <button key={tab} onClick={() => setActiveTab(tab)}
-              className={`flex-1 py-3 flex flex-col items-center gap-0.5 transition-colors ${activeTab === tab ? 'text-[#0052FF]' : 'text-[#8A919E]'}`}>
-              <span className="text-xl">{icon}</span>
+            <button key={tab} onClick={() => {
+              setActiveTab(tab)
+              if (tab === 'activity') {
+                const snapshot: Record<string, number> = {}
+                myPosts.forEach(p => { snapshot[p.id.toString()] = Number(p.likes) + Number(p.tips) })
+                setSeenActivity(snapshot)
+                localStorage.setItem('flamebase_seen_activity', JSON.stringify(snapshot))
+              }
+            }}
+              className={`flex-1 py-3 flex flex-col items-center gap-0.5 transition-colors relative ${activeTab === tab ? 'text-[#0052FF]' : 'text-[#8A919E]'}`}>
+              <span className="text-xl relative">
+                {icon}
+                {tab === 'activity' && activityCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] font-black px-1 py-0.5 rounded-full min-w-[14px] text-center leading-none">{activityCount > 9 ? '9+' : activityCount}</span>
+                )}
+              </span>
               <span className="text-[10px] font-bold">{t(labelKey)}</span>
             </button>
           ))}

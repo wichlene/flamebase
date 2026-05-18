@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useAccount, useSignMessage, useWriteContract } from 'wagmi'
-import { hexToBytes, parseEther } from 'viem'
+import { hexToBytes } from 'viem'
 import { TOOLS_ADDRESS, TOOLS_ABI } from '@/lib/toolsContracts'
 
 type Conv = {
@@ -80,7 +80,7 @@ export default function Messages({ fixedFee, logTx }: Props) {
       setStatus('ready')
     } catch (e: any) {
       console.error('XMTP connect error', e)
-      setError(e?.message || 'XMTP bağlanamadı')
+      setError(e?.message || 'Connection failed')
       setStatus('error')
     }
   }
@@ -143,15 +143,15 @@ export default function Messages({ fixedFee, logTx }: Props) {
     const dm = activeConvRef.current
     if (!dm || !draft.trim()) return
     setSending(true)
-    try { await dm.send(draft); setDraft('') } catch (e: any) { alert(e?.message || 'send failed') }
+    try { await dm.send(draft); setDraft('') } catch (e: any) { alert(e?.message || 'Send failed') }
     setSending(false)
   }
 
   const startNew = async () => {
     if (!newPeer || !address || !clientRef.current) return
     const peer = newPeer.trim().toLowerCase()
-    if (!/^0x[a-f0-9]{40}$/.test(peer)) { alert('Geçerli bir 0x adresi gir'); return }
-    if (peer === address.toLowerCase()) { alert('Kendine mesaj atamazsın'); return }
+    if (!/^0x[a-f0-9]{40}$/.test(peer)) { alert('Enter a valid 0x address'); return }
+    if (peer === address.toLowerCase()) { alert("You can't message yourself"); return }
     setSending(true)
     try {
       if (!paidPeers.has(peer)) {
@@ -166,7 +166,7 @@ export default function Messages({ fixedFee, logTx }: Props) {
       const canMessage = await client.canMessage([{ identifier: peer, identifierKind: 0 }])
       const reachable = canMessage.get(peer) ?? canMessage.get(peer.toLowerCase())
       if (!reachable) {
-        alert('Bu adresin henüz XMTP kimliği yok. Önce kendisi mesajlar sekmesine girip bağlanması lazım.')
+        alert("This address hasn't activated XMTP yet. They need to open the Messages tab and connect first.")
         setSending(false); return
       }
       const dm = await client.conversations.newDmWithIdentifier({ identifier: peer, identifierKind: 0 })
@@ -175,31 +175,31 @@ export default function Messages({ fixedFee, logTx }: Props) {
       await openConversation(dm.id)
     } catch (e: any) {
       console.error(e)
-      alert(e?.message || 'Sohbet açılamadı')
+      alert(e?.message || 'Could not open conversation')
     }
     setSending(false)
   }
 
   if (!address) {
-    return <div className="p-8 text-center text-[#8A919E]">Mesajlaşmak için cüzdanı bağla.</div>
+    return <div className="p-8 text-center text-[#8A919E]">Connect your wallet to use messages.</div>
   }
 
   if (status === 'idle' || status === 'error') {
     return (
       <div className="p-8 text-center">
         <div className="text-4xl mb-3">💬</div>
-        <h3 className="font-black text-xl mb-2 text-[#0A0B0D]">XMTP Mesajlaşma</h3>
-        <p className="text-sm text-[#5B6271] mb-4">Uçtan uca şifreli, merkezsiz. İlk girişte cüzdanını bir kez imzalaman gerekir.</p>
+        <h3 className="font-black text-xl mb-2 text-[#0A0B0D]">XMTP Messaging</h3>
+        <p className="text-sm text-[#5B6271] mb-4">End-to-end encrypted, decentralized.</p>
         {error && <p className="text-xs text-red-500 mb-3 break-words">{error}</p>}
         <button onClick={connect} className="bg-[#0052FF] hover:bg-[#1652F0] text-white px-6 py-2.5 rounded-xl font-bold transition-colors">
-          XMTP'ye Bağlan
+          Connect to XMTP
         </button>
       </div>
     )
   }
 
   if (status === 'connecting') {
-    return <div className="p-8 text-center text-[#5B6271]">XMTP'ye bağlanıyor… cüzdandan imzala</div>
+    return <div className="p-8 text-center text-[#5B6271]">Connecting to XMTP… sign in your wallet</div>
   }
 
   return (
@@ -207,11 +207,11 @@ export default function Messages({ fixedFee, logTx }: Props) {
       {/* Conversation list */}
       <div className="w-72 border-r border-[#EEF1F5] overflow-y-auto">
         <div className="p-3 border-b border-[#EEF1F5] flex items-center justify-between">
-          <h3 className="font-black text-[#0A0B0D]">Sohbetler</h3>
-          <button onClick={() => setShowNew(true)} className="bg-[#0052FF] hover:bg-[#1652F0] text-white px-3 py-1.5 rounded-lg text-xs font-bold">+ Yeni</button>
+          <h3 className="font-black text-[#0A0B0D]">Conversations</h3>
+          <button onClick={() => setShowNew(true)} className="bg-[#0052FF] hover:bg-[#1652F0] text-white px-3 py-1.5 rounded-lg text-xs font-bold">+ New</button>
         </div>
         {conversations.length === 0 ? (
-          <p className="p-4 text-xs text-[#8A919E] text-center">Henüz sohbet yok</p>
+          <p className="p-4 text-xs text-[#8A919E] text-center">No conversations yet</p>
         ) : conversations.map(c => (
           <button key={c.id} onClick={() => openConversation(c.id)}
             className={`w-full text-left p-3 border-b border-[#F7F9FC] hover:bg-[#F7F9FC] transition-colors ${activeId === c.id ? 'bg-[#E6EEFF]' : ''}`}>
@@ -224,7 +224,7 @@ export default function Messages({ fixedFee, logTx }: Props) {
       {/* Active conversation */}
       <div className="flex-1 flex flex-col">
         {!activeId ? (
-          <div className="flex-1 flex items-center justify-center text-[#8A919E] text-sm">Bir sohbet seç</div>
+          <div className="flex-1 flex items-center justify-center text-[#8A919E] text-sm">Select a conversation</div>
         ) : (
           <>
             <div className="flex-1 overflow-y-auto p-4 space-y-2">
@@ -243,11 +243,11 @@ export default function Messages({ fixedFee, logTx }: Props) {
             <div className="border-t border-[#EEF1F5] p-3 flex gap-2">
               <input value={draft} onChange={e => setDraft(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
-                placeholder="Mesaj yaz…"
+                placeholder="Type a message…"
                 className="flex-1 bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-[#0052FF]" />
               <button onClick={send} disabled={sending || !draft.trim()}
                 className="bg-[#0052FF] hover:bg-[#1652F0] text-white px-5 py-2 rounded-xl font-bold text-sm disabled:opacity-40 transition-colors">
-                Gönder
+                Send
               </button>
             </div>
           </>
@@ -258,15 +258,15 @@ export default function Messages({ fixedFee, logTx }: Props) {
       {showNew && (
         <div className="fixed inset-0 bg-black/50 z-[300] flex items-center justify-center p-4" onClick={() => setShowNew(false)}>
           <div className="bg-white rounded-2xl p-5 max-w-sm w-full" onClick={e => e.stopPropagation()}>
-            <h3 className="font-black text-lg mb-2 text-[#0A0B0D]">Yeni Sohbet</h3>
-            <p className="text-xs text-[#5B6271] mb-3">Yeni sohbet açmak <b>$0.04</b>'tür (bir kerelik). Sonraki mesajlar ücretsiz.</p>
-            <input value={newPeer} onChange={e => setNewPeer(e.target.value)} placeholder="0x… adres"
+            <h3 className="font-black text-lg mb-2 text-[#0A0B0D]">New Conversation</h3>
+            <p className="text-xs text-[#5B6271] mb-3">Starting a new conversation costs <b>$0.04</b> (one-time). All messages after are free.</p>
+            <input value={newPeer} onChange={e => setNewPeer(e.target.value)} placeholder="0x… address"
               className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-4 py-2.5 text-sm font-mono focus:outline-none focus:border-[#0052FF] mb-3" />
             <div className="flex gap-2">
-              <button onClick={() => setShowNew(false)} className="flex-1 bg-[#F0F2F5] text-[#0A0B0D] py-2.5 rounded-xl font-bold text-sm">İptal</button>
+              <button onClick={() => setShowNew(false)} className="flex-1 bg-[#F0F2F5] text-[#0A0B0D] py-2.5 rounded-xl font-bold text-sm">Cancel</button>
               <button onClick={startNew} disabled={sending || !newPeer}
                 className="flex-1 bg-[#0052FF] hover:bg-[#1652F0] text-white py-2.5 rounded-xl font-bold text-sm disabled:opacity-40">
-                {sending ? '…' : (paidPeers.has(newPeer.trim().toLowerCase()) ? 'Aç' : 'Öde & Aç')}
+                {sending ? '…' : (paidPeers.has(newPeer.trim().toLowerCase()) ? 'Open' : 'Pay & Open')}
               </button>
             </div>
           </div>
