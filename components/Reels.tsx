@@ -40,21 +40,38 @@ function getBrowserLang(): string {
   return supported.includes(l) ? l : 'en'
 }
 
+// Track if user has ever unmuted — persists across cards
+let _userUnmuted = false
+
 function VideoCard({ video, isActive }: { video: PixabayVideo; isActive: boolean }) {
   const vidRef = useRef<HTMLVideoElement>(null)
-  const [muted, setMuted] = useState(true)
+  const [muted, setMuted] = useState(!_userUnmuted)
   const [liked, setLiked] = useState(false)
   const [likeCount, setLikeCount] = useState(video.likes)
   const [paused, setPaused] = useState(false)
+  const [showSoundHint, setShowSoundHint] = useState(false)
 
   useEffect(() => {
     if (!vidRef.current) return
     if (isActive && !paused) {
+      vidRef.current.muted = !_userUnmuted
+      setMuted(!_userUnmuted)
       vidRef.current.play().catch(() => {})
+      // Show sound hint on first video if still muted
+      if (!_userUnmuted) setShowSoundHint(true)
     } else {
       vidRef.current.pause()
+      setShowSoundHint(false)
     }
   }, [isActive, paused])
+
+  const toggleMute = () => {
+    const newMuted = !muted
+    setMuted(newMuted)
+    if (vidRef.current) vidRef.current.muted = newMuted
+    if (!newMuted) { _userUnmuted = true }
+    setShowSoundHint(false)
+  }
 
   const handleLike = () => {
     if (!liked) setLikeCount(c => c + 1)
@@ -85,6 +102,14 @@ function VideoCard({ video, isActive }: { video: PixabayVideo; isActive: boolean
         </div>
       )}
 
+      {/* Sound hint — tap to unmute */}
+      {showSoundHint && (
+        <button onClick={toggleMute}
+          className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/60 backdrop-blur-sm text-white text-xs font-bold px-4 py-2 rounded-full z-20 animate-pulse">
+          🔇 Tap for sound
+        </button>
+      )}
+
       {/* Dark gradient */}
       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20 pointer-events-none" />
 
@@ -105,7 +130,7 @@ function VideoCard({ video, isActive }: { video: PixabayVideo; isActive: boolean
         </div>
 
         {/* Sound */}
-        <button onClick={() => setMuted(m => !m)}
+        <button onClick={toggleMute}
           className="w-11 h-11 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center text-xl">
           {muted ? '🔇' : '🔊'}
         </button>
