@@ -17,13 +17,16 @@ export async function GET(request: Request) {
   const pageToken = searchParams.get('pageToken') || ''
   const q = searchParams.get('q') || ''
   const videoCategoryId = searchParams.get('videoCategoryId') || '0'
+  const KEY = process.env.YOUTUBE_API_KEY
 
   try {
-    let url: string
+    let items: any[] = []
+    let nextPageToken = ''
+
     if (q) {
-      // Search mode
-      const params = new URLSearchParams({
-        key: process.env.YOUTUBE_API_KEY,
+      // search.list → then videos.list to get statistics + contentDetails (duration)
+      const sp = new URLSearchParams({
+        key: KEY,
         part: 'snippet',
         type: 'video',
         q,
@@ -33,28 +36,37 @@ export async function GET(request: Request) {
         order: 'relevance',
         ...(pageToken && { pageToken }),
       })
-      url = `https://www.googleapis.com/youtube/v3/search?${params}`
+      const sr = await fetch(`https://www.googleapis.com/youtube/v3/search?${sp}`)
+      const sd = await sr.json()
+      if (!sr.ok) return NextResponse.json({ error: sd?.error?.message || 'YouTube error' }, { status: 500 })
+      nextPageToken = sd.nextPageToken || ''
+
+      const ids = (sd.items || []).map((i: any) => i.id?.videoId).filter(Boolean).join(',')
+      if (ids) {
+        const dp = new URLSearchParams({ key: KEY, part: 'snippet,statistics,contentDetails', id: ids })
+        const dr = await fetch(`https://www.googleapis.com/youtube/v3/videos?${dp}`)
+        const dd = await dr.json()
+        items = dd.items || []
+      }
     } else {
-      // Trending mode — rotate category for variety
+      // Trending — videos.list with contentDetails for duration
       const params = new URLSearchParams({
-        key: process.env.YOUTUBE_API_KEY,
-        part: 'snippet,statistics',
+        key: KEY,
+        part: 'snippet,statistics,contentDetails',
         chart: 'mostPopular',
         regionCode: region,
         maxResults: '20',
         videoCategoryId,
         ...(pageToken && { pageToken }),
       })
-      url = `https://www.googleapis.com/youtube/v3/videos?${params}`
+      const res = await fetch(`https://www.googleapis.com/youtube/v3/videos?${params}`)
+      const data = await res.json()
+      if (!res.ok) return NextResponse.json({ error: data?.error?.message || 'YouTube error' }, { status: 500 })
+      nextPageToken = data.nextPageToken || ''
+      items = data.items || []
     }
 
-    const res = await fetch(url)
-    const data = await res.json()
-    if (!res.ok) {
-      console.error('YouTube API error', data)
-      return NextResponse.json({ error: data?.error?.message || 'YouTube error' }, { status: 500 })
-    }
-    return NextResponse.json(data)
+    return NextResponse.json({ items, nextPageToken })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message }, { status: 500 })
   }

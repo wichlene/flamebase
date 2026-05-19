@@ -9,6 +9,7 @@ type YTVideo = {
   thumbnail: string
   viewCount: string
   likeCount: string
+  isShort: boolean  // true = vertical (≤60s), false = landscape
 }
 
 const REGIONS = [
@@ -26,6 +27,7 @@ const REGIONS = [
 
 const TABS = [
   { label: '🔥 Trending', value: '' },
+  { label: '📱 Shorts', value: '#shorts' },
   { label: '😂 Funny', value: 'funny viral' },
   { label: '🎵 Music', value: 'music video' },
   { label: '⚽ Sports', value: 'sports highlights' },
@@ -35,7 +37,13 @@ const TABS = [
   { label: '🌿 Nature', value: 'nature' },
 ]
 
-const YT_CATEGORIES = ['0', '22', '23', '24', '17', '10', '20']
+const YT_CATEGORIES = ['0', '22', '10', '23', '24', '17', '20', '26', '28', '15']
+
+function parseDuration(iso: string): number {
+  const m = iso?.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/)
+  if (!m) return 999
+  return (parseInt(m[1] || '0') * 3600) + (parseInt(m[2] || '0') * 60) + parseInt(m[3] || '0')
+}
 
 function fmtCount(n: string | number): string {
   const num = typeof n === 'string' ? parseInt(n) || 0 : n
@@ -64,13 +72,10 @@ export default function Reels() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [activeTab, setActiveTab] = useState('')
   const [region, setRegion] = useState(() => getBrowserRegion())
-  const [nextPageToken, setNextPageToken] = useState('')
   const [activeIndex, setActiveIndex] = useState(0)
-  const [hasMore, setHasMore] = useState(true)
   const [showRegions, setShowRegions] = useState(false)
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
-  const [catIndex, setCatIndex] = useState(0)
   const [likes, setLikes] = useState<Record<string, boolean>>({})
   const [likeCounts, setLikeCounts] = useState<Record<string, number>>({})
 
@@ -78,12 +83,23 @@ export default function Reels() {
   const loadingMoreRef = useRef(false)
   const activeIndexRef = useRef(0)
   const catIndexRef = useRef(0)
+  const nextPageTokenRef = useRef('')
+  const activeTabRef = useRef('')
+  const regionRef = useRef(getBrowserRegion())
+  const searchRef = useRef('')
+  const videosLenRef = useRef(0)
 
-  const parseVideos = (data: any, isSearch: boolean): YTVideo[] =>
-    (data.items || []).map((item: any) => {
-      const id = isSearch ? item.id?.videoId : item.id
+  // keep refs in sync with state
+  useEffect(() => { activeTabRef.current = activeTab }, [activeTab])
+  useEffect(() => { regionRef.current = region }, [region])
+  useEffect(() => { searchRef.current = search }, [search])
+
+  const parseVideos = (items: any[]): YTVideo[] =>
+    items.map((item: any) => {
+      const id = typeof item.id === 'string' ? item.id : item.id?.videoId
       const snippet = item.snippet || {}
       const stats = item.statistics || {}
+      const dur = parseDuration(item.contentDetails?.duration || '')
       return {
         id,
         title: snippet.title || '',
@@ -94,16 +110,20 @@ export default function Reels() {
           snippet.thumbnails?.medium?.url || '',
         viewCount: stats.viewCount || '0',
         likeCount: stats.likeCount || '0',
+        isShort: dur <= 62,
       }
     }).filter((v: YTVideo) => v.id)
 
   const fetchVideos = useCallback(async (
-    tab: string, reg: string, srch: string, pageToken = '', reset = false, catIdx = 0
+    tab: string, reg: string, srch: string, pageToken: string, reset: boolean, catIdx: number
   ) => {
+    if (!reset && loadingMoreRef.current) return
+    loadingMoreRef.current = true
     if (reset) setLoading(true)
-    else { setLoadingMore(true); loadingMoreRef.current = true }
+    else setLoadingMore(true)
+
     try {
-      const query = srch || tab
+      const query = srch || (tab !== '' ? tab : '')
       const params = new URLSearchParams({
         region: reg,
         lang: reg.toLowerCase(),
@@ -113,32 +133,56 @@ export default function Reels() {
       const res = await fetch(`/api/youtube?${params}`)
       const data = await res.json()
       if (data.error) { console.error(data.error); return }
-      const parsed = parseVideos(data, !!query)
+
+      const parsed = parseVideos(data.items || [])
       const counts: Record<string, number> = {}
       parsed.forEach(v => { counts[v.id] = parseInt(v.likeCount || '0') })
+
+      nextPageTokenRef.current = data.nextPageToken || ''
+
       if (reset) {
         setVideos(parsed)
         setLikeCounts(counts)
         setActiveIndex(0)
         activeIndexRef.current = 0
+        videosLenRef.current = parsed.length
         if (containerRef.current) containerRef.current.scrollTop = 0
       } else {
-        setVideos(prev => [...prev, ...parsed])
+        setVideos(prev => {
+          const next = [...prev, ...parsed]
+          videosLenRef.current = next.length
+          return next
+        })
         setLikeCounts(prev => ({ ...prev, ...counts }))
       }
-      setNextPageToken(data.nextPageToken || '')
-      setHasMore(!!data.nextPageToken || catIdx + 1 < YT_CATEGORIES.length * 3)
     } catch (e) { console.error(e) }
-    setLoading(false); setLoadingMore(false); loadingMoreRef.current = false
+
+    setLoading(false)
+    setLoadingMore(false)
+    loadingMoreRef.current = false
   }, [])
 
   useEffect(() => {
     catIndexRef.current = 0
-    setCatIndex(0)
+    nextPageTokenRef.current = ''
     fetchVideos(activeTab, region, search, '', true, 0)
   }, [activeTab, region, search, fetchVideos])
 
-  // scrollend fires once after snap completes — most reliable for active index
+  // Load more using refs — no stale closure issues
+  const loadMore = useCallback(() => {
+    if (loadingMoreRef.current) return
+    const nextCat = catIndexRef.current + 1
+    catIndexRef.current = nextCat
+    fetchVideos(
+      activeTabRef.current,
+      regionRef.current,
+      searchRef.current,
+      nextPageTokenRef.current,
+      false,
+      nextCat
+    )
+  }, [fetchVideos])
+
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
@@ -151,13 +195,8 @@ export default function Reels() {
         activeIndexRef.current = idx
         setActiveIndex(idx)
       }
-      // load more near end
-      const vLen = container.querySelectorAll('[data-card]').length
-      if (idx >= vLen - 4 && !loadingMoreRef.current) {
-        const nextCat = catIndexRef.current + 1
-        catIndexRef.current = nextCat
-        setCatIndex(nextCat)
-      }
+      // Trigger infinite load when 5 videos from end
+      if (idx >= videosLenRef.current - 5) loadMore()
     }
 
     const supportsScrollEnd = 'onscrollend' in window
@@ -174,12 +213,7 @@ export default function Reels() {
       container.removeEventListener('scroll', onScroll)
       clearTimeout(debounce)
     }
-  }, [])
-
-  useEffect(() => {
-    if (catIndex === 0) return
-    fetchVideos(activeTab, region, search, nextPageToken || '', false, catIndex)
-  }, [catIndex])
+  }, [loadMore])
 
   const scrollToIndex = (idx: number) => {
     const container = containerRef.current
@@ -187,6 +221,7 @@ export default function Reels() {
     container.scrollTo({ top: idx * container.clientHeight, behavior: 'smooth' })
     activeIndexRef.current = idx
     setActiveIndex(idx)
+    if (idx >= videosLenRef.current - 5) loadMore()
   }
 
   const handleLike = (id: string) => {
@@ -234,7 +269,7 @@ export default function Reels() {
         ))}
       </div>
 
-      {/* Region + nav buttons */}
+      {/* Region + nav */}
       <div className="relative flex items-center gap-2 px-3 py-1.5 border-b border-[#EEF1F5] bg-white flex-shrink-0">
         <button onClick={() => setShowRegions(r => !r)}
           className="flex items-center gap-1 bg-[#F0F2F5] px-2.5 py-1 rounded-full text-xs font-bold">
@@ -254,26 +289,42 @@ export default function Reels() {
           <button onClick={() => activeIndex > 0 && scrollToIndex(activeIndex - 1)}
             disabled={activeIndex === 0}
             className="w-7 h-7 rounded-full bg-[#F0F2F5] flex items-center justify-center text-sm disabled:opacity-30">↑</button>
-          <button onClick={() => activeIndex < videos.length - 1 && scrollToIndex(activeIndex + 1)}
+          <button onClick={() => scrollToIndex(activeIndex + 1)}
             disabled={activeIndex >= videos.length - 1}
             className="w-7 h-7 rounded-full bg-[#F0F2F5] flex items-center justify-center text-sm disabled:opacity-30">↓</button>
           <span className="text-[10px] text-[#8A919E] ml-1">{activeIndex + 1}/{videos.length}</span>
         </div>
       </div>
 
-      {/* Main view: single iframe on top, invisible snap-scroll thumbnails below for navigation */}
-      <div className="flex-1 relative overflow-hidden">
+      {/* Main: single iframe on top, snap-scroll thumbnails below */}
+      <div className="flex-1 relative overflow-hidden bg-black">
 
-        {/* ONE iframe for the active video — key forces remount so old video stops immediately */}
         {currentVideo && (
-          <div className="absolute inset-0 z-10 bg-black">
-            <iframe
-              key={currentVideo.id}
-              src={`https://www.youtube.com/embed/${currentVideo.id}?autoplay=1&enablejsapi=1&rel=0&modestbranding=1&playsinline=1`}
-              className="w-full h-full"
-              allow="autoplay; encrypted-media; picture-in-picture"
-              allowFullScreen
-            />
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-black">
+            {/* Portrait (Shorts) — narrow centered */}
+            {currentVideo.isShort ? (
+              <div style={{ height: '100%', aspectRatio: '9/16', maxWidth: '100%', position: 'relative' }}>
+                <iframe
+                  key={currentVideo.id}
+                  src={`https://www.youtube.com/embed/${currentVideo.id}?autoplay=1&enablejsapi=1&rel=0&modestbranding=1&playsinline=1`}
+                  className="w-full h-full"
+                  allow="autoplay; encrypted-media; picture-in-picture"
+                  allowFullScreen
+                />
+              </div>
+            ) : (
+              /* Landscape — full width */
+              <div className="w-full" style={{ aspectRatio: '16/9' }}>
+                <iframe
+                  key={currentVideo.id}
+                  src={`https://www.youtube.com/embed/${currentVideo.id}?autoplay=1&enablejsapi=1&rel=0&modestbranding=1&playsinline=1`}
+                  className="w-full h-full"
+                  allow="autoplay; encrypted-media; picture-in-picture"
+                  allowFullScreen
+                />
+              </div>
+            )}
+
             {/* Like / views overlay */}
             <div className="absolute right-3 bottom-20 flex flex-col items-center gap-4 z-20 pointer-events-auto">
               <button onClick={() => handleLike(currentVideo.id)} className="flex flex-col items-center gap-0.5">
@@ -289,10 +340,17 @@ export default function Reels() {
               <a href={`https://www.youtube.com/watch?v=${currentVideo.id}`} target="_blank" rel="noreferrer"
                 className="w-9 h-9 rounded-full bg-red-600 flex items-center justify-center text-white text-xs font-black shadow">YT</a>
             </div>
+
+            {/* Vertical/landscape badge */}
+            <div className="absolute top-3 left-3 z-20">
+              <span className="text-[10px] bg-black/50 text-white px-2 py-0.5 rounded-full">
+                {currentVideo.isShort ? '📱 Short' : '🖥️ Video'}
+              </span>
+            </div>
           </div>
         )}
 
-        {/* Snap-scroll container — invisible thumbnails, used only for scroll navigation */}
+        {/* Invisible snap-scroll thumbnails — navigation only */}
         <div
           ref={containerRef}
           className="absolute inset-0 overflow-y-scroll"
@@ -303,21 +361,19 @@ export default function Reels() {
               key={video.id}
               data-card
               onClick={() => scrollToIndex(i)}
-              className="w-full flex-shrink-0 bg-black cursor-pointer"
+              className="w-full flex-shrink-0 cursor-pointer"
               style={{ height: '100%', scrollSnapAlign: 'start', scrollSnapStop: 'always' }}
-            >
-              <img src={video.thumbnail} className="w-full h-full object-cover opacity-0" alt="" />
-            </div>
+            />
           ))}
           {loadingMore && (
-            <div className="py-8 text-center text-white text-sm" style={{ scrollSnapAlign: 'start' }}>
-              Loading…
+            <div className="py-8 text-center text-white/60 text-xs" style={{ scrollSnapAlign: 'start' }}>
+              Loading more…
             </div>
           )}
         </div>
       </div>
 
-      {/* Video info bar */}
+      {/* Info bar */}
       {currentVideo && (
         <div className="flex-shrink-0 bg-black px-3 py-2 flex items-center gap-2">
           <div className="min-w-0 flex-1">
@@ -329,9 +385,9 @@ export default function Reels() {
       )}
 
       {videos.length === 0 && !loading && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <div className="absolute inset-0 flex flex-col items-center justify-center z-20">
           <p className="text-4xl mb-3">😕</p>
-          <p className="text-[#5B6271] text-sm">No videos found.</p>
+          <p className="text-white/60 text-sm">No videos found.</p>
         </div>
       )}
     </div>
