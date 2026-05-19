@@ -227,25 +227,23 @@ export default function Reels() {
     }
   }, [activeIndex, videos.length, hasMore, nextPageToken, activeTab, region, search, catIndex, fetchVideos, scrollToIndex])
 
-  // IntersectionObserver — root is the snap container
+  // Scroll event — reliable active index detection for snap containers
   useEffect(() => {
-    if (!containerRef.current) return
-    const obs = new IntersectionObserver(entries => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          const idx = Number((entry.target as HTMLElement).dataset.index)
-          setActiveIndex(idx)
-          if (idx >= videos.length - 4 && hasMore && !loadingMoreRef.current) {
-            const nextCat = catIndex + 1
-            setCatIndex(nextCat)
-            fetchVideos(activeTab, region, search, nextPageToken || '', false, nextCat)
-          }
-        }
-      })
-    }, { root: containerRef.current, threshold: 0.6 })
-
-    cardRefs.current.forEach(el => el && obs.observe(el))
-    return () => obs.disconnect()
+    const container = containerRef.current
+    if (!container) return
+    const handleScroll = () => {
+      const cardHeight = container.clientHeight
+      if (!cardHeight) return
+      const idx = Math.round(container.scrollTop / cardHeight)
+      setActiveIndex(idx)
+      if (idx >= videos.length - 4 && hasMore && !loadingMoreRef.current) {
+        const nextCat = catIndex + 1
+        setCatIndex(nextCat)
+        fetchVideos(activeTab, region, search, nextPageToken || '', false, nextCat)
+      }
+    }
+    container.addEventListener('scroll', handleScroll, { passive: true })
+    return () => container.removeEventListener('scroll', handleScroll)
   }, [videos.length, hasMore, nextPageToken, activeTab, region, search, catIndex, fetchVideos])
 
   const doSearch = () => {
