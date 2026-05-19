@@ -12,6 +12,9 @@ type YTVideo = {
   isShort: boolean
 }
 
+// Module-level: persists user's mute preference across video changes
+let _userUnmuted = false
+
 const REGIONS = [
   { label: '🌍 Auto', value: 'AUTO' },
   { label: '🇹🇷 Türkiye', value: 'TR' },
@@ -83,9 +86,10 @@ export default function Reels() {
   const [search, setSearch] = useState('')
   const [likes, setLikes] = useState<Record<string, boolean>>({})
   const [likeCounts, setLikeCounts] = useState<Record<string, number>>({})
+  const [muted, setMuted] = useState(true)
 
   const containerRef = useRef<HTMLDivElement>(null)
-  const iframeRef = useRef<HTMLIFrameElement>(null)
+  const iframeRefs = useRef<Record<number, HTMLIFrameElement | null>>({})
   const loadingMoreRef = useRef(false)
   const activeIndexRef = useRef(0)
   const catIndexRef = useRef(0)
@@ -95,8 +99,6 @@ export default function Reels() {
   const searchRef = useRef('')
   const videosLenRef = useRef(0)
   const seenIdsRef = useRef<Set<string>>(new Set())
-  const lastWheelRef = useRef(0)
-  const wheelLockRef = useRef(false)
 
   const effectiveRegion = region === 'AUTO' ? autoRegion : region
 
@@ -185,7 +187,7 @@ export default function Reels() {
     fetchVideos(activeTabRef.current, regionRef.current, searchRef.current, nextPageTokenRef.current, false, nextCat)
   }, [fetchVideos])
 
-  // Detect which card is in view via native scroll
+  // Detect active card via native scroll
   useEffect(() => {
     const c = containerRef.current
     if (!c) return
@@ -199,67 +201,23 @@ export default function Reels() {
       }
       if (idx >= videosLenRef.current - 5) loadMore()
     }
-
-    const supportsScrollEnd = 'onscrollend' in window
     let debounce: ReturnType<typeof setTimeout>
     const onScroll = () => { clearTimeout(debounce); debounce = setTimeout(onSnap, 80) }
-
-    if (supportsScrollEnd) {
-      c.addEventListener('scrollend', onSnap, { passive: true })
-      c.addEventListener('scroll', onScroll, { passive: true }) // fallback dual
-    } else {
-      c.addEventListener('scroll', onScroll, { passive: true })
-    }
+    c.addEventListener('scroll', onScroll, { passive: true })
+    if ('onscrollend' in window) c.addEventListener('scrollend', onSnap, { passive: true })
     return () => {
-      c.removeEventListener('scrollend', onSnap)
       c.removeEventListener('scroll', onScroll)
+      c.removeEventListener('scrollend', onSnap)
       clearTimeout(debounce)
     }
   }, [loadMore])
 
-  // Programmatic scroll for desktop wheel + buttons
   const scrollToIndex = useCallback((idx: number) => {
     const c = containerRef.current
     if (!c) return
     if (idx < 0 || idx >= videosLenRef.current) return
     c.scrollTo({ top: idx * c.clientHeight, behavior: 'smooth' })
   }, [])
-
-  // Wheel on the overlay (covers iframe — iframe would otherwise eat wheel events)
-  const onOverlayWheel = (e: React.WheelEvent) => {
-    e.preventDefault()
-    const now = Date.now()
-    if (now - lastWheelRef.current < 500 || wheelLockRef.current) return
-    lastWheelRef.current = now
-    wheelLockRef.current = true
-    setTimeout(() => { wheelLockRef.current = false }, 500)
-    scrollToIndex(activeIndexRef.current + (e.deltaY > 0 ? 1 : -1))
-  }
-
-  // Touch on overlay — swipe for navigation, tap for play/pause
-  const touchStartYRef = useRef(0)
-  const touchStartTimeRef = useRef(0)
-  const onOverlayTouchStart = (e: React.TouchEvent) => {
-    touchStartYRef.current = e.touches[0].clientY
-    touchStartTimeRef.current = Date.now()
-  }
-  const onOverlayTouchEnd = (e: React.TouchEvent) => {
-    const dy = touchStartYRef.current - e.changedTouches[0].clientY
-    const dt = Date.now() - touchStartTimeRef.current
-    if (Math.abs(dy) > 40) {
-      scrollToIndex(activeIndexRef.current + (dy > 0 ? 1 : -1))
-    } else if (dt < 300) {
-      // tap → toggle play/pause
-      iframeRef.current?.contentWindow?.postMessage(
-        JSON.stringify({ event: 'command', func: 'pauseVideo', args: [] }), '*'
-      )
-      setTimeout(() => {
-        iframeRef.current?.contentWindow?.postMessage(
-          JSON.stringify({ event: 'command', func: 'playVideo', args: [] }), '*'
-        )
-      }, 50)
-    }
-  }
 
   // Keyboard
   useEffect(() => {
@@ -275,6 +233,16 @@ export default function Reels() {
     return () => window.removeEventListener('keydown', onKey)
   }, [scrollToIndex])
 
+  const toggleMute = () => {
+    const next = !muted
+    setMuted(next)
+    _userUnmuted = !next
+    const iframe = iframeRefs.current[activeIndex]
+    iframe?.contentWindow?.postMessage(
+      JSON.stringify({ event: 'command', func: next ? 'mute' : 'unMute', args: [] }), '*'
+    )
+  }
+
   const handleLike = (id: string) => {
     setLikes(prev => {
       const was = !!prev[id]
@@ -285,12 +253,17 @@ export default function Reels() {
 
   const doSearch = () => { setSearch(searchInput.trim()); setActiveTab('') }
 
+  // Sync mute state with module on mount
+  useEffect(() => { setMuted(!_userUnmuted) }, [])
+
   if (loading) return (
     <div className="flex flex-col items-center justify-center py-24 gap-3">
       <div className="text-5xl animate-bounce">▶️</div>
       <p className="text-[#5B6271] text-sm font-semibold">Loading videos…</p>
     </div>
   )
+
+  const currentVideo = videos[activeIndex]
 
   return (
     <div className="flex flex-col select-none" style={{ height: 'calc(100vh - 56px)' }}>
@@ -343,7 +316,8 @@ export default function Reels() {
         </div>
       </div>
 
-      {/* Native snap-scroll container — cards slide in/out as user scrolls */}
+      {/* Native snap-scroll. iframes have pointer-events:none so scroll/wheel/touch
+          pass through to the container — exactly like YouTube Shorts. */}
       <div
         ref={containerRef}
         className="flex-1 overflow-y-scroll bg-black"
@@ -351,7 +325,8 @@ export default function Reels() {
       >
         {videos.map((video, i) => {
           const isActive = activeIndex === i
-          const embedUrl = `https://www.youtube.com/embed/${video.id}?autoplay=1&enablejsapi=1&rel=0&modestbranding=1&playsinline=1`
+          const muteParam = _userUnmuted ? 0 : 1
+          const embedUrl = `https://www.youtube.com/embed/${video.id}?autoplay=1&mute=${muteParam}&enablejsapi=1&rel=0&modestbranding=1&playsinline=1&loop=1&playlist=${video.id}`
           return (
             <div
               key={video.id}
@@ -359,81 +334,79 @@ export default function Reels() {
               className="w-full relative bg-black flex items-center justify-center"
               style={{ height: '100%', flexShrink: 0, scrollSnapAlign: 'start', scrollSnapStop: 'always' }}
             >
-              {isActive ? (
-                <>
-                  {video.isShort ? (
-                    <div style={{ height: '100%', aspectRatio: '9/16', maxWidth: '100%', position: 'relative' }}>
-                      <iframe
-                        ref={iframeRef}
-                        key={video.id}
-                        src={embedUrl}
-                        className="w-full h-full"
-                        allow="autoplay; encrypted-media; picture-in-picture"
-                        allowFullScreen
-                      />
-                    </div>
-                  ) : (
-                    <div className="w-full" style={{ aspectRatio: '16/9', position: 'relative' }}>
-                      <iframe
-                        ref={iframeRef}
-                        key={video.id}
-                        src={embedUrl}
-                        className="w-full h-full"
-                        allow="autoplay; encrypted-media; picture-in-picture"
-                        allowFullScreen
-                      />
-                    </div>
-                  )}
-                  {/* Transparent overlay catches wheel/touch over iframe area only */}
-                  <div
-                    className="absolute inset-y-0 z-10"
-                    style={{ left: 0, right: 70 }}
-                    onWheel={onOverlayWheel}
-                    onTouchStart={onOverlayTouchStart}
-                    onTouchEnd={onOverlayTouchEnd}
-                  />
-                </>
-              ) : (
-                <img
-                  src={video.thumbnail}
-                  alt=""
-                  className="max-w-full max-h-full object-contain"
-                  draggable={false}
-                />
+              {/* Thumbnail always visible (loads instantly while iframe loads or for non-active cards) */}
+              <img
+                src={video.thumbnail}
+                alt=""
+                className="absolute max-w-full max-h-full object-contain"
+                draggable={false}
+              />
+              {/* iframe ONLY for active card → previous video unmounts and stops */}
+              {isActive && (
+                video.isShort ? (
+                  <div style={{ height: '100%', aspectRatio: '9/16', maxWidth: '100%', position: 'relative' }}>
+                    <iframe
+                      ref={el => { iframeRefs.current[i] = el }}
+                      src={embedUrl}
+                      className="w-full h-full"
+                      style={{ pointerEvents: 'none' }}
+                      allow="autoplay; encrypted-media; picture-in-picture"
+                      allowFullScreen
+                    />
+                  </div>
+                ) : (
+                  <div className="w-full" style={{ aspectRatio: '16/9', position: 'relative' }}>
+                    <iframe
+                      ref={el => { iframeRefs.current[i] = el }}
+                      src={embedUrl}
+                      className="w-full h-full"
+                      style={{ pointerEvents: 'none' }}
+                      allow="autoplay; encrypted-media; picture-in-picture"
+                      allowFullScreen
+                    />
+                  </div>
+                )
               )}
 
-              <span className="absolute top-3 left-3 z-20 text-[10px] bg-black/50 text-white px-2 py-0.5 rounded-full">
+              {/* Badge */}
+              <span className="absolute top-3 left-3 z-20 text-[10px] bg-black/50 text-white px-2 py-0.5 rounded-full pointer-events-none">
                 {video.isShort ? '📱 Short' : '🖥️ Video'}
               </span>
 
+              {/* Side action buttons (only on active) */}
               {isActive && (
-                <>
-                  <div className="absolute right-3 bottom-20 flex flex-col items-center gap-4 z-20">
-                    <button onClick={() => handleLike(video.id)} className="flex flex-col items-center gap-0.5">
-                      <span className={`text-2xl transition-transform ${likes[video.id] ? 'scale-125' : ''}`}>
-                        {likes[video.id] ? '❤️' : '🤍'}
-                      </span>
-                      <span className="text-white text-[11px] font-bold drop-shadow">{fmtCount(likeCounts[video.id] || 0)}</span>
-                    </button>
-                    <div className="flex flex-col items-center gap-0.5">
-                      <span className="text-xl">👁</span>
-                      <span className="text-white text-[11px] font-bold drop-shadow">{fmtCount(video.viewCount)}</span>
-                    </div>
-                    <a href={`https://www.youtube.com/watch?v=${video.id}`} target="_blank" rel="noreferrer"
-                      className="w-9 h-9 rounded-full bg-red-600 flex items-center justify-center text-white text-xs font-black shadow">YT</a>
+                <div className="absolute right-3 bottom-20 flex flex-col items-center gap-4 z-20">
+                  <button onClick={() => handleLike(video.id)} className="flex flex-col items-center gap-0.5">
+                    <span className={`text-2xl transition-transform ${likes[video.id] ? 'scale-125' : ''}`}>
+                      {likes[video.id] ? '❤️' : '🤍'}
+                    </span>
+                    <span className="text-white text-[11px] font-bold drop-shadow">{fmtCount(likeCounts[video.id] || 0)}</span>
+                  </button>
+                  <div className="flex flex-col items-center gap-0.5">
+                    <span className="text-xl">👁</span>
+                    <span className="text-white text-[11px] font-bold drop-shadow">{fmtCount(video.viewCount)}</span>
                   </div>
-
-                  <div className="absolute bottom-2 left-3 right-20 z-20 pointer-events-none">
-                    <p className="text-white text-xs font-bold truncate drop-shadow">{video.channelTitle}</p>
-                    <p className="text-white/70 text-[11px] truncate drop-shadow">{video.title}</p>
-                  </div>
-                </>
+                  <button onClick={toggleMute} className="flex flex-col items-center gap-0.5">
+                    <span className="text-2xl">{muted ? '🔇' : '🔊'}</span>
+                  </button>
+                  <a href={`https://www.youtube.com/watch?v=${video.id}`} target="_blank" rel="noreferrer"
+                    className="w-9 h-9 rounded-full bg-red-600 flex items-center justify-center text-white text-xs font-black shadow">YT</a>
+                </div>
               )}
 
+              {/* Bottom title */}
+              {isActive && (
+                <div className="absolute bottom-2 left-3 right-20 z-20 pointer-events-none">
+                  <p className="text-white text-xs font-bold truncate drop-shadow">{video.channelTitle}</p>
+                  <p className="text-white/70 text-[11px] truncate drop-shadow">{video.title}</p>
+                </div>
+              )}
+
+              {/* First-card swipe hint */}
               {i === 0 && isActive && (
-                <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-20 pointer-events-none flex flex-col items-center gap-1 animate-bounce">
+                <div className="absolute bottom-32 left-1/2 -translate-x-1/2 z-20 pointer-events-none flex flex-col items-center gap-1 animate-bounce">
                   <span className="text-2xl">👆</span>
-                  <span className="text-white/80 text-xs bg-black/40 px-2 py-0.5 rounded-full">Swipe / scroll / arrows</span>
+                  <span className="text-white/80 text-xs bg-black/40 px-2 py-0.5 rounded-full">Swipe / scroll</span>
                 </div>
               )}
             </div>
