@@ -12,6 +12,7 @@ import { TOOLS_ADDRESS, TOKEN_FACTORY_ADDRESS, NFT_FACTORY_ADDRESS, DAO_ADDRESS,
 
 const Messages = dynamic(() => import('../components/Messages'), { ssr: false, loading: () => <div className="p-8 text-center text-[#5B6271]">💬 Loading…</div> })
 const AIChat = dynamic(() => import('../components/AIChat'), { ssr: false, loading: () => <div className="p-8 text-center text-[#5B6271]">🤖 Loading AI…</div> })
+const Reels = dynamic(() => import('../components/Reels'), { ssr: false, loading: () => <div className="p-8 text-center text-[#5B6271]">🎬 Loading Reels…</div> })
 
 const TOOLS_DEPLOYED = TOOLS_ADDRESS.length > 0
 const TOKEN_FACTORY_DEPLOYED = TOKEN_FACTORY_ADDRESS.length > 0
@@ -1132,52 +1133,15 @@ export default function Home() {
             )}
 
             {/* ══ REELS ══ */}
-            {activeTab === 'reels' && (() => {
-              const reelPosts = posts.filter(p => p.ipfsHash?.startsWith('vid_'))
-              return (
-                <div>
-                  <div className="hidden md:flex items-center justify-between px-5 py-4 border-b border-[#EEF1F5] sticky top-0 bg-white/95 backdrop-blur z-10">
-                    <h1 className="text-lg font-black text-[#0A0B0D]">🎬 Reels</h1>
-                    <p className="text-xs text-[#8A919E]">{reelPosts.length} video{reelPosts.length !== 1 ? 's' : ''}</p>
-                  </div>
-                  {reelPosts.length === 0 ? (
-                    <div className="text-center py-20 px-6">
-                      <div className="text-6xl mb-4">🎬</div>
-                      <p className="font-bold text-[#0A0B0D] text-xl">No videos yet</p>
-                      <p className="text-[#5B6271] text-sm mt-2">Be the first to upload a video post!</p>
-                      <button onClick={() => setActiveTab('post')}
-                        className="mt-4 bg-[#0052FF] text-white px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-[#1652F0] transition-colors">
-                        Upload Video
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="divide-y divide-[#EEF1F5]">
-                      {reelPosts.map(post => (
-                        <div key={post.id.toString()} className="p-4">
-                          <div className="flex items-center gap-2 mb-2">
-                            <button onClick={() => setSelectedUser(post.author)} className="flex items-center gap-2 hover:opacity-80">
-                              <Avatar addr={post.author} profiles={profiles} size="sm" />
-                              <span className="font-bold text-sm text-[#0A0B0D]">{getUsername(post.author)}</span>
-                            </button>
-                            <span className="text-[#8A919E] text-xs ml-auto">{timeAgo(post.timestamp)}</span>
-                          </div>
-                          <video
-                            src={`https://gateway.pinata.cloud/ipfs/${post.ipfsHash.slice(4)}`}
-                            controls playsInline
-                            className="w-full max-h-[520px] bg-black rounded-2xl"
-                          />
-                          {post.content && <p className="text-sm text-[#0A0B0D] mt-2">{post.content}</p>}
-                          <div className="flex items-center gap-4 mt-2 text-xs text-[#5B6271]">
-                            <span>🔥 {post.likes.toString()}</span>
-                            <span>💸 {parseFloat(formatEther(post.tips)).toFixed(4)} ETH</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+            {activeTab === 'reels' && (
+              <div>
+                <div className="hidden md:flex items-center justify-between px-5 py-4 border-b border-[#EEF1F5] sticky top-0 bg-white/95 backdrop-blur z-10">
+                  <h1 className="text-lg font-black text-[#0A0B0D]">🎬 Reels</h1>
+                  <span className="text-xs text-[#8A919E]">Global popular videos</span>
                 </div>
-              )
-            })()}
+                <Reels />
+              </div>
+            )}
 
             {/* ══ PROFILE ══ */}
             {activeTab === 'profile' && (
