@@ -2,320 +2,403 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 
-type Video = {
-  id: number
-  url: string       // direct mp4
-  thumb: string
-  tags: string
-  user: string
-  views: number
-  likes: number
-  duration: number
+type YTVideo = {
+  id: string
+  title: string
+  channelTitle: string
+  thumbnail: string
+  viewCount: string
+  likeCount: string
+  isShort: boolean
 }
 
-const TABS = [
-  { label: '🔥 Popular', q: '', category: '' },
-  { label: '😂 Funny', q: 'funny', category: '' },
-  { label: '🐾 Animals', q: 'animals', category: 'animals' },
-  { label: '🌿 Nature', q: 'nature', category: 'nature' },
-  { label: '🏙️ City', q: 'city', category: '' },
-  { label: '⚽ Sports', q: 'sports', category: 'sports' },
-  { label: '🍕 Food', q: 'food', category: 'food' },
-  { label: '✈️ Travel', q: 'travel', category: 'travel' },
-  { label: '🎵 Music', q: 'music', category: 'music' },
+const REGIONS = [
+  { label: '🌍 Auto', value: 'AUTO' },
+  { label: '🇹🇷 Türkiye', value: 'TR' },
+  { label: '🇺🇸 USA', value: 'US' },
+  { label: '🇬🇧 UK', value: 'GB' },
+  { label: '🇩🇪 Germany', value: 'DE' },
+  { label: '🇫🇷 France', value: 'FR' },
+  { label: '🇯🇵 Japan', value: 'JP' },
+  { label: '🇰🇷 Korea', value: 'KR' },
+  { label: '🇧🇷 Brazil', value: 'BR' },
+  { label: '🇮🇳 India', value: 'IN' },
+  { label: '🇷🇺 Russia', value: 'RU' },
+  { label: '🇪🇸 Spain', value: 'ES' },
 ]
 
-function fmtCount(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`
-  return String(n)
+const TABS = [
+  { label: '🔥 Trending', value: '' },
+  { label: '📱 Shorts', value: '#shorts' },
+  { label: '😂 Funny', value: 'funny viral' },
+  { label: '🎵 Music', value: 'music video' },
+  { label: '⚽ Sports', value: 'sports highlights' },
+  { label: '🎮 Gaming', value: 'gaming' },
+  { label: '🍕 Food', value: 'food' },
+  { label: '🐾 Animals', value: 'cute animals' },
+  { label: '🌿 Nature', value: 'nature' },
+]
+
+const YT_CATEGORIES = ['0', '22', '10', '23', '24', '17', '20', '26', '28', '15']
+
+function parseDuration(iso: string): number {
+  const m = iso?.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/)
+  if (!m) return 999
+  return (parseInt(m[1] || '0') * 3600) + (parseInt(m[2] || '0') * 60) + parseInt(m[3] || '0')
 }
 
-function VideoCard({
-  video, isActive, onLike, liked, likeCount,
-}: {
-  video: Video
-  isActive: boolean
-  onLike: () => void
-  liked: boolean
-  likeCount: number
-}) {
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const [muted, setMuted] = useState(true)
-  const [paused, setPaused] = useState(false)
+function fmtCount(n: string | number): string {
+  const num = typeof n === 'string' ? parseInt(n) || 0 : n
+  if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`
+  if (num >= 1_000) return `${(num / 1_000).toFixed(0)}K`
+  return String(num)
+}
 
-  useEffect(() => {
-    const el = videoRef.current
-    if (!el) return
-    if (isActive) {
-      el.currentTime = 0
-      el.play().catch(() => {})
-    } else {
-      el.pause()
-      el.currentTime = 0
-    }
-  }, [isActive])
-
-  const toggleMute = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    if (!videoRef.current) return
-    videoRef.current.muted = !muted
-    setMuted(m => !m)
-  }
-
-  const togglePlay = () => {
-    const el = videoRef.current
-    if (!el) return
-    if (el.paused) { el.play(); setPaused(false) }
-    else { el.pause(); setPaused(true) }
-  }
-
-  return (
-    <div className="w-full h-full relative bg-black flex items-center justify-center" onClick={togglePlay}>
-      <video
-        ref={videoRef}
-        src={video.url}
-        className="w-full h-full object-contain"
-        loop
-        muted={muted}
-        playsInline
-        preload={isActive ? 'auto' : 'none'}
-      />
-
-      {/* Pause indicator */}
-      {paused && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="w-16 h-16 rounded-full bg-black/50 flex items-center justify-center">
-            <span className="text-3xl text-white ml-1">▶</span>
-          </div>
-        </div>
-      )}
-
-      {/* Right-side actions */}
-      <div className="absolute right-3 bottom-24 flex flex-col items-center gap-5 z-10" onClick={e => e.stopPropagation()}>
-        <button onClick={onLike} className="flex flex-col items-center gap-0.5">
-          <span className={`text-2xl transition-transform ${liked ? 'scale-125' : ''}`}>{liked ? '❤️' : '🤍'}</span>
-          <span className="text-white text-[11px] font-bold drop-shadow">{fmtCount(likeCount)}</span>
-        </button>
-        <div className="flex flex-col items-center gap-0.5">
-          <span className="text-xl">👁</span>
-          <span className="text-white text-[11px] font-bold drop-shadow">{fmtCount(video.views)}</span>
-        </div>
-        <button onClick={toggleMute} className="flex flex-col items-center gap-0.5">
-          <span className="text-2xl">{muted ? '🔇' : '🔊'}</span>
-        </button>
-      </div>
-
-      {/* Bottom info */}
-      <div className="absolute bottom-4 left-3 right-20 z-10 pointer-events-none">
-        <p className="text-white font-bold text-sm drop-shadow">@{video.user}</p>
-        <p className="text-white/70 text-xs mt-0.5 line-clamp-2">{video.tags}</p>
-      </div>
-
-      {/* Gradient */}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
-    </div>
-  )
+function detectRegion(): string {
+  if (typeof navigator === 'undefined') return 'US'
+  const lang = navigator.language || ''
+  if (lang.startsWith('tr')) return 'TR'
+  if (lang.startsWith('ru')) return 'RU'
+  if (lang.startsWith('de')) return 'DE'
+  if (lang.startsWith('fr')) return 'FR'
+  if (lang.startsWith('ja')) return 'JP'
+  if (lang.startsWith('ko')) return 'KR'
+  if (lang.startsWith('pt')) return 'BR'
+  if (lang.startsWith('hi')) return 'IN'
+  if (lang.startsWith('es')) return 'ES'
+  if (lang.startsWith('it')) return 'IT'
+  return 'US'
 }
 
 export default function Reels() {
-  const [videos, setVideos] = useState<Video[]>([])
+  const [videos, setVideos] = useState<YTVideo[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
-  const [activeTab, setActiveTab] = useState(0)
+  const [activeTab, setActiveTab] = useState('')
+  const [region, setRegion] = useState<string>('AUTO')
+  const [autoRegion] = useState(() => detectRegion())
   const [activeIndex, setActiveIndex] = useState(0)
+  const [showRegions, setShowRegions] = useState(false)
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
-  const [page, setPage] = useState(1)
-  const [likes, setLikes] = useState<Record<number, boolean>>({})
-  const [likeCounts, setLikeCounts] = useState<Record<number, number>>({})
+  const [likes, setLikes] = useState<Record<string, boolean>>({})
+  const [likeCounts, setLikeCounts] = useState<Record<string, number>>({})
+  const [tapAnim, setTapAnim] = useState<'play' | 'pause' | null>(null)
 
-  const containerRef = useRef<HTMLDivElement>(null)
+  const iframeRef = useRef<HTMLIFrameElement>(null)
   const loadingMoreRef = useRef(false)
-  const pageRef = useRef(1)
   const activeIndexRef = useRef(0)
+  const catIndexRef = useRef(0)
+  const nextPageTokenRef = useRef('')
+  const activeTabRef = useRef('')
+  const regionRef = useRef('AUTO')
+  const searchRef = useRef('')
+  const videosLenRef = useRef(0)
+  const isPlayingRef = useRef(true)
+  const touchStartYRef = useRef(0)
+  const touchStartTimeRef = useRef(0)
+  const lastWheelRef = useRef(0)
+  const wheelAccumRef = useRef(0)
 
-  const parseVideos = (hits: any[]): Video[] =>
-    hits.map((h: any) => ({
-      id: h.id,
-      url: h.videos?.medium?.url || h.videos?.small?.url || h.videos?.large?.url || '',
-      thumb: h.videos?.medium?.thumbnail || h.videos?.small?.thumbnail || h.picture_id ? `https://i.vimeocdn.com/video/${h.picture_id}_640x360.jpg` : '',
-      tags: h.tags || '',
-      user: h.user || '',
-      views: h.views || 0,
-      likes: h.likes || 0,
-      duration: h.duration || 0,
-    })).filter(v => v.url)
+  const effectiveRegion = region === 'AUTO' ? autoRegion : region
 
-  const fetchVideos = useCallback(async (tabIdx: number, srch: string, pg: number, reset: boolean) => {
+  useEffect(() => { activeTabRef.current = activeTab }, [activeTab])
+  useEffect(() => { regionRef.current = effectiveRegion }, [effectiveRegion])
+  useEffect(() => { searchRef.current = search }, [search])
+
+  const parseVideos = (items: any[]): YTVideo[] =>
+    items.map((item: any) => {
+      const id = typeof item.id === 'string' ? item.id : item.id?.videoId
+      const snippet = item.snippet || {}
+      const stats = item.statistics || {}
+      const dur = parseDuration(item.contentDetails?.duration || '')
+      return {
+        id,
+        title: snippet.title || '',
+        channelTitle: snippet.channelTitle || '',
+        thumbnail:
+          snippet.thumbnails?.maxres?.url ||
+          snippet.thumbnails?.high?.url ||
+          snippet.thumbnails?.medium?.url || '',
+        viewCount: stats.viewCount || '0',
+        likeCount: stats.likeCount || '0',
+        isShort: dur <= 62,
+      }
+    }).filter((v: YTVideo) => v.id)
+
+  const fetchVideos = useCallback(async (
+    tab: string, reg: string, srch: string, pageToken: string, reset: boolean, catIdx: number
+  ) => {
     if (!reset && loadingMoreRef.current) return
     loadingMoreRef.current = true
     if (reset) setLoading(true)
     else setLoadingMore(true)
-
     try {
-      const tab = TABS[tabIdx]
+      const query = srch || tab
       const params = new URLSearchParams({
-        page: String(pg),
-        ...(srch ? { q: srch } : tab.q ? { q: tab.q } : { mix: '1' }),
-        ...(tab.category && !srch && { category: tab.category }),
+        region: reg,
+        lang: reg.toLowerCase(),
+        ...(query ? { q: query } : { videoCategoryId: YT_CATEGORIES[catIdx % YT_CATEGORIES.length] }),
+        ...(pageToken && { pageToken }),
       })
-      const res = await fetch(`/api/reels?${params}`)
+      const res = await fetch(`/api/youtube?${params}`)
       const data = await res.json()
-      const parsed = parseVideos(data.hits || [])
-      const counts: Record<number, number> = {}
-      parsed.forEach(v => { counts[v.id] = v.likes })
-
+      if (data.error) { console.error(data.error); return }
+      const parsed = parseVideos(data.items || [])
+      const counts: Record<string, number> = {}
+      parsed.forEach(v => { counts[v.id] = parseInt(v.likeCount || '0') })
+      nextPageTokenRef.current = data.nextPageToken || ''
       if (reset) {
         setVideos(parsed)
         setLikeCounts(counts)
         setActiveIndex(0)
         activeIndexRef.current = 0
-        if (containerRef.current) containerRef.current.scrollTop = 0
+        videosLenRef.current = parsed.length
       } else {
-        setVideos(prev => [...prev, ...parsed])
+        setVideos(prev => {
+          const next = [...prev, ...parsed]
+          videosLenRef.current = next.length
+          return next
+        })
         setLikeCounts(prev => ({ ...prev, ...counts }))
       }
     } catch (e) { console.error(e) }
-
     setLoading(false); setLoadingMore(false); loadingMoreRef.current = false
   }, [])
 
   useEffect(() => {
-    pageRef.current = 1
-    setPage(1)
-    fetchVideos(activeTab, search, 1, true)
-  }, [activeTab, search, fetchVideos])
+    catIndexRef.current = 0
+    nextPageTokenRef.current = ''
+    fetchVideos(activeTab, effectiveRegion, search, '', true, 0)
+  }, [activeTab, effectiveRegion, search, fetchVideos])
 
-  // Snap scroll detection + infinite load
-  useEffect(() => {
-    const container = containerRef.current
-    if (!container) return
+  const loadMore = useCallback(() => {
+    if (loadingMoreRef.current) return
+    const nextCat = catIndexRef.current + 1
+    catIndexRef.current = nextCat
+    fetchVideos(activeTabRef.current, regionRef.current, searchRef.current, nextPageTokenRef.current, false, nextCat)
+  }, [fetchVideos])
 
-    const onSnap = () => {
-      const h = container.clientHeight
-      if (!h) return
-      const idx = Math.round(container.scrollTop / h)
-      if (idx !== activeIndexRef.current) {
-        activeIndexRef.current = idx
-        setActiveIndex(idx)
-      }
-      // Load more when near end
-      const total = container.querySelectorAll('[data-card]').length
-      if (idx >= total - 4 && !loadingMoreRef.current) {
-        const nextPage = pageRef.current + 1
-        pageRef.current = nextPage
-        setPage(nextPage)
-        fetchVideos(activeTab, search, nextPage, false)
-      }
-    }
-
-    const supportsScrollEnd = 'onscrollend' in window
-    let debounce: ReturnType<typeof setTimeout>
-    const onScroll = () => { clearTimeout(debounce); debounce = setTimeout(onSnap, 60) }
-
-    if (supportsScrollEnd) {
-      container.addEventListener('scrollend', onSnap, { passive: true })
-    } else {
-      container.addEventListener('scroll', onScroll, { passive: true })
-    }
-    return () => {
-      container.removeEventListener('scrollend', onSnap)
-      container.removeEventListener('scroll', onScroll)
-      clearTimeout(debounce)
-    }
-  }, [activeTab, search, fetchVideos])
-
-  const scrollToIndex = (idx: number) => {
-    const container = containerRef.current
-    if (!container || idx < 0 || idx >= videos.length) return
-    container.scrollTo({ top: idx * container.clientHeight, behavior: 'smooth' })
+  const goTo = useCallback((idx: number) => {
+    const len = videosLenRef.current
+    if (idx < 0 || idx >= len) return
     activeIndexRef.current = idx
+    isPlayingRef.current = true
     setActiveIndex(idx)
+    if (idx >= len - 5) loadMore()
+  }, [loadMore])
+
+  const sendCmd = useCallback((func: string) => {
+    iframeRef.current?.contentWindow?.postMessage(
+      JSON.stringify({ event: 'command', func, args: [] }), '*'
+    )
+  }, [])
+
+  // Touch swipe + tap
+  const onTouchStart = (e: React.TouchEvent) => {
+    touchStartYRef.current = e.touches[0].clientY
+    touchStartTimeRef.current = Date.now()
+  }
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const dy = touchStartYRef.current - e.changedTouches[0].clientY
+    const dt = Date.now() - touchStartTimeRef.current
+    if (Math.abs(dy) > 40) {
+      if (dy > 0) goTo(activeIndexRef.current + 1)
+      else goTo(activeIndexRef.current - 1)
+    } else if (dt < 300) {
+      if (isPlayingRef.current) { sendCmd('pauseVideo'); isPlayingRef.current = false; setTapAnim('pause') }
+      else { sendCmd('playVideo'); isPlayingRef.current = true; setTapAnim('play') }
+      setTimeout(() => setTapAnim(null), 600)
+    }
   }
 
-  const doSearch = () => { setSearch(searchInput.trim()); setActiveTab(0) }
+  // Wheel — attached DIRECTLY to overlay (it's z:20 above iframe, so it gets the events)
+  const onWheel = (e: React.WheelEvent) => {
+    const now = Date.now()
+    if (now - lastWheelRef.current < 500) return
+    wheelAccumRef.current += e.deltaY
+    if (Math.abs(wheelAccumRef.current) > 30) {
+      lastWheelRef.current = now
+      if (wheelAccumRef.current > 0) goTo(activeIndexRef.current + 1)
+      else goTo(activeIndexRef.current - 1)
+      wheelAccumRef.current = 0
+    }
+  }
+
+  // Keyboard arrows
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement) return
+      if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') {
+        e.preventDefault()
+        goTo(activeIndexRef.current + 1)
+      } else if (e.key === 'ArrowUp' || e.key === 'PageUp') {
+        e.preventDefault()
+        goTo(activeIndexRef.current - 1)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [goTo])
+
+  const handleLike = (id: string) => {
+    setLikes(prev => {
+      const was = !!prev[id]
+      setLikeCounts(c => ({ ...c, [id]: (c[id] || 0) + (was ? -1 : 1) }))
+      return { ...prev, [id]: !was }
+    })
+  }
+
+  const doSearch = () => { setSearch(searchInput.trim()); setActiveTab('') }
+
+  const currentVideo = videos[activeIndex]
+  const currentRegionLabel = REGIONS.find(r => r.value === region)?.label || `🌍 Auto (${autoRegion})`
+  const embedUrl = currentVideo
+    ? `https://www.youtube.com/embed/${currentVideo.id}?autoplay=1&enablejsapi=1&rel=0&modestbranding=1&playsinline=1`
+    : ''
 
   if (loading) return (
     <div className="flex flex-col items-center justify-center py-24 gap-3">
-      <div className="text-5xl animate-bounce">🎬</div>
+      <div className="text-5xl animate-bounce">▶️</div>
       <p className="text-[#5B6271] text-sm font-semibold">Loading videos…</p>
     </div>
   )
 
   return (
-    <div className="flex flex-col" style={{ height: 'calc(100vh - 56px)' }}>
+    <div className="flex flex-col select-none" style={{ height: 'calc(100vh - 56px)' }}>
 
       {/* Search */}
       <div className="flex gap-2 px-3 py-2 border-b border-[#EEF1F5] bg-white flex-shrink-0">
         <input value={searchInput} onChange={e => setSearchInput(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && doSearch()}
           placeholder="Search videos…"
-          className="flex-1 bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:border-[#FF6B00]" />
+          className="flex-1 bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:border-[#FF0000]" />
         <button onClick={doSearch}
-          className="bg-[#FF6B00] hover:bg-orange-700 text-white px-4 py-1.5 rounded-xl text-sm font-bold transition-colors">
+          className="bg-[#FF0000] hover:bg-red-700 text-white px-4 py-1.5 rounded-xl text-sm font-bold transition-colors">
           🔍
         </button>
       </div>
 
       {/* Tabs */}
       <div className="flex gap-2 overflow-x-auto px-3 py-2 border-b border-[#EEF1F5] bg-white flex-shrink-0" style={{ scrollbarWidth: 'none' }}>
-        {TABS.map((tab, i) => (
-          <button key={i} onClick={() => { setActiveTab(i); setSearch(''); setSearchInput('') }}
-            className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${activeTab === i && !search ? 'bg-[#FF6B00] text-white' : 'bg-[#F0F2F5] text-[#5B6271] hover:bg-[#FFE8E8] hover:text-[#FF6B00]'}`}>
+        {TABS.map(tab => (
+          <button key={tab.value} onClick={() => { setActiveTab(tab.value); setSearch(''); setSearchInput('') }}
+            className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${activeTab === tab.value && !search ? 'bg-[#FF0000] text-white' : 'bg-[#F0F2F5] text-[#5B6271] hover:bg-[#FFE8E8] hover:text-[#FF0000]'}`}>
             {tab.label}
           </button>
         ))}
       </div>
 
-      {/* Nav counter */}
-      <div className="flex items-center justify-end gap-2 px-3 py-1 bg-white border-b border-[#EEF1F5] flex-shrink-0">
-        <button onClick={() => scrollToIndex(activeIndex - 1)} disabled={activeIndex === 0}
-          className="w-7 h-7 rounded-full bg-[#F0F2F5] flex items-center justify-center text-sm disabled:opacity-30">↑</button>
-        <button onClick={() => scrollToIndex(activeIndex + 1)} disabled={activeIndex >= videos.length - 1}
-          className="w-7 h-7 rounded-full bg-[#F0F2F5] flex items-center justify-center text-sm disabled:opacity-30">↓</button>
-        <span className="text-[10px] text-[#8A919E]">{activeIndex + 1}/{videos.length}{loadingMore ? '…' : ''}</span>
+      {/* Region + nav */}
+      <div className="relative flex items-center gap-2 px-3 py-1.5 border-b border-[#EEF1F5] bg-white flex-shrink-0">
+        <button onClick={() => setShowRegions(r => !r)}
+          className="flex items-center gap-1 bg-[#F0F2F5] px-2.5 py-1 rounded-full text-xs font-bold">
+          {region === 'AUTO' ? `🌍 Auto (${autoRegion})` : currentRegionLabel} ▾
+        </button>
+        {showRegions && (
+          <div className="absolute top-9 left-3 bg-white border border-[#E4E7EB] rounded-2xl shadow-xl z-30 overflow-hidden min-w-[180px] max-h-[280px] overflow-y-auto">
+            {REGIONS.map(r => (
+              <button key={r.value} onClick={() => { setRegion(r.value); setShowRegions(false) }}
+                className={`w-full text-left px-4 py-2.5 text-sm hover:bg-[#F0F4FF] ${region === r.value ? 'font-black text-[#0052FF]' : 'text-[#0A0B0D]'}`}>
+                {r.value === 'AUTO' ? `🌍 Auto (${autoRegion})` : r.label}
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="flex gap-1 ml-auto items-center">
+          <button onClick={() => goTo(activeIndex - 1)} disabled={activeIndex === 0}
+            className="w-7 h-7 rounded-full bg-[#F0F2F5] flex items-center justify-center text-sm disabled:opacity-30">↑</button>
+          <button onClick={() => goTo(activeIndex + 1)} disabled={activeIndex >= videos.length - 1}
+            className="w-7 h-7 rounded-full bg-[#F0F2F5] flex items-center justify-center text-sm disabled:opacity-30">↓</button>
+          <span className="text-[10px] text-[#8A919E] ml-1">{activeIndex + 1}/{videos.length}{loadingMore ? '…' : ''}</span>
+        </div>
       </div>
 
-      {/* Snap scroll video feed — native scroll works because <video> doesn't block events */}
-      <div
-        ref={containerRef}
-        className="flex-1 overflow-y-scroll"
-        style={{ scrollSnapType: 'y mandatory', scrollbarWidth: 'none' }}
-      >
-        {videos.map((video, i) => (
-          <div
-            key={video.id}
-            data-card
-            style={{ height: '100%', scrollSnapAlign: 'start', scrollSnapStop: 'always', flexShrink: 0 }}
-          >
-            <VideoCard
-              video={video}
-              isActive={activeIndex === i}
-              liked={!!likes[video.id]}
-              likeCount={likeCounts[video.id] ?? video.likes}
-              onLike={() => {
-                setLikes(prev => {
-                  const was = !!prev[video.id]
-                  setLikeCounts(c => ({ ...c, [video.id]: (c[video.id] ?? video.likes) + (was ? -1 : 1) }))
-                  return { ...prev, [video.id]: !was }
-                })
-              }}
+      {/* Video area */}
+      <div className="flex-1 relative overflow-hidden bg-black">
+        {currentVideo ? (
+          <>
+            <div className="absolute inset-0 flex items-center justify-center bg-black">
+              {currentVideo.isShort ? (
+                <div style={{ height: '100%', aspectRatio: '9/16', maxWidth: '100%' }}>
+                  <iframe ref={iframeRef} key={currentVideo.id} src={embedUrl}
+                    className="w-full h-full"
+                    allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen />
+                </div>
+              ) : (
+                <div style={{ width: '100%', aspectRatio: '16/9' }}>
+                  <iframe ref={iframeRef} key={currentVideo.id} src={embedUrl}
+                    className="w-full h-full"
+                    allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen />
+                </div>
+              )}
+            </div>
+
+            {/* Transparent overlay — catches touch + wheel.
+                Right side (action buttons) is excluded so YT link/like work. */}
+            <div
+              className="absolute inset-y-0 left-0 z-20"
+              style={{ right: 70 }}
+              onTouchStart={onTouchStart}
+              onTouchEnd={onTouchEnd}
+              onWheel={onWheel}
             />
-          </div>
-        ))}
-        {loadingMore && (
-          <div className="py-10 text-center text-[#5B6271] text-sm" style={{ scrollSnapAlign: 'start' }}>
-            Loading more…
-          </div>
-        )}
-        {videos.length === 0 && !loading && (
-          <div className="h-full flex flex-col items-center justify-center" style={{ scrollSnapAlign: 'start' }}>
+
+            {/* Tap animation */}
+            {tapAnim && (
+              <div className="absolute inset-0 z-25 flex items-center justify-center pointer-events-none">
+                <div className="w-20 h-20 rounded-full bg-black/60 flex items-center justify-center">
+                  <span className="text-4xl">{tapAnim === 'play' ? '▶️' : '⏸️'}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Side actions */}
+            <div className="absolute right-3 bottom-20 flex flex-col items-center gap-4 z-30">
+              <button onClick={() => handleLike(currentVideo.id)} className="flex flex-col items-center gap-0.5">
+                <span className={`text-2xl transition-transform ${likes[currentVideo.id] ? 'scale-125' : ''}`}>
+                  {likes[currentVideo.id] ? '❤️' : '🤍'}
+                </span>
+                <span className="text-white text-[11px] font-bold drop-shadow">{fmtCount(likeCounts[currentVideo.id] || 0)}</span>
+              </button>
+              <div className="flex flex-col items-center gap-0.5">
+                <span className="text-xl">👁</span>
+                <span className="text-white text-[11px] font-bold drop-shadow">{fmtCount(currentVideo.viewCount)}</span>
+              </div>
+              <a href={`https://www.youtube.com/watch?v=${currentVideo.id}`} target="_blank" rel="noreferrer"
+                className="w-9 h-9 rounded-full bg-red-600 flex items-center justify-center text-white text-xs font-black shadow">YT</a>
+            </div>
+
+            <div className="absolute top-3 left-3 z-30">
+              <span className="text-[10px] bg-black/50 text-white px-2 py-0.5 rounded-full">
+                {currentVideo.isShort ? '📱 Short' : '🖥️ Video'}
+              </span>
+            </div>
+
+            {activeIndex === 0 && (
+              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 pointer-events-none flex flex-col items-center gap-1 animate-bounce">
+                <span className="text-2xl">👆</span>
+                <span className="text-white/80 text-xs bg-black/40 px-2 py-0.5 rounded-full">Swipe / scroll / arrow keys</span>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
             <p className="text-4xl mb-3">😕</p>
-            <p className="text-[#5B6271] text-sm">No videos found.</p>
+            <p className="text-white/60 text-sm">No videos found.</p>
           </div>
         )}
       </div>
+
+      {currentVideo && (
+        <div className="flex-shrink-0 bg-black px-3 py-2 flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <p className="text-white text-xs font-bold truncate">{currentVideo.channelTitle}</p>
+            <p className="text-white/60 text-[11px] truncate">{currentVideo.title}</p>
+          </div>
+          <span className="text-[10px] text-white/40 flex-shrink-0">📺 YouTube</span>
+        </div>
+      )}
     </div>
   )
 }
