@@ -18,6 +18,9 @@ export async function GET(request: Request) {
   const q = searchParams.get('q') || ''
   const videoCategoryId = searchParams.get('videoCategoryId') || '0'
   const KEY = process.env.YOUTUBE_API_KEY
+  // Random sort order for variety on every refresh
+  const orders = ['relevance', 'viewCount', 'date', 'rating']
+  const order = orders[Math.floor(Math.random() * orders.length)]
 
   try {
     let items: any[] = []
@@ -30,10 +33,10 @@ export async function GET(request: Request) {
         part: 'snippet',
         type: 'video',
         q,
-        maxResults: '20',
+        maxResults: '50',
         relevanceLanguage: lang,
         regionCode: region,
-        order: 'relevance',
+        order,
         ...(pageToken && { pageToken }),
       })
       const sr = await fetch(`https://www.googleapis.com/youtube/v3/search?${sp}`)
@@ -55,7 +58,7 @@ export async function GET(request: Request) {
         part: 'snippet,statistics,contentDetails',
         chart: 'mostPopular',
         regionCode: region,
-        maxResults: '20',
+        maxResults: '50',
         videoCategoryId,
         ...(pageToken && { pageToken }),
       })
@@ -65,6 +68,9 @@ export async function GET(request: Request) {
       nextPageToken = data.nextPageToken || ''
       items = data.items || []
     }
+
+    // Shuffle for variety — never the same order twice
+    items = items.sort(() => Math.random() - 0.5)
 
     return NextResponse.json({ items, nextPageToken })
   } catch (e: any) {
