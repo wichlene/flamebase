@@ -16,6 +16,7 @@ export async function GET(request: Request) {
   const region = searchParams.get('region') || REGION_MAP[lang] || 'US'
   const pageToken = searchParams.get('pageToken') || ''
   const q = searchParams.get('q') || ''
+  const videoCategoryId = searchParams.get('videoCategoryId') || '0'
 
   try {
     let url: string
@@ -29,20 +30,19 @@ export async function GET(request: Request) {
         maxResults: '20',
         relevanceLanguage: lang,
         regionCode: region,
-        videoDuration: 'short',
         order: 'relevance',
         ...(pageToken && { pageToken }),
       })
       url = `https://www.googleapis.com/youtube/v3/search?${params}`
     } else {
-      // Trending mode
+      // Trending mode — rotate category for variety
       const params = new URLSearchParams({
         key: process.env.YOUTUBE_API_KEY,
         part: 'snippet,statistics',
         chart: 'mostPopular',
         regionCode: region,
         maxResults: '20',
-        videoCategoryId: '0',
+        videoCategoryId,
         ...(pageToken && { pageToken }),
       })
       url = `https://www.googleapis.com/youtube/v3/videos?${params}`
