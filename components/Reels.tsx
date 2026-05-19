@@ -70,8 +70,6 @@ function detectRegion(): string {
   return 'US'
 }
 
-const TRANSITION_MS = 380
-
 export default function Reels() {
   const [videos, setVideos] = useState<YTVideo[]>([])
   const [loading, setLoading] = useState(true)
@@ -80,16 +78,13 @@ export default function Reels() {
   const [region, setRegion] = useState<string>('AUTO')
   const [autoRegion] = useState(() => detectRegion())
   const [activeIndex, setActiveIndex] = useState(0)
-  const [iframeIndex, setIframeIndex] = useState(0)
   const [showRegions, setShowRegions] = useState(false)
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
   const [likes, setLikes] = useState<Record<string, boolean>>({})
   const [likeCounts, setLikeCounts] = useState<Record<string, number>>({})
-  const [tapAnim, setTapAnim] = useState<'play' | 'pause' | null>(null)
-  const [viewportH, setViewportH] = useState(0)
 
-  const viewportRef = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const loadingMoreRef = useRef(false)
   const activeIndexRef = useRef(0)
@@ -100,29 +95,14 @@ export default function Reels() {
   const searchRef = useRef('')
   const videosLenRef = useRef(0)
   const seenIdsRef = useRef<Set<string>>(new Set())
-  const isPlayingRef = useRef(true)
-  const touchStartYRef = useRef(0)
-  const touchStartTimeRef = useRef(0)
   const lastWheelRef = useRef(0)
-  const wheelAccumRef = useRef(0)
-  const iframeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const wheelLockRef = useRef(false)
 
   const effectiveRegion = region === 'AUTO' ? autoRegion : region
 
   useEffect(() => { activeTabRef.current = activeTab }, [activeTab])
   useEffect(() => { regionRef.current = effectiveRegion }, [effectiveRegion])
   useEffect(() => { searchRef.current = search }, [search])
-
-  // Measure viewport for absolute-positioned slides
-  useEffect(() => {
-    const el = viewportRef.current
-    if (!el) return
-    const update = () => setViewportH(el.clientHeight)
-    update()
-    const ro = new ResizeObserver(update)
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
 
   const parseVideos = (items: any[]): YTVideo[] =>
     items.map((item: any) => {
@@ -164,7 +144,6 @@ export default function Reels() {
       const data = await res.json()
       if (data.error) { console.error(data.error); return }
       let parsed = parseVideos(data.items || [])
-      // Deduplicate against seen ids
       if (reset) seenIdsRef.current = new Set()
       parsed = parsed.filter(v => {
         if (seenIdsRef.current.has(v.id)) return false
@@ -178,9 +157,9 @@ export default function Reels() {
         setVideos(parsed)
         setLikeCounts(counts)
         setActiveIndex(0)
-        setIframeIndex(0)
         activeIndexRef.current = 0
         videosLenRef.current = parsed.length
+        if (containerRef.current) containerRef.current.scrollTop = 0
       } else {
         setVideos(prev => {
           const next = [...prev, ...parsed]
@@ -206,65 +185,95 @@ export default function Reels() {
     fetchVideos(activeTabRef.current, regionRef.current, searchRef.current, nextPageTokenRef.current, false, nextCat)
   }, [fetchVideos])
 
-  // goTo: triggers slide animation. Iframe moves to new index after slide settles.
-  const goTo = useCallback((idx: number) => {
-    const len = videosLenRef.current
-    if (idx < 0 || idx >= len) return
-    activeIndexRef.current = idx
-    isPlayingRef.current = true
-    setActiveIndex(idx)
-    if (iframeTimerRef.current) clearTimeout(iframeTimerRef.current)
-    iframeTimerRef.current = setTimeout(() => setIframeIndex(idx), TRANSITION_MS)
-    if (idx >= len - 5) loadMore()
+  // Detect which card is in view via native scroll
+  useEffect(() => {
+    const c = containerRef.current
+    if (!c) return
+    const onSnap = () => {
+      const h = c.clientHeight
+      if (!h) return
+      const idx = Math.round(c.scrollTop / h)
+      if (idx !== activeIndexRef.current && idx >= 0 && idx < videosLenRef.current) {
+        activeIndexRef.current = idx
+        setActiveIndex(idx)
+      }
+      if (idx >= videosLenRef.current - 5) loadMore()
+    }
+
+    const supportsScrollEnd = 'onscrollend' in window
+    let debounce: ReturnType<typeof setTimeout>
+    const onScroll = () => { clearTimeout(debounce); debounce = setTimeout(onSnap, 80) }
+
+    if (supportsScrollEnd) {
+      c.addEventListener('scrollend', onSnap, { passive: true })
+      c.addEventListener('scroll', onScroll, { passive: true }) // fallback dual
+    } else {
+      c.addEventListener('scroll', onScroll, { passive: true })
+    }
+    return () => {
+      c.removeEventListener('scrollend', onSnap)
+      c.removeEventListener('scroll', onScroll)
+      clearTimeout(debounce)
+    }
   }, [loadMore])
 
-  const sendCmd = useCallback((func: string) => {
-    iframeRef.current?.contentWindow?.postMessage(
-      JSON.stringify({ event: 'command', func, args: [] }), '*'
-    )
+  // Programmatic scroll for desktop wheel + buttons
+  const scrollToIndex = useCallback((idx: number) => {
+    const c = containerRef.current
+    if (!c) return
+    if (idx < 0 || idx >= videosLenRef.current) return
+    c.scrollTo({ top: idx * c.clientHeight, behavior: 'smooth' })
   }, [])
 
-  const onTouchStart = (e: React.TouchEvent) => {
+  // Wheel on the overlay (covers iframe — iframe would otherwise eat wheel events)
+  const onOverlayWheel = (e: React.WheelEvent) => {
+    e.preventDefault()
+    const now = Date.now()
+    if (now - lastWheelRef.current < 500 || wheelLockRef.current) return
+    lastWheelRef.current = now
+    wheelLockRef.current = true
+    setTimeout(() => { wheelLockRef.current = false }, 500)
+    scrollToIndex(activeIndexRef.current + (e.deltaY > 0 ? 1 : -1))
+  }
+
+  // Touch on overlay — swipe for navigation, tap for play/pause
+  const touchStartYRef = useRef(0)
+  const touchStartTimeRef = useRef(0)
+  const onOverlayTouchStart = (e: React.TouchEvent) => {
     touchStartYRef.current = e.touches[0].clientY
     touchStartTimeRef.current = Date.now()
   }
-  const onTouchEnd = (e: React.TouchEvent) => {
+  const onOverlayTouchEnd = (e: React.TouchEvent) => {
     const dy = touchStartYRef.current - e.changedTouches[0].clientY
     const dt = Date.now() - touchStartTimeRef.current
     if (Math.abs(dy) > 40) {
-      if (dy > 0) goTo(activeIndexRef.current + 1)
-      else goTo(activeIndexRef.current - 1)
+      scrollToIndex(activeIndexRef.current + (dy > 0 ? 1 : -1))
     } else if (dt < 300) {
-      if (isPlayingRef.current) { sendCmd('pauseVideo'); isPlayingRef.current = false; setTapAnim('pause') }
-      else { sendCmd('playVideo'); isPlayingRef.current = true; setTapAnim('play') }
-      setTimeout(() => setTapAnim(null), 600)
+      // tap → toggle play/pause
+      iframeRef.current?.contentWindow?.postMessage(
+        JSON.stringify({ event: 'command', func: 'pauseVideo', args: [] }), '*'
+      )
+      setTimeout(() => {
+        iframeRef.current?.contentWindow?.postMessage(
+          JSON.stringify({ event: 'command', func: 'playVideo', args: [] }), '*'
+        )
+      }, 50)
     }
   }
 
-  const onWheel = (e: React.WheelEvent) => {
-    const now = Date.now()
-    if (now - lastWheelRef.current < 450) return
-    wheelAccumRef.current += e.deltaY
-    if (Math.abs(wheelAccumRef.current) > 25) {
-      lastWheelRef.current = now
-      if (wheelAccumRef.current > 0) goTo(activeIndexRef.current + 1)
-      else goTo(activeIndexRef.current - 1)
-      wheelAccumRef.current = 0
-    }
-  }
-
+  // Keyboard
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement) return
       if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') {
-        e.preventDefault(); goTo(activeIndexRef.current + 1)
+        e.preventDefault(); scrollToIndex(activeIndexRef.current + 1)
       } else if (e.key === 'ArrowUp' || e.key === 'PageUp') {
-        e.preventDefault(); goTo(activeIndexRef.current - 1)
+        e.preventDefault(); scrollToIndex(activeIndexRef.current - 1)
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [goTo])
+  }, [scrollToIndex])
 
   const handleLike = (id: string) => {
     setLikes(prev => {
@@ -275,11 +284,6 @@ export default function Reels() {
   }
 
   const doSearch = () => { setSearch(searchInput.trim()); setActiveTab('') }
-
-  const currentVideo = videos[iframeIndex]
-  const embedUrl = currentVideo
-    ? `https://www.youtube.com/embed/${currentVideo.id}?autoplay=1&enablejsapi=1&rel=0&modestbranding=1&playsinline=1`
-    : ''
 
   if (loading) return (
     <div className="flex flex-col items-center justify-center py-24 gap-3">
@@ -331,119 +335,122 @@ export default function Reels() {
           🔀 Shuffle
         </button>
         <div className="flex gap-1 ml-auto items-center">
-          <button onClick={() => goTo(activeIndex - 1)} disabled={activeIndex === 0}
+          <button onClick={() => scrollToIndex(activeIndex - 1)} disabled={activeIndex === 0}
             className="w-7 h-7 rounded-full bg-[#F0F2F5] flex items-center justify-center text-sm disabled:opacity-30">↑</button>
-          <button onClick={() => goTo(activeIndex + 1)} disabled={activeIndex >= videos.length - 1}
+          <button onClick={() => scrollToIndex(activeIndex + 1)} disabled={activeIndex >= videos.length - 1}
             className="w-7 h-7 rounded-full bg-[#F0F2F5] flex items-center justify-center text-sm disabled:opacity-30">↓</button>
           <span className="text-[10px] text-[#8A919E] ml-1">{activeIndex + 1}/{videos.length}{loadingMore ? '…' : ''}</span>
         </div>
       </div>
 
-      {/* Video viewport — sliding stack */}
-      <div ref={viewportRef} className="flex-1 relative overflow-hidden bg-black">
-
-        {/* Sliding stack of thumbnails — translateY animates between videos */}
-        {viewportH > 0 && (
-          <div
-            className="absolute top-0 left-0 right-0"
-            style={{
-              transform: `translateY(${-activeIndex * viewportH}px)`,
-              transition: `transform ${TRANSITION_MS}ms cubic-bezier(0.22, 1, 0.36, 1)`,
-            }}
-          >
-            {videos.map((video, i) => (
-              <div
-                key={video.id}
-                className="w-full relative bg-black flex items-center justify-center"
-                style={{ height: viewportH }}
-              >
+      {/* Native snap-scroll container — cards slide in/out as user scrolls */}
+      <div
+        ref={containerRef}
+        className="flex-1 overflow-y-scroll bg-black"
+        style={{ scrollSnapType: 'y mandatory', scrollbarWidth: 'none' }}
+      >
+        {videos.map((video, i) => {
+          const isActive = activeIndex === i
+          const embedUrl = `https://www.youtube.com/embed/${video.id}?autoplay=1&enablejsapi=1&rel=0&modestbranding=1&playsinline=1`
+          return (
+            <div
+              key={video.id}
+              data-card
+              className="w-full relative bg-black flex items-center justify-center"
+              style={{ height: '100%', flexShrink: 0, scrollSnapAlign: 'start', scrollSnapStop: 'always' }}
+            >
+              {isActive ? (
+                <>
+                  {video.isShort ? (
+                    <div style={{ height: '100%', aspectRatio: '9/16', maxWidth: '100%', position: 'relative' }}>
+                      <iframe
+                        ref={iframeRef}
+                        key={video.id}
+                        src={embedUrl}
+                        className="w-full h-full"
+                        allow="autoplay; encrypted-media; picture-in-picture"
+                        allowFullScreen
+                      />
+                    </div>
+                  ) : (
+                    <div className="w-full" style={{ aspectRatio: '16/9', position: 'relative' }}>
+                      <iframe
+                        ref={iframeRef}
+                        key={video.id}
+                        src={embedUrl}
+                        className="w-full h-full"
+                        allow="autoplay; encrypted-media; picture-in-picture"
+                        allowFullScreen
+                      />
+                    </div>
+                  )}
+                  {/* Transparent overlay catches wheel/touch over iframe area only */}
+                  <div
+                    className="absolute inset-y-0 z-10"
+                    style={{ left: 0, right: 70 }}
+                    onWheel={onOverlayWheel}
+                    onTouchStart={onOverlayTouchStart}
+                    onTouchEnd={onOverlayTouchEnd}
+                  />
+                </>
+              ) : (
                 <img
                   src={video.thumbnail}
-                  className="max-w-full max-h-full object-contain"
                   alt=""
+                  className="max-w-full max-h-full object-contain"
                   draggable={false}
                 />
-                {/* short/video badge */}
-                <span className="absolute top-3 left-3 text-[10px] bg-black/50 text-white px-2 py-0.5 rounded-full">
-                  {video.isShort ? '📱 Short' : '🖥️ Video'}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
+              )}
 
-        {/* Iframe — positioned over the current viewport slot, updates AFTER slide settles */}
-        {currentVideo && viewportH > 0 && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-black pointer-events-none">
-            {currentVideo.isShort ? (
-              <div style={{ height: '100%', aspectRatio: '9/16', maxWidth: '100%', pointerEvents: 'auto' }}>
-                <iframe ref={iframeRef} key={currentVideo.id} src={embedUrl}
-                  className="w-full h-full"
-                  allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen />
-              </div>
-            ) : (
-              <div style={{ width: '100%', aspectRatio: '16/9', pointerEvents: 'auto' }}>
-                <iframe ref={iframeRef} key={currentVideo.id} src={embedUrl}
-                  className="w-full h-full"
-                  allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen />
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Touch/wheel overlay — z:20 above iframe, excludes right action area */}
-        <div
-          className="absolute inset-y-0 left-0 z-20"
-          style={{ right: 70 }}
-          onTouchStart={onTouchStart}
-          onTouchEnd={onTouchEnd}
-          onWheel={onWheel}
-        />
-
-        {/* Tap animation */}
-        {tapAnim && (
-          <div className="absolute inset-0 z-25 flex items-center justify-center pointer-events-none">
-            <div className="w-20 h-20 rounded-full bg-black/60 flex items-center justify-center">
-              <span className="text-4xl">{tapAnim === 'play' ? '▶️' : '⏸️'}</span>
-            </div>
-          </div>
-        )}
-
-        {/* Side actions */}
-        {videos[activeIndex] && (
-          <div className="absolute right-3 bottom-20 flex flex-col items-center gap-4 z-30">
-            <button onClick={() => handleLike(videos[activeIndex].id)} className="flex flex-col items-center gap-0.5">
-              <span className={`text-2xl transition-transform ${likes[videos[activeIndex].id] ? 'scale-125' : ''}`}>
-                {likes[videos[activeIndex].id] ? '❤️' : '🤍'}
+              <span className="absolute top-3 left-3 z-20 text-[10px] bg-black/50 text-white px-2 py-0.5 rounded-full">
+                {video.isShort ? '📱 Short' : '🖥️ Video'}
               </span>
-              <span className="text-white text-[11px] font-bold drop-shadow">{fmtCount(likeCounts[videos[activeIndex].id] || 0)}</span>
-            </button>
-            <div className="flex flex-col items-center gap-0.5">
-              <span className="text-xl">👁</span>
-              <span className="text-white text-[11px] font-bold drop-shadow">{fmtCount(videos[activeIndex].viewCount)}</span>
+
+              {isActive && (
+                <>
+                  <div className="absolute right-3 bottom-20 flex flex-col items-center gap-4 z-20">
+                    <button onClick={() => handleLike(video.id)} className="flex flex-col items-center gap-0.5">
+                      <span className={`text-2xl transition-transform ${likes[video.id] ? 'scale-125' : ''}`}>
+                        {likes[video.id] ? '❤️' : '🤍'}
+                      </span>
+                      <span className="text-white text-[11px] font-bold drop-shadow">{fmtCount(likeCounts[video.id] || 0)}</span>
+                    </button>
+                    <div className="flex flex-col items-center gap-0.5">
+                      <span className="text-xl">👁</span>
+                      <span className="text-white text-[11px] font-bold drop-shadow">{fmtCount(video.viewCount)}</span>
+                    </div>
+                    <a href={`https://www.youtube.com/watch?v=${video.id}`} target="_blank" rel="noreferrer"
+                      className="w-9 h-9 rounded-full bg-red-600 flex items-center justify-center text-white text-xs font-black shadow">YT</a>
+                  </div>
+
+                  <div className="absolute bottom-2 left-3 right-20 z-20 pointer-events-none">
+                    <p className="text-white text-xs font-bold truncate drop-shadow">{video.channelTitle}</p>
+                    <p className="text-white/70 text-[11px] truncate drop-shadow">{video.title}</p>
+                  </div>
+                </>
+              )}
+
+              {i === 0 && isActive && (
+                <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-20 pointer-events-none flex flex-col items-center gap-1 animate-bounce">
+                  <span className="text-2xl">👆</span>
+                  <span className="text-white/80 text-xs bg-black/40 px-2 py-0.5 rounded-full">Swipe / scroll / arrows</span>
+                </div>
+              )}
             </div>
-            <a href={`https://www.youtube.com/watch?v=${videos[activeIndex].id}`} target="_blank" rel="noreferrer"
-              className="w-9 h-9 rounded-full bg-red-600 flex items-center justify-center text-white text-xs font-black shadow">YT</a>
+          )
+        })}
+        {loadingMore && (
+          <div className="py-8 text-center text-white/60 text-sm" style={{ scrollSnapAlign: 'start' }}>
+            Loading more…
           </div>
         )}
-
-        {activeIndex === 0 && (
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 pointer-events-none flex flex-col items-center gap-1 animate-bounce">
-            <span className="text-2xl">👆</span>
-            <span className="text-white/80 text-xs bg-black/40 px-2 py-0.5 rounded-full">Swipe / scroll / arrow keys</span>
+        {videos.length === 0 && !loading && (
+          <div className="h-full flex flex-col items-center justify-center" style={{ scrollSnapAlign: 'start' }}>
+            <p className="text-4xl mb-3">😕</p>
+            <p className="text-white/60 text-sm">No videos found.</p>
           </div>
         )}
       </div>
-
-      {videos[activeIndex] && (
-        <div className="flex-shrink-0 bg-black px-3 py-2 flex items-center gap-2">
-          <div className="min-w-0 flex-1">
-            <p className="text-white text-xs font-bold truncate">{videos[activeIndex].channelTitle}</p>
-            <p className="text-white/60 text-[11px] truncate">{videos[activeIndex].title}</p>
-          </div>
-          <span className="text-[10px] text-white/40 flex-shrink-0">📺 YouTube</span>
-        </div>
-      )}
     </div>
   )
 }
