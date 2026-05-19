@@ -11,6 +11,7 @@ import { T, LANG_LABELS, type Lang } from '../lib/i18n'
 import { TOOLS_ADDRESS, TOKEN_FACTORY_ADDRESS, NFT_FACTORY_ADDRESS, DAO_ADDRESS, TOOLS_ABI, TOKEN_FACTORY_ABI, NFT_FACTORY_ABI, DAO_ABI } from '../lib/toolsContracts'
 
 const Messages = dynamic(() => import('../components/Messages'), { ssr: false, loading: () => <div className="p-8 text-center text-[#5B6271]">💬 Loading…</div> })
+const AIChat = dynamic(() => import('../components/AIChat'), { ssr: false, loading: () => <div className="p-8 text-center text-[#5B6271]">🤖 Loading AI…</div> })
 
 const TOOLS_DEPLOYED = TOOLS_ADDRESS.length > 0
 const TOKEN_FACTORY_DEPLOYED = TOKEN_FACTORY_ADDRESS.length > 0
@@ -43,7 +44,7 @@ interface ProfileData {
   tips: bigint
 }
 
-type Tab = 'feed' | 'post' | 'activity' | 'messages' | 'profile'
+type Tab = 'feed' | 'post' | 'activity' | 'messages' | 'profile' | 'ai' | 'reels'
 
 function Avatar({ addr, profiles, size = 'md' }: { addr: string; profiles: Record<string, ProfileData>; size?: 'sm' | 'md' | 'lg' }) {
   const p = profiles[addr.toLowerCase()]
@@ -180,6 +181,8 @@ export default function Home() {
 
   // Unread message count from Messages component
   const [unreadMessages, setUnreadMessages] = useState(0)
+  // AI post improvement
+  const [improving, setImproving] = useState(false)
 
   // Friends system (stored in localStorage)
   const [following, setFollowing] = useState<Set<string>>(new Set())
@@ -602,8 +605,10 @@ export default function Home() {
   const navItems: { tab: Tab; icon: string; labelKey: string }[] = [
     { tab: 'feed', icon: '🏠', labelKey: 'navFeed' },
     { tab: 'post', icon: '✏️', labelKey: 'navNewPost' },
+    { tab: 'reels', icon: '🎬', labelKey: 'navReels' },
     { tab: 'activity', icon: '🔔', labelKey: 'navActivity' },
     { tab: 'messages', icon: '💬', labelKey: 'navMessages' },
+    { tab: 'ai', icon: '🤖', labelKey: 'navAI' },
     { tab: 'profile', icon: '👤', labelKey: 'navProfile' },
   ]
 
@@ -1043,6 +1048,26 @@ export default function Home() {
                         <span className="text-2xl">📷</span>
                         <input type="file" accept="image/*,video/*" className="hidden" onChange={handleFileChange} />
                       </label>
+                      <button
+                        onClick={async () => {
+                          if (!newPost.trim() || improving) return
+                          setImproving(true)
+                          try {
+                            const res = await fetch('/api/ai', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ messages: [{ role: 'user', content: newPost }], type: 'improve' }),
+                            })
+                            const data = await res.json()
+                            if (data.content) setNewPost(data.content)
+                          } catch {}
+                          setImproving(false)
+                        }}
+                        disabled={!newPost.trim() || improving}
+                        title="Improve with AI"
+                        className="flex items-center gap-1.5 bg-gradient-to-r from-[#7B3FE4] to-[#0052FF] text-white px-3 py-1.5 rounded-lg text-xs font-bold disabled:opacity-40 transition-all hover:opacity-90 flex-shrink-0">
+                        {improving ? '…' : '✨ AI'}
+                      </button>
                       <span className="text-[#8A919E] text-xs flex-1">{newPost.length}/500</span>
                       <button onClick={createPost} disabled={loading || !newPost}
                         className="bg-[#0052FF] hover:bg-[#1652F0] text-white px-8 py-2.5 rounded-xl font-bold disabled:opacity-40 transition-colors shadow-sm">
@@ -1098,6 +1123,61 @@ export default function Home() {
                 <Messages profiles={profiles} fixedFee={fixedFee} pendingTarget={pendingDmTarget} onPendingHandled={() => setPendingDmTarget(null)} onUnreadCount={setUnreadMessages} />
               </div>
             )}
+
+            {/* ══ AI CHAT ══ */}
+            {activeTab === 'ai' && (
+              <div>
+                <AIChat />
+              </div>
+            )}
+
+            {/* ══ REELS ══ */}
+            {activeTab === 'reels' && (() => {
+              const reelPosts = posts.filter(p => p.ipfsHash?.startsWith('vid_'))
+              return (
+                <div>
+                  <div className="hidden md:flex items-center justify-between px-5 py-4 border-b border-[#EEF1F5] sticky top-0 bg-white/95 backdrop-blur z-10">
+                    <h1 className="text-lg font-black text-[#0A0B0D]">🎬 Reels</h1>
+                    <p className="text-xs text-[#8A919E]">{reelPosts.length} video{reelPosts.length !== 1 ? 's' : ''}</p>
+                  </div>
+                  {reelPosts.length === 0 ? (
+                    <div className="text-center py-20 px-6">
+                      <div className="text-6xl mb-4">🎬</div>
+                      <p className="font-bold text-[#0A0B0D] text-xl">No videos yet</p>
+                      <p className="text-[#5B6271] text-sm mt-2">Be the first to upload a video post!</p>
+                      <button onClick={() => setActiveTab('post')}
+                        className="mt-4 bg-[#0052FF] text-white px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-[#1652F0] transition-colors">
+                        Upload Video
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-[#EEF1F5]">
+                      {reelPosts.map(post => (
+                        <div key={post.id.toString()} className="p-4">
+                          <div className="flex items-center gap-2 mb-2">
+                            <button onClick={() => setSelectedUser(post.author)} className="flex items-center gap-2 hover:opacity-80">
+                              <Avatar addr={post.author} profiles={profiles} size="sm" />
+                              <span className="font-bold text-sm text-[#0A0B0D]">{getUsername(post.author)}</span>
+                            </button>
+                            <span className="text-[#8A919E] text-xs ml-auto">{timeAgo(post.timestamp)}</span>
+                          </div>
+                          <video
+                            src={`https://gateway.pinata.cloud/ipfs/${post.ipfsHash.slice(4)}`}
+                            controls playsInline
+                            className="w-full max-h-[520px] bg-black rounded-2xl"
+                          />
+                          {post.content && <p className="text-sm text-[#0A0B0D] mt-2">{post.content}</p>}
+                          <div className="flex items-center gap-4 mt-2 text-xs text-[#5B6271]">
+                            <span>🔥 {post.likes.toString()}</span>
+                            <span>💸 {parseFloat(formatEther(post.tips)).toFixed(4)} ETH</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
 
             {/* ══ PROFILE ══ */}
             {activeTab === 'profile' && (
@@ -1190,6 +1270,44 @@ export default function Home() {
                             </div>
                           ))}
                         </div>
+                      </div>
+                    )}
+
+                    {/* My Posts grid */}
+                    {myPosts.length > 0 && (
+                      <div className="bg-white border border-[#E4E7EB] rounded-2xl overflow-hidden shadow-sm mb-4">
+                        <div className="flex items-center justify-between px-5 py-3 border-b border-[#EEF1F5]">
+                          <h3 className="font-black text-[#0A0B0D]">My Posts</h3>
+                          <span className="text-xs text-[#8A919E]">{myPosts.length} post{myPosts.length !== 1 ? 's' : ''}</span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-0.5 bg-[#EEF1F5]">
+                          {myPosts.slice(0, 9).map(post => (
+                            <button key={post.id.toString()} onClick={() => setActiveTab('feed')}
+                              className="aspect-square bg-[#F7F9FC] hover:opacity-80 transition-opacity overflow-hidden relative">
+                              {post.ipfsHash?.startsWith('vid_') ? (
+                                <div className="w-full h-full flex items-center justify-center bg-black">
+                                  <span className="text-white text-2xl">▶</span>
+                                </div>
+                              ) : post.ipfsHash ? (
+                                <img src={`https://gateway.pinata.cloud/ipfs/${post.ipfsHash}`}
+                                  className="w-full h-full object-cover" alt="" />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center p-2">
+                                  <p className="text-xs text-[#5B6271] text-center line-clamp-3 leading-tight">{post.content}</p>
+                                </div>
+                              )}
+                              <div className="absolute bottom-1 right-1 flex items-center gap-0.5 bg-black/50 rounded px-1 py-0.5">
+                                <span className="text-[10px] text-white">🔥{post.likes.toString()}</span>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                        {myPosts.length > 9 && (
+                          <button onClick={() => setActiveTab('feed')}
+                            className="w-full py-2.5 text-xs text-[#0052FF] font-bold hover:bg-[#F0F4FF] transition-colors border-t border-[#EEF1F5]">
+                            View all {myPosts.length} posts →
+                          </button>
+                        )}
                       </div>
                     )}
 

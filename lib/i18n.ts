@@ -78,6 +78,8 @@ export const T: Record<Lang, Record<string, string>> = {
     uploading: 'Uploading...',
     viewProfile: 'View Profile',
     postsBy: 'Posts by',
+    navAI: 'AI',
+    navReels: 'Reels',
   },
   tr: {
     appTagline: 'Base üzerinde on-chain sosyal.',
@@ -148,6 +150,8 @@ export const T: Record<Lang, Record<string, string>> = {
     uploading: 'Yükleniyor...',
     viewProfile: 'Profili Gör',
     postsBy: 'Gönderiler:',
+    navAI: 'AI',
+    navReels: 'Reels',
   },
   ru: {
     appTagline: 'Социальная сеть on-chain на Base.',
@@ -218,6 +222,8 @@ export const T: Record<Lang, Record<string, string>> = {
     uploading: 'Загрузка...',
     viewProfile: 'Профиль',
     postsBy: 'Посты:',
+    navAI: 'AI',
+    navReels: 'Reels',
   },
   es: {
     appTagline: 'Red social on-chain en Base.',
@@ -288,6 +294,8 @@ export const T: Record<Lang, Record<string, string>> = {
     uploading: 'Subiendo...',
     viewProfile: 'Ver perfil',
     postsBy: 'Publicaciones de',
+    navAI: 'AI',
+    navReels: 'Reels',
   },
   pt: {
     appTagline: 'Rede social on-chain na Base.',
@@ -358,5 +366,7 @@ export const T: Record<Lang, Record<string, string>> = {
     uploading: 'Enviando...',
     viewProfile: 'Ver perfil',
     postsBy: 'Publicações de',
+    navAI: 'AI',
+    navReels: 'Reels',
   },
 }

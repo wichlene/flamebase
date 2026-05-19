@@ -33,6 +33,16 @@ type Props = {
 }
 
 const SEEN_KEY = 'flamebase_msg_seen'
+const HIDDEN_KEY = 'flamebase_msg_hidden'
+
+function getHidden(): Set<string> {
+  try { return new Set(JSON.parse(localStorage.getItem(HIDDEN_KEY) || '[]')) } catch { return new Set() }
+}
+
+function addHidden(id: string) {
+  const s = getHidden(); s.add(id)
+  localStorage.setItem(HIDDEN_KEY, JSON.stringify([...s]))
+}
 
 function getSeenMap(): Record<string, number> {
   try { return JSON.parse(localStorage.getItem(SEEN_KEY) || '{}') } catch { return {} }
@@ -59,6 +69,7 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
   const streamRef = useRef<any>(null)
   const endRef = useRef<HTMLDivElement>(null)
   const connectingRef = useRef(false)
+  const [hiddenConvs, setHiddenConvs] = useState<Set<string>>(() => getHidden())
 
   // Build username → address reverse lookup
   const usernameToAddress: Record<string, string> = {}
@@ -278,23 +289,34 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
           <button onClick={() => setShowNew(true)} className="bg-[#0052FF] hover:bg-[#1652F0] text-white px-3 py-1.5 rounded-lg text-xs font-bold">+ New</button>
         </div>
         <div className="overflow-y-auto flex-1">
-          {conversations.length === 0 ? (
+          {conversations.filter(c => !hiddenConvs.has(c.id)).length === 0 ? (
             <p className="p-4 text-xs text-[#8A919E] text-center">No conversations yet</p>
-          ) : conversations.map(c => {
+          ) : conversations.filter(c => !hiddenConvs.has(c.id)).map(c => {
             const isUnread = c.lastSentAt > 0 && c.lastSentAt > (seenMap[c.id] ?? 0)
             return (
-              <button key={c.id} onClick={() => openConversation(c.id)}
-                className={`w-full text-left p-3 border-b border-[#F7F9FC] hover:bg-[#F7F9FC] transition-colors ${activeId === c.id ? 'bg-[#E6EEFF]' : ''}`}>
-                <div className="flex items-center gap-2">
-                  {isUnread && <span className="w-2 h-2 rounded-full bg-[#0052FF] flex-shrink-0" />}
-                  <div className="min-w-0 flex-1">
-                    <p className={`text-sm truncate ${isUnread ? 'font-black' : 'font-bold'} text-[#0A0B0D]`}>
-                      {c.peerAddress.slice(0, 8)}…{c.peerAddress.slice(-4)}
-                    </p>
-                    {c.lastMessage && <p className={`text-xs truncate mt-0.5 ${isUnread ? 'text-[#0A0B0D] font-semibold' : 'text-[#5B6271]'}`}>{c.lastMessage}</p>}
+              <div key={c.id} className={`group flex items-center border-b border-[#F7F9FC] hover:bg-[#F7F9FC] transition-colors ${activeId === c.id ? 'bg-[#E6EEFF]' : ''}`}>
+                <button onClick={() => openConversation(c.id)} className="flex-1 text-left p-3">
+                  <div className="flex items-center gap-2">
+                    {isUnread && <span className="w-2 h-2 rounded-full bg-[#0052FF] flex-shrink-0" />}
+                    <div className="min-w-0 flex-1">
+                      <p className={`text-sm truncate ${isUnread ? 'font-black' : 'font-bold'} text-[#0A0B0D]`}>
+                        {c.peerAddress.slice(0, 8)}…{c.peerAddress.slice(-4)}
+                      </p>
+                      {c.lastMessage && <p className={`text-xs truncate mt-0.5 ${isUnread ? 'text-[#0A0B0D] font-semibold' : 'text-[#5B6271]'}`}>{c.lastMessage}</p>}
+                    </div>
                   </div>
-                </div>
-              </button>
+                </button>
+                <button
+                  onClick={() => {
+                    addHidden(c.id)
+                    setHiddenConvs(getHidden())
+                    if (activeId === c.id) { setActiveId(null); setMessages([]) }
+                  }}
+                  className="opacity-0 group-hover:opacity-100 mr-2 w-6 h-6 flex items-center justify-center rounded-full hover:bg-red-100 text-[#8A919E] hover:text-red-500 text-xs transition-all flex-shrink-0"
+                  title="Delete conversation">
+                  🗑
+                </button>
+              </div>
             )
           })}
         </div>
