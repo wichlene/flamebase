@@ -24,16 +24,23 @@ const REGIONS = [
   { label: '🇪🇸 Spain', value: 'ES' },
 ]
 
+// `cats` = related YouTube category IDs. Shuffle picks one at random for variety.
+// `q`    = search query fallback when no good category exists.
 const TABS = [
-  { label: '🔥 Trending', value: '' },
-  { label: '📱 Shorts', value: 'shorts' },
-  { label: '😂 Funny', value: 'funny viral' },
-  { label: '🎵 Music', value: 'music video' },
-  { label: '⚽ Sports', value: 'sports highlights' },
-  { label: '🎮 Gaming', value: 'gaming' },
-  { label: '🍕 Food', value: 'food' },
-  { label: '🐾 Animals', value: 'cute animals' },
-  { label: '🌿 Nature', value: 'nature' },
+  { label: '🔥 Trending', cats: ['0'], q: '' },
+  { label: '📱 Shorts', cats: [], q: '#shorts' },
+  { label: '😂 Comedy', cats: ['23', '24', '22'], q: '' },
+  { label: '🎵 Music', cats: ['10'], q: '' },
+  { label: '🎬 Film', cats: ['1', '24'], q: '' },
+  { label: '🎭 Entertainment', cats: ['24', '23'], q: '' },
+  { label: '⚽ Sports', cats: ['17'], q: '' },
+  { label: '🎮 Gaming', cats: ['20'], q: '' },
+  { label: '🐾 Animals', cats: ['15'], q: '' },
+  { label: '📰 News', cats: ['25'], q: '' },
+  { label: '🔬 Science', cats: ['28', '27'], q: '' },
+  { label: '🍕 Food', cats: ['26'], q: 'food cooking recipe' },
+  { label: '🌿 Nature', cats: [], q: 'nature scenery wildlife' },
+  { label: '🚗 Cars', cats: ['2'], q: '' },
 ]
 
 function detectRegion(): string {
@@ -62,7 +69,7 @@ function fmtViews(n: string): string {
 export default function Reels() {
   const [videos, setVideos] = useState<YTVideo[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState('')
+  const [activeTab, setActiveTab] = useState(TABS[0])
   const [region, setRegion] = useState<string>('AUTO')
   const [autoRegion] = useState(() => detectRegion())
   const [showRegions, setShowRegions] = useState(false)
@@ -76,11 +83,20 @@ export default function Reels() {
 
   useEffect(() => {
     setLoading(true)
-    const query = search || (activeTab === 'shorts' ? '#shorts' : activeTab)
+    // Pick a random category from the tab's related set. This is what makes
+    // refresh actually show different videos.
+    const pickedCat = activeTab.cats.length > 0
+      ? activeTab.cats[Math.floor(Math.random() * activeTab.cats.length)]
+      : ''
     const params = new URLSearchParams({
       region: effectiveRegion,
       lang: effectiveRegion.toLowerCase(),
-      ...(query ? { q: query } : { videoCategoryId: '0' }),
+      ...(search
+        ? { q: search }
+        : pickedCat
+          ? { videoCategoryId: pickedCat }
+          : { q: activeTab.q }
+      ),
       _: String(Date.now()),
     })
     fetch(`/api/youtube?${params}`)
@@ -102,7 +118,7 @@ export default function Reels() {
       .catch(e => { console.error(e); setLoading(false) })
   }, [activeTab, effectiveRegion, search, refreshKey])
 
-  const doSearch = () => { setSearch(searchInput.trim()); setActiveTab('') }
+  const doSearch = () => { setSearch(searchInput.trim()); setActiveTab(TABS[0]) }
 
   if (loading) return (
     <div className="flex flex-col items-center justify-center py-24 gap-3">
@@ -133,8 +149,8 @@ export default function Reels() {
 
       <div className="flex gap-2 overflow-x-auto px-3 py-2 border-b border-[#EEF1F5] bg-white flex-shrink-0" style={{ scrollbarWidth: 'none' }}>
         {TABS.map(tab => (
-          <button key={tab.value} onClick={() => { setActiveTab(tab.value); setSearch(''); setSearchInput('') }}
-            className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${activeTab === tab.value && !search ? 'bg-[#FF0000] text-white' : 'bg-[#F0F2F5] text-[#5B6271] hover:bg-[#FFE8E8] hover:text-[#FF0000]'}`}>
+          <button key={tab.label} onClick={() => { setActiveTab(tab); setSearch(''); setSearchInput('') }}
+            className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${activeTab.label === tab.label && !search ? 'bg-[#FF0000] text-white' : 'bg-[#F0F2F5] text-[#5B6271] hover:bg-[#FFE8E8] hover:text-[#FF0000]'}`}>
             {tab.label}
           </button>
         ))}
