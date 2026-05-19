@@ -19,87 +19,121 @@ type PixabayVideo = {
   pageURL: string
 }
 
-const CATEGORIES = [
-  { label: 'All', value: '' },
-  { label: '🌿 Nature', value: 'nature' },
-  { label: '👥 People', value: 'people' },
-  { label: '🏙️ City', value: 'places' },
+const TABS = [
+  { label: '🎲 Mix', value: 'mix' },
+  { label: '😂 Funny', value: 'funny' },
+  { label: '🐾 Animals', value: 'cute animals' },
+  { label: '😮 Amazing', value: 'amazing' },
   { label: '⚽ Sports', value: 'sports' },
-  { label: '🐾 Animals', value: 'animals' },
   { label: '✈️ Travel', value: 'travel' },
+  { label: '🌿 Nature', value: 'nature' },
   { label: '🎵 Music', value: 'music' },
   { label: '🍕 Food', value: 'food' },
+  { label: '🏙️ City', value: 'city' },
 ]
 
+// Detect browser language → Pixabay lang code
+function getBrowserLang(): string {
+  if (typeof navigator === 'undefined') return 'en'
+  const l = navigator.language?.slice(0, 2).toLowerCase()
+  const supported = ['cs','da','de','en','es','fr','id','it','hu','nl','no','pl','pt','ro','sk','fi','sv','tr','vi','th','bg','ru','el','ja','ko','zh']
+  return supported.includes(l) ? l : 'en'
+}
+
 function VideoCard({ video, isActive }: { video: PixabayVideo; isActive: boolean }) {
-  const ref = useRef<HTMLVideoElement>(null)
+  const vidRef = useRef<HTMLVideoElement>(null)
   const [muted, setMuted] = useState(true)
   const [liked, setLiked] = useState(false)
+  const [likeCount, setLikeCount] = useState(video.likes)
+  const [paused, setPaused] = useState(false)
 
   useEffect(() => {
-    if (!ref.current) return
-    if (isActive) {
-      ref.current.play().catch(() => {})
+    if (!vidRef.current) return
+    if (isActive && !paused) {
+      vidRef.current.play().catch(() => {})
     } else {
-      ref.current.pause()
+      vidRef.current.pause()
     }
-  }, [isActive])
+  }, [isActive, paused])
+
+  const handleLike = () => {
+    if (!liked) setLikeCount(c => c + 1)
+    else setLikeCount(c => c - 1)
+    setLiked(l => !l)
+  }
 
   const src = video.videos.medium?.url || video.videos.small?.url || video.videos.tiny?.url
 
   return (
-    <div className="relative w-full bg-black" style={{ height: 'calc(100vh - 180px)' }}>
+    <div className="relative w-full bg-black select-none" style={{ height: 'calc(100vh - 180px)', minHeight: 400 }}>
       <video
-        ref={ref}
+        ref={vidRef}
         src={src}
         loop
         muted={muted}
         playsInline
-        className="w-full h-full object-cover"
+        onClick={() => setPaused(p => !p)}
+        className="w-full h-full object-cover cursor-pointer"
       />
 
-      {/* Overlay gradient */}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent pointer-events-none" />
+      {/* Pause indicator */}
+      {paused && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="w-16 h-16 rounded-full bg-black/50 flex items-center justify-center">
+            <span className="text-white text-3xl ml-1">▶</span>
+          </div>
+        </div>
+      )}
+
+      {/* Dark gradient */}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20 pointer-events-none" />
 
       {/* Right action bar */}
-      <div className="absolute right-3 bottom-20 flex flex-col items-center gap-5">
-        <button
-          onClick={() => setMuted(m => !m)}
-          className="w-10 h-10 rounded-full bg-white/20 backdrop-blur flex items-center justify-center text-white text-lg">
-          {muted ? '🔇' : '🔊'}
-        </button>
-        <button
-          onClick={() => setLiked(l => !l)}
-          className="flex flex-col items-center gap-1">
-          <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xl transition-transform ${liked ? 'scale-125' : ''}`}>
+      <div className="absolute right-3 bottom-24 flex flex-col items-center gap-5 z-10">
+        {/* Like */}
+        <button onClick={handleLike} className="flex flex-col items-center gap-1 group">
+          <div className={`w-11 h-11 rounded-full flex items-center justify-center text-2xl transition-all duration-200 ${liked ? 'scale-125' : 'group-active:scale-90'}`}>
             {liked ? '❤️' : '🤍'}
           </div>
-          <span className="text-white text-xs font-bold">{(video.likes + (liked ? 1 : 0)).toLocaleString()}</span>
+          <span className="text-white text-xs font-bold drop-shadow">{likeCount > 999 ? `${(likeCount/1000).toFixed(1)}K` : likeCount}</span>
         </button>
+
+        {/* Views */}
         <div className="flex flex-col items-center gap-1">
-          <div className="w-10 h-10 rounded-full bg-white/20 backdrop-blur flex items-center justify-center text-lg">👁</div>
-          <span className="text-white text-xs font-bold">{video.views > 999 ? `${(video.views / 1000).toFixed(0)}K` : video.views}</span>
+          <div className="w-11 h-11 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center text-xl">👁</div>
+          <span className="text-white text-xs font-bold drop-shadow">{video.views > 999 ? `${(video.views/1000).toFixed(0)}K` : video.views}</span>
         </div>
+
+        {/* Sound */}
+        <button onClick={() => setMuted(m => !m)}
+          className="w-11 h-11 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center text-xl">
+          {muted ? '🔇' : '🔊'}
+        </button>
+
+        {/* Open in Pixabay */}
         <a href={video.pageURL} target="_blank" rel="noreferrer"
-          className="w-10 h-10 rounded-full bg-white/20 backdrop-blur flex items-center justify-center text-white text-sm font-bold">
+          className="w-11 h-11 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center text-white text-lg font-bold">
           ↗
         </a>
       </div>
 
       {/* Bottom info */}
-      <div className="absolute bottom-4 left-3 right-16">
+      <div className="absolute bottom-4 left-3 right-16 z-10">
         <div className="flex items-center gap-2 mb-1.5">
           {video.userImageURL
-            ? <img src={video.userImageURL} className="w-7 h-7 rounded-full object-cover" alt="" />
-            : <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#0052FF] to-[#7B3FE4] flex items-center justify-center text-white text-xs font-black">{video.user[0]?.toUpperCase()}</div>
+            ? <img src={video.userImageURL} className="w-8 h-8 rounded-full object-cover border-2 border-white/30" alt="" />
+            : <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#0052FF] to-[#7B3FE4] flex items-center justify-center text-white text-sm font-black">
+                {video.user[0]?.toUpperCase()}
+              </div>
           }
-          <span className="text-white font-bold text-sm">@{video.user}</span>
-          <span className="text-white/60 text-xs ml-auto">{video.duration}s</span>
+          <span className="text-white font-bold text-sm drop-shadow">@{video.user}</span>
+          <span className="text-white/50 text-xs">{video.duration}s</span>
         </div>
-        <p className="text-white/80 text-xs leading-relaxed line-clamp-2">{video.tags}</p>
-        <div className="flex items-center gap-1 mt-1.5">
-          <img src="https://pixabay.com/static/img/logo_square.png" className="w-4 h-4 rounded" alt="Pixabay" />
-          <span className="text-white/40 text-[10px]">via Pixabay</span>
+        <p className="text-white/75 text-xs leading-relaxed line-clamp-2 drop-shadow">
+          #{video.tags.split(', ').slice(0, 4).join(' #')}
+        </p>
+        <div className="flex items-center gap-1 mt-2 opacity-50">
+          <span className="text-white text-[10px]">📷 Pixabay</span>
         </div>
       </div>
     </div>
@@ -110,17 +144,27 @@ export default function Reels() {
   const [videos, setVideos] = useState<PixabayVideo[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
-  const [category, setCategory] = useState('')
+  const [activeTab, setActiveTab] = useState('mix')
   const [page, setPage] = useState(1)
   const [activeIndex, setActiveIndex] = useState(0)
   const [hasMore, setHasMore] = useState(true)
   const containerRef = useRef<HTMLDivElement>(null)
   const observerRef = useRef<IntersectionObserver | null>(null)
+  const pageRef = useRef(1)
+  const loadingMoreRef = useRef(false)
 
-  const fetchVideos = useCallback(async (cat: string, pg: number, reset = false) => {
-    if (pg === 1) setLoading(true); else setLoadingMore(true)
+  const fetchVideos = useCallback(async (tab: string, pg: number, reset = false) => {
+    if (pg === 1) setLoading(true)
+    else { setLoadingMore(true); loadingMoreRef.current = true }
+
     try {
-      const params = new URLSearchParams({ page: pg.toString(), ...(cat && { category: cat }) })
+      const lang = getBrowserLang()
+      const isMix = tab === 'mix'
+      const params = new URLSearchParams({
+        page: String(pg),
+        lang,
+        ...(isMix ? { mix: '1' } : { q: tab }),
+      })
       const res = await fetch(`/api/reels?${params}`)
       const data = await res.json()
       const hits: PixabayVideo[] = data.hits || []
@@ -130,63 +174,64 @@ export default function Reels() {
       } else {
         setVideos(prev => [...prev, ...hits])
       }
-      setHasMore(hits.length === 20)
+      setHasMore(hits.length >= 15)
     } catch {}
+
     setLoading(false)
     setLoadingMore(false)
+    loadingMoreRef.current = false
   }, [])
 
   useEffect(() => {
-    fetchVideos(category, 1, true)
+    pageRef.current = 1
     setPage(1)
-  }, [category, fetchVideos])
+    fetchVideos(activeTab, 1, true)
+  }, [activeTab, fetchVideos])
 
-  // Intersection Observer to detect active video
+  // Intersection Observer — detect active video + infinite scroll
   useEffect(() => {
     if (observerRef.current) observerRef.current.disconnect()
-    observerRef.current = new IntersectionObserver(
-      entries => {
-        entries.forEach(entry => {
-          if (entry.isIntersecting) {
-            const idx = Number((entry.target as HTMLElement).dataset.index)
-            setActiveIndex(idx)
-            // Load more when near end
-            if (idx >= videos.length - 3 && hasMore && !loadingMore) {
-              const nextPage = page + 1
-              setPage(nextPage)
-              fetchVideos(category, nextPage)
-            }
+    observerRef.current = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          const idx = Number((entry.target as HTMLElement).dataset.index)
+          setActiveIndex(idx)
+          if (idx >= videos.length - 4 && hasMore && !loadingMoreRef.current) {
+            const next = pageRef.current + 1
+            pageRef.current = next
+            setPage(next)
+            fetchVideos(activeTab, next)
           }
-        })
-      },
-      { threshold: 0.6 }
-    )
+        }
+      })
+    }, { threshold: 0.55 })
+
     const cards = containerRef.current?.querySelectorAll('[data-index]')
-    cards?.forEach(card => observerRef.current?.observe(card))
+    cards?.forEach(c => observerRef.current?.observe(c))
     return () => observerRef.current?.disconnect()
-  }, [videos.length, hasMore, loadingMore, page, category, fetchVideos])
+  }, [videos.length, hasMore, activeTab, fetchVideos])
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 gap-3">
-        <div className="text-4xl animate-pulse">🎬</div>
-        <p className="text-[#5B6271] text-sm">Loading popular videos…</p>
+      <div className="flex flex-col items-center justify-center py-24 gap-3">
+        <div className="text-5xl animate-bounce">🎬</div>
+        <p className="text-[#5B6271] text-sm font-semibold">Loading videos…</p>
       </div>
     )
   }
 
   return (
     <div>
-      {/* Category filter */}
-      <div className="flex gap-2 overflow-x-auto px-4 py-3 border-b border-[#EEF1F5] scrollbar-hide">
-        {CATEGORIES.map(c => (
-          <button key={c.value} onClick={() => setCategory(c.value)}
+      {/* Tab bar */}
+      <div className="flex gap-2 overflow-x-auto px-3 py-2.5 border-b border-[#EEF1F5] bg-white sticky top-0 z-10" style={{ scrollbarWidth: 'none' }}>
+        {TABS.map(tab => (
+          <button key={tab.value} onClick={() => setActiveTab(tab.value)}
             className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
-              category === c.value
-                ? 'bg-[#0052FF] text-white'
+              activeTab === tab.value
+                ? 'bg-[#0052FF] text-white shadow-sm'
                 : 'bg-[#F0F2F5] text-[#5B6271] hover:bg-[#E6EEFF] hover:text-[#0052FF]'
             }`}>
-            {c.label}
+            {tab.label}
           </button>
         ))}
       </div>
@@ -199,7 +244,10 @@ export default function Reels() {
           </div>
         ))}
         {loadingMore && (
-          <div className="py-8 text-center text-[#5B6271] text-sm animate-pulse">Loading more…</div>
+          <div className="py-10 text-center text-[#5B6271] text-sm animate-pulse">Loading more…</div>
+        )}
+        {!hasMore && videos.length > 0 && (
+          <div className="py-8 text-center text-[#8A919E] text-xs">You've seen them all in this category!</div>
         )}
       </div>
     </div>
