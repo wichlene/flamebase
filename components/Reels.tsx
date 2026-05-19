@@ -93,14 +93,14 @@ function VideoCard({ video, isActive, onEnded }: { video: YTVideo; isActive: boo
   const embedUrl = `https://www.youtube.com/embed/${video.id}?autoplay=1&enablejsapi=1&rel=0&modestbranding=1&playsinline=1`
 
   return (
-    <div className="relative w-full bg-black" style={{ height: 'calc(100vh - 175px)', minHeight: 400 }}>
+    <div className="relative w-full h-full bg-black">
       {/* Thumbnail / placeholder */}
       {!showPlayer && (
-        <div className="absolute inset-0">
+        <div className="absolute inset-0 cursor-pointer" onClick={() => setShowPlayer(true)}>
           <img src={video.thumbnail} className="w-full h-full object-cover" alt="" />
-          <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-            <div className="w-16 h-16 rounded-full bg-red-600 flex items-center justify-center shadow-xl">
-              <span className="text-white text-3xl ml-1">▶</span>
+          <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+            <div className="w-20 h-20 rounded-full bg-red-600 flex items-center justify-center shadow-2xl hover:scale-110 transition-transform">
+              <span className="text-white text-4xl ml-1">▶</span>
             </div>
           </div>
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent pointer-events-none" />
@@ -205,11 +205,12 @@ export default function Reels() {
     fetchVideos(activeTab, region, search, '', true, 0)
   }, [activeTab, region, search, fetchVideos])
 
-  // Scroll to specific index
+  // Scroll to specific index inside the snap container
   const scrollToIndex = useCallback((idx: number) => {
+    const container = containerRef.current
     const el = cardRefs.current[idx]
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    if (container && el) {
+      container.scrollTo({ top: el.offsetTop, behavior: 'smooth' })
       setActiveIndex(idx)
     }
   }, [])
@@ -226,14 +227,14 @@ export default function Reels() {
     }
   }, [activeIndex, videos.length, hasMore, nextPageToken, activeTab, region, search, catIndex, fetchVideos, scrollToIndex])
 
-  // IntersectionObserver for active index tracking
+  // IntersectionObserver — root is the snap container
   useEffect(() => {
+    if (!containerRef.current) return
     const obs = new IntersectionObserver(entries => {
       entries.forEach(entry => {
         if (entry.isIntersecting) {
           const idx = Number((entry.target as HTMLElement).dataset.index)
           setActiveIndex(idx)
-          // Pre-fetch when near end
           if (idx >= videos.length - 4 && hasMore && !loadingMoreRef.current) {
             const nextCat = catIndex + 1
             setCatIndex(nextCat)
@@ -241,7 +242,7 @@ export default function Reels() {
           }
         }
       })
-    }, { threshold: 0.6 })
+    }, { root: containerRef.current, threshold: 0.6 })
 
     cardRefs.current.forEach(el => el && obs.observe(el))
     return () => obs.disconnect()
@@ -326,19 +327,29 @@ export default function Reels() {
         </div>
       </div>
 
-      {/* Video feed */}
-      <div ref={containerRef} className="divide-y divide-[#222]">
+      {/* Video feed — snap scroll, one video at a time */}
+      <div
+        ref={containerRef}
+        className="overflow-y-scroll"
+        style={{ height: 'calc(100vh - 175px)', scrollSnapType: 'y mandatory', scrollbarWidth: 'none' }}
+      >
         {videos.map((video, i) => (
-          <div key={`${video.id}-${i}`} data-index={i}
-            ref={el => { cardRefs.current[i] = el }}>
+          <div
+            key={`${video.id}-${i}`}
+            data-index={i}
+            ref={el => { cardRefs.current[i] = el }}
+            style={{ scrollSnapAlign: 'start', scrollSnapStop: 'always', height: '100%' }}
+          >
             <VideoCard video={video} isActive={activeIndex === i} onEnded={handleVideoEnd} />
           </div>
         ))}
         {loadingMore && (
-          <div className="py-10 text-center text-[#5B6271] text-sm animate-pulse">Loading more…</div>
+          <div className="py-10 text-center text-[#5B6271] text-sm animate-pulse" style={{ scrollSnapAlign: 'start' }}>
+            Loading more…
+          </div>
         )}
         {videos.length === 0 && !loading && (
-          <div className="py-20 text-center">
+          <div className="py-20 text-center" style={{ scrollSnapAlign: 'start' }}>
             <p className="text-4xl mb-3">😕</p>
             <p className="text-[#5B6271] text-sm">No videos found.</p>
           </div>
