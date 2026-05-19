@@ -83,11 +83,13 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
     onUnreadCount?.(count)
   }
 
-  // On mount: if client already exists (tab switch), sync + load conversations immediately
+  // On mount: auto-connect if wallet is connected (no manual button needed)
   useEffect(() => {
     if (_xmtpClient) {
       if (status !== 'ready') setStatus('ready')
       refreshConversations()
+    } else if (address && !connectingRef.current) {
+      connect()
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -260,15 +262,16 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
 
   if (!address) return <div className="p-8 text-center text-[#8A919E]">Connect your wallet to use messages.</div>
 
-  if (status === 'idle' || status === 'error') {
+  if (status === 'idle') {
+    return <div className="p-8 text-center text-[#5B6271]">Connecting… sign the request in your wallet</div>
+  }
+
+  if (status === 'error') {
     return (
       <div className="p-8 text-center">
-        <div className="text-4xl mb-3">💬</div>
-        <h3 className="font-black text-xl mb-2 text-[#0A0B0D]">XMTP Messaging</h3>
-        <p className="text-sm text-[#5B6271] mb-4">End-to-end encrypted, decentralized.</p>
-        {error && <p className="text-xs text-red-500 mb-3 break-words">{error}</p>}
+        <p className="text-sm text-red-500 mb-3 break-words">{error || 'Connection failed'}</p>
         <button onClick={connect} className="bg-[#0052FF] hover:bg-[#1652F0] text-white px-6 py-2.5 rounded-xl font-bold transition-colors">
-          Connect to XMTP
+          Retry
         </button>
       </div>
     )
