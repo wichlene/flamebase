@@ -83,6 +83,7 @@ export default function Home() {
   const chainId = useChainId()
   const { switchChain } = useSwitchChain()
   const [activeTab, setActiveTab] = useState<Tab>('feed')
+  const [reelsEverOpened, setReelsEverOpened] = useState(false)
   const [posts, setPosts] = useState<Post[]>([])
   const [seenActivity, setSeenActivity] = useState<Record<string, number>>({})
 
@@ -676,6 +677,7 @@ export default function Home() {
             {navItems.map(({ tab, icon, labelKey }) => (
               <button key={tab} onClick={() => {
                 setActiveTab(tab)
+                if (tab === 'reels') setReelsEverOpened(true)
                 if (tab === 'activity') {
                   const snapshot: Record<string, number> = {}
                   myPosts.forEach(p => { snapshot[p.id.toString()] = Number(p.likes) + Number(p.tips) })
@@ -1132,9 +1134,9 @@ export default function Home() {
               </div>
             )}
 
-            {/* ══ REELS ══ */}
-            {activeTab === 'reels' && (
-              <div>
+            {/* ══ REELS ══ — keep mounted once first visited so video plays in background */}
+            {(activeTab === 'reels' || reelsEverOpened) && (
+              <div style={{ display: activeTab === 'reels' ? undefined : 'none' }}>
                 <div className="hidden md:flex items-center justify-between px-5 py-4 border-b border-[#EEF1F5] sticky top-0 bg-white/95 backdrop-blur z-10">
                   <h1 className="text-lg font-black text-[#0A0B0D]">🎬 Reels</h1>
                   <span className="text-xs text-[#8A919E]">Global popular videos</span>
@@ -1523,6 +1525,7 @@ export default function Home() {
           {navItems.map(({ tab, icon, labelKey }) => (
             <button key={tab} onClick={() => {
               setActiveTab(tab)
+              if (tab === 'reels') setReelsEverOpened(true)
               if (tab === 'activity') {
                 const snapshot: Record<string, number> = {}
                 myPosts.forEach(p => { snapshot[p.id.toString()] = Number(p.likes) + Number(p.tips) })
