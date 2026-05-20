@@ -2,7 +2,7 @@
 
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { useAccount, useWriteContract, useReadContract, usePublicClient, useBalance, useSwitchChain, useChainId } from 'wagmi'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { parseEther, formatEther } from 'viem'
 import { base } from 'wagmi/chains'
 import dynamic from 'next/dynamic'
@@ -631,6 +631,31 @@ export default function Home() {
     return true
   })
 
+  // Trending hashtags: pull #tags from post content, count by frequency,
+  // boost recent posts a bit so yesterday's news doesn't dominate forever.
+  const trendingTags = useMemo(() => {
+    const now = Date.now() / 1000
+    const counts = new Map<string, number>()
+    for (const p of posts) {
+      if (!p.content) continue
+      const tags = p.content.match(/#[\p{L}0-9_]{2,30}/gu)
+      if (!tags) continue
+      const ageHours = Math.max(1, (now - Number(p.timestamp)) / 3600)
+      const recencyWeight = 1 + Math.max(0, 72 - ageHours) / 72  // 2x for fresh, 1x for >3 days
+      const seen = new Set<string>()
+      for (const raw of tags) {
+        const tag = raw.toLowerCase()
+        if (seen.has(tag)) continue  // a post counts once per unique tag
+        seen.add(tag)
+        counts.set(tag, (counts.get(tag) || 0) + recencyWeight)
+      }
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([tag]) => tag)
+  }, [posts])
+
   const TOOL_CARDS = [
     { id: 'counter', symbol: '[##]', label: 'COUNTER', desc: 'Increment the global on-chain counter', deployed: TOOLS_DEPLOYED },
     { id: 'streak', symbol: '[~]', label: 'STREAK', desc: 'Daily check-in streak tracker', deployed: TOOLS_DEPLOYED },
@@ -882,7 +907,7 @@ export default function Home() {
                 </div>
 
                 {/* Search bar */}
-                <div className="px-4 pt-3 pb-2 border-b border-[#EEF1F5]">
+                <div className="px-4 pt-3 pb-2">
                   <input
                     value={searchQuery}
                     onChange={e => setSearchQuery(e.target.value)}
@@ -890,6 +915,37 @@ export default function Home() {
                     className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-4 py-2.5 text-sm text-[#0A0B0D] placeholder-[#8A919E] focus:outline-none focus:border-[#0052FF]"
                   />
                 </div>
+
+                {/* Trending hashtags — clickable chips that filter the feed */}
+                {trendingTags.length > 0 && (
+                  <div className="px-4 pb-3 border-b border-[#EEF1F5]">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-xs font-black text-[#8A919E] uppercase tracking-wider">📈 Trending</span>
+                      {searchQuery.startsWith('#') && (
+                        <button onClick={() => setSearchQuery('')}
+                          className="text-xs text-[#0052FF] hover:underline font-semibold ml-auto">
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+                      {trendingTags.map(tag => {
+                        const active = searchQuery.toLowerCase() === tag
+                        return (
+                          <button key={tag}
+                            onClick={() => setSearchQuery(active ? '' : tag)}
+                            className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-bold transition-colors ${
+                              active
+                                ? 'bg-[#0052FF] text-white'
+                                : 'bg-[#F0F2F5] text-[#5B6271] hover:bg-[#E6EEFF] hover:text-[#0052FF]'
+                            }`}>
+                            {tag}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 {!isConnected && (
                   <div className="mx-4 mt-4 p-4 rounded-2xl bg-[#F0F4FF] border border-[#D6E2FF] flex items-center gap-3">
@@ -950,7 +1006,18 @@ export default function Home() {
                             </div>
 
                             {post.content && (
-                              <p className="text-[#0A0B0D] text-[15px] leading-relaxed mb-3 whitespace-pre-wrap">{post.content}</p>
+                              <p className="text-[#0A0B0D] text-[15px] leading-relaxed mb-3 whitespace-pre-wrap">
+                                {post.content.split(/(#[\p{L}0-9_]{2,30})/gu).map((part, i) =>
+                                  part.startsWith('#')
+                                    ? <span key={i} role="button" tabIndex={0}
+                                        onClick={(e) => { e.stopPropagation(); setSearchQuery(part.toLowerCase()) }}
+                                        onKeyDown={(e) => { if (e.key === 'Enter') setSearchQuery(part.toLowerCase()) }}
+                                        className="text-[#0052FF] hover:underline cursor-pointer font-semibold">
+                                        {part}
+                                      </span>
+                                    : <span key={i}>{part}</span>
+                                )}
+                              </p>
                             )}
 
                             {post.ipfsHash && (
