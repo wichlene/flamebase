@@ -9,6 +9,8 @@ import dynamic from 'next/dynamic'
 import { CONTRACT_ADDRESS, CONTRACT_ABI } from '../lib/contract'
 import { T, LANG_LABELS, type Lang } from '../lib/i18n'
 import { TOOLS_ADDRESS, TOKEN_FACTORY_ADDRESS, NFT_FACTORY_ADDRESS, DAO_ADDRESS, TOOLS_ABI, TOKEN_FACTORY_ABI, NFT_FACTORY_ABI, DAO_ABI } from '../lib/toolsContracts'
+import { SFX, isSoundEnabled, setSoundEnabled } from '../lib/sounds'
+import { ToastStack, type ToastItem, type ToastKind } from '../components/Toast'
 
 const Messages = dynamic(() => import('../components/Messages'), { ssr: false, loading: () => <div className="p-8 text-center text-[#5B6271]">💬 Loading…</div> })
 const AIChat = dynamic(() => import('../components/AIChat'), { ssr: false, loading: () => <div className="p-8 text-center text-[#5B6271]">🤖 Loading AI…</div> })
@@ -96,6 +98,25 @@ export default function Home() {
     localStorage.setItem('flamebase_theme', theme)
   }, [theme])
   const toggleTheme = () => setTheme(t => t === 'dark' ? 'light' : 'dark')
+
+  // Sound on/off — persists in localStorage, default off.
+  const [soundOn, setSoundOn] = useState(false)
+  useEffect(() => { setSoundOn(isSoundEnabled()) }, [])
+  const toggleSound = () => { const next = !soundOn; setSoundOn(next); setSoundEnabled(next); if (next) SFX.click() }
+
+  // Toast stack — append via showToast(), auto-dismiss handled inside ToastStack.
+  const [toasts, setToasts] = useState<ToastItem[]>([])
+  const showToast = useCallback((kind: ToastKind, message: string) => {
+    setToasts(prev => [...prev, { id: Date.now() + Math.random(), kind, message }])
+    if (kind === 'success') SFX.notify()
+    else if (kind === 'error') SFX.error()
+  }, [])
+  const dismissToast = useCallback((id: number) => {
+    setToasts(prev => prev.filter(t => t.id !== id))
+  }, [])
+
+  // Track which post was just liked so we can run the bounce animation once.
+  const [animatingLike, setAnimatingLike] = useState<string | null>(null)
   const [posts, setPosts] = useState<Post[]>([])
   const [seenActivity, setSeenActivity] = useState<Record<string, number>>({})
 
@@ -507,7 +528,7 @@ export default function Home() {
         const res = await fetch('/api/upload', { method: 'POST', body: fd })
         const data = await res.json()
         if (!res.ok || !data.ipfsHash) {
-          alert('Upload failed: ' + JSON.stringify(data.error || data))
+          showToast('error', 'Upload failed — try a smaller file or different format')
           setLoading(false)
           return
         }
@@ -520,17 +541,29 @@ export default function Home() {
       setNewPost(''); setSelectedFile(null); setPreviewUrl(null)
       setTimeout(() => refetchCount(), 3000)
       setActiveTab('feed')
-    } catch (e) { console.error(e) }
+      SFX.post()
+      showToast('success', 'Post published — confirming on Base…')
+    } catch (e) {
+      console.error(e)
+      showToast('error', 'Post failed — transaction rejected')
+    }
     setLoading(false)
   }
 
   const handleLike = async (postId: bigint) => {
     if (!isConnected) return
+    const key = postId.toString()
+    setAnimatingLike(key)
+    setTimeout(() => setAnimatingLike(prev => prev === key ? null : prev), 500)
+    SFX.like()
     setLoadingAction(`like-${postId}`)
     try {
       await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'like', args: [postId], value: effectiveFee(likePrice as bigint | undefined) })
       setPosts(prev => prev.map(p => p.id === postId ? { ...p, likes: p.likes + 1n } : p))
-    } catch (e) { console.error(e) }
+    } catch (e) {
+      console.error(e)
+      showToast('error', 'Like failed — transaction rejected or reverted')
+    }
     setLoadingAction(null)
   }
 
@@ -559,7 +592,12 @@ export default function Home() {
       await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'tip', args: [postId], value: weiAmount })
       setPosts(prev => prev.map(p => p.id === postId ? { ...p, tips: p.tips + weiAmount } : p))
       setTipAmounts(prev => ({ ...prev, [key]: '' }))
-    } catch (e) { console.error(e) }
+      SFX.tip()
+      showToast('success', `Tipped $${usd}`)
+    } catch (e) {
+      console.error(e)
+      showToast('error', 'Tip failed — transaction rejected or reverted')
+    }
     setLoadingAction(null)
   }
 
@@ -787,6 +825,11 @@ export default function Home() {
                 aria-label="Toggle theme">
                 {theme === 'dark' ? '☀️' : '🌙'}
               </button>
+              <button onClick={toggleSound} title={soundOn ? 'Mute sound effects' : 'Enable sound effects'}
+                className="bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-3 py-2 text-sm hover:bg-[#F0F2F5] transition-colors flex-shrink-0"
+                aria-label="Toggle sound">
+                {soundOn ? '🔊' : '🔇'}
+              </button>
             </div>
           </div>
         </aside>
@@ -819,6 +862,11 @@ export default function Home() {
                 className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[#F7F9FC] transition-colors"
                 aria-label="Toggle theme">
                 <span className="text-base">{theme === 'dark' ? '☀️' : '🌙'}</span>
+              </button>
+              <button onClick={toggleSound} title={soundOn ? 'Mute' : 'Enable sound'}
+                className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[#F7F9FC] transition-colors"
+                aria-label="Toggle sound">
+                <span className="text-base">{soundOn ? '🔊' : '🔇'}</span>
               </button>
               <select value={lang} onChange={e => setLang(e.target.value as Lang)}
                 className="bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1 text-xs text-[#5B6271] focus:outline-none focus:border-[#0052FF] cursor-pointer">
@@ -958,11 +1006,51 @@ export default function Home() {
                   </div>
                 )}
 
-                {posts.length === 0 && (
-                  <div className="text-center text-[#5B6271] mt-40 px-6">
-                    <div className="text-7xl mb-4">🔥</div>
-                    <p className="font-bold text-[#0A0B0D] text-xl">{t('noPostsTitle')}</p>
-                    <p className="text-sm mt-2">{t('noPostsSub')}</p>
+                {posts.length === 0 && postCount === undefined && (
+                  <div className="divide-y divide-[#EEF1F5]">
+                    {Array.from({ length: 4 }).map((_, i) => (
+                      <div key={i} className="p-4 flex gap-3">
+                        <div className="skeleton w-10 h-10 rounded-full flex-shrink-0" />
+                        <div className="flex-1 space-y-2">
+                          <div className="flex gap-2">
+                            <div className="skeleton h-3 w-24" />
+                            <div className="skeleton h-3 w-16" />
+                          </div>
+                          <div className="skeleton h-4 w-full" />
+                          <div className="skeleton h-4 w-4/5" />
+                          <div className="flex gap-2 pt-2">
+                            <div className="skeleton h-7 w-14" />
+                            <div className="skeleton h-7 w-14" />
+                            <div className="skeleton h-7 w-14" />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {posts.length === 0 && postCount !== undefined && Number(postCount) === 0 && (
+                  <div className="text-center text-[#5B6271] mt-32 px-6 animate-fade-in">
+                    <div className="text-7xl mb-4 animate-bounce">🔥</div>
+                    <p className="font-black text-[#0A0B0D] text-xl">{t('noPostsTitle')}</p>
+                    <p className="text-sm mt-2 mb-5 max-w-xs mx-auto">{t('noPostsSub')}</p>
+                    {isConnected && (
+                      <button onClick={() => setActiveTab('post')}
+                        className="bg-[#0052FF] hover:bg-[#1652F0] text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-colors shadow-sm">
+                        ✏️ Write the first post
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {visiblePosts.length === 0 && posts.length > 0 && searchQuery && (
+                  <div className="text-center text-[#5B6271] mt-20 px-6 animate-fade-in">
+                    <div className="text-5xl mb-3">🔍</div>
+                    <p className="font-bold text-[#0A0B0D]">No matches for &ldquo;{searchQuery}&rdquo;</p>
+                    <button onClick={() => setSearchQuery('')}
+                      className="mt-3 text-[#0052FF] hover:underline text-sm font-semibold">
+                      Clear search
+                    </button>
                   </div>
                 )}
 
@@ -975,7 +1063,7 @@ export default function Home() {
                   const isOwnPost = address && post.author.toLowerCase() === address.toLowerCase()
 
                   return (
-                    <article key={key} className="border-b border-[#EEF1F5] hover:bg-[#FAFBFD] transition-colors">
+                    <article key={key} className="border-b border-[#EEF1F5] hover:bg-[#FAFBFD] hover:shadow-sm transition-all duration-200">
                       <div className="p-4">
                         <div className="flex gap-3">
                           <button onClick={() => setSelectedUser(post.author)} className="flex-shrink-0 cursor-pointer">
@@ -1036,7 +1124,7 @@ export default function Home() {
                               <button onClick={() => handleLike(post.id)} disabled={isLiking || !isConnected}
                                 title={!isConnected ? t('connectWallet') : ''}
                                 className="flex items-center gap-1.5 text-[#5B6271] hover:text-[#FF6B35] hover:bg-[#FFF0EB] rounded-xl px-3 py-2 text-sm transition-all group disabled:opacity-50 disabled:hover:bg-transparent">
-                                <span className="text-lg group-hover:scale-125 transition-transform">🔥</span>
+                                <span className={`text-lg inline-block transition-transform ${animatingLike === key ? 'animate-flame-pop' : 'group-hover:scale-125'}`}>🔥</span>
                                 <span className="font-bold">{post.likes.toString()}</span>
                                 <span className="text-[11px] opacity-60 hidden sm:inline"></span>
                               </button>
@@ -1786,6 +1874,9 @@ export default function Home() {
           ))}
         </div>
       </nav>
+
+      {/* Floating toast notifications */}
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
 
       {/* ── User Profile Modal ── */}
       {selectedUser && (

@@ -74,3 +74,43 @@ html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #3A3D44; }
 
 /* Backdrop blur surfaces in headers stay readable */
 [data-theme="dark"] .backdrop-blur { background-color: rgba(22, 24, 28, 0.85) !important; }
+
+/* ───────────────────────── Animations ───────────────────────── */
+
+/* Like-button pop: scale up briefly, then settle. */
+@keyframes flame-pop {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(1.5) rotate(-8deg); }
+  60%  { transform: scale(0.92) rotate(4deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+.animate-flame-pop { animation: flame-pop 0.45s cubic-bezier(.36,.07,.19,.97) both; }
+
+/* Toasts slide+fade in from the right. */
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(-6px) translateX(8px); }
+  to   { opacity: 1; transform: translateY(0) translateX(0); }
+}
+.animate-toast-in { animation: toast-in 0.2s ease-out both; }
+
+/* Tab content fade-in when switching sections. */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in { animation: fade-in 0.18s ease-out both; }
+
+/* Skeleton shimmer for loading placeholders. */
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, #F0F2F5 0%, #F7F9FC 50%, #F0F2F5 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+  border-radius: 0.5rem;
+}
+[data-theme="dark"] .skeleton {
+  background: linear-gradient(90deg, #1E2025 0%, #25282E 50%, #1E2025 100%);
+}
