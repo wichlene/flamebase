@@ -157,7 +157,7 @@ export default function Home() {
   const [selectedUser, setSelectedUser] = useState<string | null>(null)
   const [pendingDmTarget, setPendingDmTarget] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
-  const [notifications, setNotifications] = useState<Array<{type: string; postId: string; from: string; timestamp: number}>>([])
+  const [notifications, setNotifications] = useState<Array<{type: 'like' | 'tip'; postId: string; delta: string; preview: string; timestamp: number}>>([])
   const [showNotifications, setShowNotifications] = useState(false)
   const [activeTool, setActiveTool] = useState<string | null>(null)
   // Tool form states
@@ -183,6 +183,9 @@ export default function Home() {
 
   // Unread message count from Messages component
   const [unreadMessages, setUnreadMessages] = useState(0)
+  // Share popover state — which post's share menu is open + brief "copied" flash
+  const [sharePost, setSharePost] = useState<string | null>(null)
+  const [shareCopied, setShareCopied] = useState(false)
   // AI post improvement
   const [improving, setImproving] = useState(false)
 
@@ -336,30 +339,52 @@ export default function Home() {
     }
   }, [])
 
-  // Notifications: detect new likes on user posts
+  // Notifications: detect new likes AND tips on the connected user's posts
+  // by comparing each post's current count against the snapshot in localStorage.
   useEffect(() => {
     if (!address || posts.length === 0) return
     const myPosts = posts.filter(p => p.author.toLowerCase() === address.toLowerCase())
     if (myPosts.length === 0) return
-    const stored = localStorage.getItem('flamebase_last_likes')
-    const lastLikes: Record<string, string> = stored ? JSON.parse(stored) : {}
-    const newNotifs: Array<{type: string; postId: string; from: string; timestamp: number}> = []
+
+    const likesRaw = localStorage.getItem('flamebase_last_likes')
+    const tipsRaw = localStorage.getItem('flamebase_last_tips')
+    const lastLikes: Record<string, string> = likesRaw ? JSON.parse(likesRaw) : {}
+    const lastTips: Record<string, string> = tipsRaw ? JSON.parse(tipsRaw) : {}
+    const firstSeen = !likesRaw && !tipsRaw  // skip notifs on initial load
+
+    const newNotifs: Array<{type: 'like' | 'tip'; postId: string; delta: string; preview: string; timestamp: number}> = []
+    const nextLikes: Record<string, string> = {}
+    const nextTips: Record<string, string> = {}
+
     for (const post of myPosts) {
       const key = post.id.toString()
-      const prev = BigInt(lastLikes[key] || '0')
-      if (post.likes > prev) {
-        newNotifs.push({ type: 'like', postId: key, from: '', timestamp: Date.now() })
+      const prevLikes = BigInt(lastLikes[key] || '0')
+      const prevTips = BigInt(lastTips[key] || '0')
+      const preview = post.content ? post.content.slice(0, 60) : (post.ipfsHash ? '📎 media post' : '')
+
+      if (!firstSeen && post.likes > prevLikes) {
+        newNotifs.push({
+          type: 'like', postId: key,
+          delta: (post.likes - prevLikes).toString(),
+          preview, timestamp: Date.now(),
+        })
       }
+      if (!firstSeen && post.tips > prevTips) {
+        newNotifs.push({
+          type: 'tip', postId: key,
+          delta: parseFloat(formatEther(post.tips - prevTips)).toFixed(4),
+          preview, timestamp: Date.now(),
+        })
+      }
+      nextLikes[key] = post.likes.toString()
+      nextTips[key] = post.tips.toString()
     }
+
     if (newNotifs.length > 0) {
-      setNotifications(newNotifs)
+      setNotifications(prev => [...newNotifs, ...prev].slice(0, 30))
     }
-    // Update stored likes
-    const updated: Record<string, string> = {}
-    for (const post of myPosts) {
-      updated[post.id.toString()] = post.likes.toString()
-    }
-    localStorage.setItem('flamebase_last_likes', JSON.stringify(updated))
+    localStorage.setItem('flamebase_last_likes', JSON.stringify(nextLikes))
+    localStorage.setItem('flamebase_last_tips', JSON.stringify(nextTips))
   }, [posts, address])
 
   const fetchProfileData = useCallback(async (addr: string): Promise<ProfileData | null> => {
@@ -760,19 +785,39 @@ export default function Home() {
 
           {/* Notification dropdown */}
           {showNotifications && (
-            <div className="fixed top-16 right-4 z-[200] bg-white rounded-2xl shadow-2xl border border-[#EEF1F5] w-72 max-h-80 overflow-y-auto">
-              <div className="px-4 py-3 border-b border-[#EEF1F5] flex items-center justify-between">
-                <h3 className="font-bold text-sm">Notifications</h3>
-                <button onClick={() => { setNotifications([]); setShowNotifications(false) }} className="text-xs text-[#8A919E] hover:text-[#0A0B0D]">Clear all</button>
+            <div className="fixed top-16 right-4 z-[200] bg-white rounded-2xl shadow-2xl border border-[#EEF1F5] w-80 max-h-96 overflow-y-auto">
+              <div className="px-4 py-3 border-b border-[#EEF1F5] flex items-center justify-between sticky top-0 bg-white">
+                <h3 className="font-black text-sm text-[#0A0B0D]">🔔 Notifications</h3>
+                {notifications.length > 0 && (
+                  <button onClick={() => { setNotifications([]); setShowNotifications(false) }} className="text-xs text-[#8A919E] hover:text-[#0A0B0D] font-semibold">Clear all</button>
+                )}
               </div>
               {notifications.length === 0 ? (
-                <p className="text-[#8A919E] text-sm text-center py-6">No new notifications</p>
+                <div className="px-4 py-10 text-center">
+                  <p className="text-3xl mb-2">📭</p>
+                  <p className="text-[#8A919E] text-sm">No new notifications</p>
+                  <p className="text-[#C5CBD3] text-xs mt-1">Likes &amp; tips on your posts show up here.</p>
+                </div>
               ) : (
                 notifications.map((n, i) => (
-                  <div key={i} className="px-4 py-3 border-b border-[#EEF1F5] hover:bg-[#F7F9FC]">
-                    <p className="text-sm text-[#0A0B0D]">🔥 Your post received new likes!</p>
-                    <p className="text-xs text-[#8A919E] mt-0.5">Post #{n.postId}</p>
-                  </div>
+                  <button
+                    key={`${n.postId}-${n.type}-${n.timestamp}-${i}`}
+                    onClick={() => { setActiveTab('feed'); setShowNotifications(false) }}
+                    className="w-full text-left px-4 py-3 border-b border-[#EEF1F5] hover:bg-[#F7F9FC] transition-colors flex items-start gap-3"
+                  >
+                    <span className="text-xl flex-shrink-0">{n.type === 'tip' ? '💸' : '🔥'}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-[#0A0B0D] font-semibold">
+                        {n.type === 'tip'
+                          ? <>You received <span className="text-[#0052FF]">{n.delta} ETH</span> in tips</>
+                          : <>+{n.delta} new {Number(n.delta) === 1 ? 'flame' : 'flames'} on your post</>}
+                      </p>
+                      {n.preview && (
+                        <p className="text-xs text-[#5B6271] mt-0.5 truncate">&ldquo;{n.preview}&rdquo;</p>
+                      )}
+                      <p className="text-[10px] text-[#8A919E] mt-1">Post #{n.postId}</p>
+                    </div>
+                  </button>
                 ))
               )}
             </div>
@@ -912,6 +957,48 @@ export default function Home() {
                                 <span className="text-lg">💬</span>
                                 <span className="font-bold">{comments.length > 0 ? comments.length : ''}</span>
                               </button>
+
+                              <div className="relative">
+                                <button onClick={() => { setSharePost(sharePost === key ? null : key); setShareCopied(false) }}
+                                  className="flex items-center gap-1.5 text-[#5B6271] hover:text-[#0052FF] hover:bg-[#E6EEFF] rounded-xl px-3 py-2 text-sm transition-all"
+                                  title="Share">
+                                  <span className="text-lg">🔗</span>
+                                </button>
+                                {sharePost === key && (() => {
+                                  const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/?post=${key}`
+                                  const text = (post.content || 'Check out this post on FlameBase').slice(0, 200)
+                                  const xUrl = `https://x.com/intent/tweet?text=${encodeURIComponent(`${text}\n\n`)}&url=${encodeURIComponent(url)}`
+                                  const fcUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(`${text}\n\n${url}`)}`
+                                  return (
+                                    <>
+                                      <div className="fixed inset-0 z-20" onClick={() => setSharePost(null)} />
+                                      <div className="absolute z-30 top-full left-0 mt-1 w-52 bg-white border border-[#E4E7EB] rounded-xl shadow-xl overflow-hidden">
+                                        <button
+                                          onClick={async () => {
+                                            try { await navigator.clipboard.writeText(url) } catch {}
+                                            setShareCopied(true)
+                                            setTimeout(() => { setShareCopied(false); setSharePost(null) }, 1200)
+                                          }}
+                                          className="w-full text-left px-3 py-2.5 text-sm font-semibold text-[#0A0B0D] hover:bg-[#F7F9FC] flex items-center gap-2.5 border-b border-[#EEF1F5]"
+                                        >
+                                          <span className="text-base">{shareCopied ? '✅' : '📋'}</span>
+                                          {shareCopied ? 'Copied!' : 'Copy link'}
+                                        </button>
+                                        <a href={xUrl} target="_blank" rel="noopener noreferrer"
+                                          onClick={() => setSharePost(null)}
+                                          className="w-full px-3 py-2.5 text-sm font-semibold text-[#0A0B0D] hover:bg-[#F7F9FC] flex items-center gap-2.5 border-b border-[#EEF1F5]">
+                                          <span className="text-base">𝕏</span> Share on X
+                                        </a>
+                                        <a href={fcUrl} target="_blank" rel="noopener noreferrer"
+                                          onClick={() => setSharePost(null)}
+                                          className="w-full px-3 py-2.5 text-sm font-semibold text-[#0A0B0D] hover:bg-[#F7F9FC] flex items-center gap-2.5">
+                                          <span className="text-base">🟣</span> Share on Farcaster
+                                        </a>
+                                      </div>
+                                    </>
+                                  )
+                                })()}
+                              </div>
 
                               <div className="flex items-center gap-1 ml-auto">
                                 {[0.5, 1, 5].map(amt => (
@@ -1204,8 +1291,12 @@ export default function Home() {
                             <p className="text-[#5B6271] text-sm mt-1 font-semibold">💸 {t('ethEarned')}</p>
                           </div>
                           <div className="bg-[#F7F9FC] rounded-xl p-4 text-center border border-[#EEF1F5]">
+                            <p className="text-3xl font-black text-[#0052FF]">{myPosts.length}</p>
+                            <p className="text-[#5B6271] text-sm mt-1 font-semibold">📝 Posts</p>
+                          </div>
+                          <div className="bg-[#F7F9FC] rounded-xl p-4 text-center border border-[#EEF1F5]">
                             <p className="text-3xl font-black text-[#0052FF]">{following.size}</p>
-                            <p className="text-[#5B6271] text-sm mt-1 font-semibold">Friends</p>
+                            <p className="text-[#5B6271] text-sm mt-1 font-semibold">👥 Friends</p>
                           </div>
                         </div>
                         <a href={`https://basescan.org/address/${address}`} target="_blank"
@@ -1214,6 +1305,39 @@ export default function Home() {
                         </a>
                       </div>
                     </div>
+
+                    {/* Most Popular Post — highest-liked post the user has written */}
+                    {(() => {
+                      if (myPosts.length === 0) return null
+                      const top = [...myPosts].sort((a, b) => Number(b.likes - a.likes) || Number(b.tips - a.tips))[0]
+                      if (top.likes === 0n && top.tips === 0n) return null
+                      return (
+                        <div className="bg-white border border-[#E4E7EB] rounded-2xl p-5 shadow-sm mb-4">
+                          <div className="flex items-center gap-2 mb-3">
+                            <span className="text-lg">🏆</span>
+                            <h3 className="font-black text-[#0A0B0D]">Most popular post</h3>
+                          </div>
+                          <button
+                            onClick={() => setActiveTab('feed')}
+                            className="w-full text-left bg-[#FAFBFD] hover:bg-[#F0F4FF] rounded-xl p-4 transition-colors border border-[#EEF1F5]"
+                          >
+                            {top.content && (
+                              <p className="text-[#0A0B0D] text-sm leading-relaxed mb-3 line-clamp-3 whitespace-pre-wrap">{top.content}</p>
+                            )}
+                            {top.ipfsHash && !top.content && (
+                              <p className="text-[#8A919E] text-sm mb-3">📎 Media post</p>
+                            )}
+                            <div className="flex items-center gap-4 text-xs">
+                              <span className="font-bold text-[#FF6B35]">🔥 {top.likes.toString()}</span>
+                              {top.tips > 0n && (
+                                <span className="font-bold text-[#0052FF]">💸 {parseFloat(formatEther(top.tips)).toFixed(4)} ETH</span>
+                              )}
+                              <span className="text-[#8A919E] ml-auto">Post #{top.id.toString()}</span>
+                            </div>
+                          </button>
+                        </div>
+                      )
+                    })()}
 
                     {/* Friends list */}
                     {following.size > 0 && (
