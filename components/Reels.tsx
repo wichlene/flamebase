@@ -77,10 +77,44 @@ export default function Reels() {
   const [search, setSearch] = useState('')
   const [activeId, setActiveId] = useState<string>('')
   const [refreshKey, setRefreshKey] = useState(0)
-  const [playKey, setPlayKey] = useState(0)
   const [showPlaylist, setShowPlaylist] = useState(true)
 
+  const playerHostRef = useRef<HTMLDivElement>(null)
+  const playerRef = useRef<any>(null)
+  const [ytReady, setYtReady] = useState(false)
+
   const effectiveRegion = region === 'AUTO' ? autoRegion : region
+
+  // Load YouTube IFrame API once. This gives us real player control
+  // (loadVideoById, stopVideo) instead of fighting iframe remounts.
+  useEffect(() => {
+    const w = window as any
+    if (w.YT?.Player) { setYtReady(true); return }
+    const prev = w.onYouTubeIframeAPIReady
+    w.onYouTubeIframeAPIReady = () => { prev?.(); setYtReady(true) }
+    if (!document.querySelector('script[src*="iframe_api"]')) {
+      const tag = document.createElement('script')
+      tag.src = 'https://www.youtube.com/iframe_api'
+      document.body.appendChild(tag)
+    }
+  }, [])
+
+  // When the active video changes, tell the existing player to load it.
+  // First load creates the player; subsequent calls swap the video in place.
+  useEffect(() => {
+    if (!ytReady || !activeId || !playerHostRef.current) return
+    const w = window as any
+    if (!playerRef.current) {
+      playerRef.current = new w.YT.Player(playerHostRef.current, {
+        videoId: activeId,
+        playerVars: { autoplay: 1, rel: 0, modestbranding: 1, playsinline: 1 },
+        width: '100%',
+        height: '100%',
+      })
+    } else if (typeof playerRef.current.loadVideoById === 'function') {
+      playerRef.current.loadVideoById(activeId)
+    }
+  }, [ytReady, activeId])
 
   useEffect(() => {
     setLoading(true)
@@ -123,26 +157,7 @@ export default function Reels() {
 
   const doSearch = () => { setSearch(searchInput.trim()); setActiveTab(TABS[0]) }
 
-  // Bump playKey to force the iframe to fully remount on every click.
-  // Otherwise YouTube's player keeps the previous video's audio alive
-  // and the playlist param can override the new video selection.
-  const switchVideo = (newId: string) => {
-    setActiveId(newId)
-    setPlayKey(k => k + 1)
-  }
-
-  if (loading) return (
-    <div className="flex flex-col items-center justify-center py-24 gap-3">
-      <div className="text-5xl animate-bounce">▶️</div>
-      <p className="text-[#5B6271] text-sm font-semibold">Loading videos…</p>
-    </div>
-  )
-
-  // Single-video embed. Our sidebar handles next/prev, so no playlist param
-  // — YouTube's playlist mode was overriding the selected video.
-  const embedUrl = activeId
-    ? `https://www.youtube.com/embed/${activeId}?autoplay=1&rel=0&modestbranding=1&playsinline=1`
-    : ''
+  const switchVideo = (newId: string) => setActiveId(newId)
 
   return (
     <div className="flex flex-col select-none" style={{ height: 'calc(100vh - 56px)' }}>
@@ -195,16 +210,16 @@ export default function Reels() {
       {/* Main: YouTube iframe (left) + thumbnail playlist (right) */}
       <div className="flex-1 flex overflow-hidden bg-black">
 
-        {/* THE iframe — YouTube's own player handles play/pause/seek/next/quality/sound/fullscreen */}
-        <div className="flex-1 bg-black flex items-center justify-center">
-          {activeId && (
-            <iframe
-              key={`${activeId}-${playKey}-${refreshKey}`}
-              src={embedUrl}
-              className="w-full h-full"
-              allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
-              allowFullScreen
-            />
+        {/* YouTube IFrame API mounts the player into this div and reuses it
+            across video switches via loadVideoById — so the old video really
+            stops, the new one really starts, no half-mounted iframes. */}
+        <div className="flex-1 bg-black flex items-center justify-center relative">
+          <div ref={playerHostRef} className="w-full h-full" />
+          {loading && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/80 z-10">
+              <div className="text-5xl animate-bounce">▶️</div>
+              <p className="text-white/70 text-sm font-semibold">Loading videos…</p>
+            </div>
           )}
         </div>
 
