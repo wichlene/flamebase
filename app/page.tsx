@@ -1351,14 +1351,38 @@ export default function Home() {
 
           {/* Footer */}
           <footer className="border-t border-[#EEF1F5] px-6 py-6 max-w-2xl mx-auto">
+            <div className="flex items-center justify-center gap-3 mb-4">
+              <a href="https://farcaster.xyz/wichlene" target="_blank" rel="noopener noreferrer"
+                aria-label="Farcaster" title="Farcaster"
+                className="w-8 h-8 rounded-full bg-[#F0F2F5] hover:bg-[#855DCD]/10 flex items-center justify-center transition-colors group">
+                <svg viewBox="0 0 1000 1000" className="w-4 h-4 text-[#5B6271] group-hover:text-[#855DCD] transition-colors" fill="currentColor">
+                  <path d="M257.778 155.556h484.444v688.889h-71.111V528.889h-.697c-7.858-87.212-81.156-155.556-170.414-155.556s-162.556 68.344-170.414 155.556h-.697v315.556h-71.111V155.556Z"/>
+                  <path d="m128.889 253.333 28.889 97.778h24.444v395.556c-12.273 0-22.222 9.949-22.222 22.222v26.667h-4.444c-12.273 0-22.222 9.949-22.222 22.222v26.667h248.889v-26.667c0-12.273-9.949-22.222-22.222-22.222h-4.444v-26.667c0-12.273-9.949-22.222-22.222-22.222h-26.667V253.333H128.889ZM675.556 746.667c-12.273 0-22.222 9.949-22.222 22.222v26.667h-4.445c-12.272 0-22.222 9.949-22.222 22.222v26.667h248.889v-26.667c0-12.273-9.949-22.222-22.222-22.222h-4.445v-26.667c0-12.273-9.949-22.222-22.222-22.222V351.111h24.445l28.888-97.778H702.222v493.334h-26.666Z"/>
+                </svg>
+              </a>
+              <a href="https://base.app/invite/primeairdrop/6Q1618T2" target="_blank" rel="noopener noreferrer"
+                aria-label="Base App" title="Base App"
+                className="w-8 h-8 rounded-full bg-[#F0F2F5] hover:bg-[#0052FF]/10 flex items-center justify-center transition-colors group">
+                <svg viewBox="0 0 111 111" className="w-4 h-4 text-[#5B6271] group-hover:text-[#0052FF] transition-colors" fill="currentColor">
+                  <path d="M54.921 110.034C85.359 110.034 110.034 85.402 110.034 55.017C110.034 24.6319 85.359 0 54.921 0C26.0432 0 2.35281 22.1714 0 50.3923H72.8467V59.6416H3.9565e-07C2.35281 87.8625 26.0432 110.034 54.921 110.034Z"/>
+                </svg>
+              </a>
+              <a href="https://x.com/PrimeAirdropTR" target="_blank" rel="noopener noreferrer"
+                aria-label="X (Twitter)" title="X"
+                className="w-8 h-8 rounded-full bg-[#F0F2F5] hover:bg-black/10 flex items-center justify-center transition-colors group">
+                <svg viewBox="0 0 24 24" className="w-4 h-4 text-[#5B6271] group-hover:text-black transition-colors" fill="currentColor">
+                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                </svg>
+              </a>
+            </div>
             <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-[#8A919E] mb-3">
-              <a href={`https://basescan.org/address/${CONTRACT_ADDRESS}`} target="_blank" className="hover:text-[#0052FF] transition-colors">{t('footerContract')}</a>
+              <a href={`https://basescan.org/address/${CONTRACT_ADDRESS}`} target="_blank" rel="noopener noreferrer" className="hover:text-[#0052FF] transition-colors">{t('footerContract')}</a>
               <span>·</span>
-              <span>{t('footerPrivacy')}</span>
+              <a href="/privacy" className="hover:text-[#0052FF] transition-colors">{t('footerPrivacy')}</a>
               <span>·</span>
-              <span>{t('footerTerms')}</span>
+              <a href="/terms" className="hover:text-[#0052FF] transition-colors">{t('footerTerms')}</a>
               <span>·</span>
-              <span>{t('footerCookies')}</span>
+              <a href="/cookies" className="hover:text-[#0052FF] transition-colors">{t('footerCookies')}</a>
             </div>
             <p className="text-center text-xs text-[#C5CBD3]">
               © {new Date().getFullYear()} FlameBase. {t('footerRights')} {t('footerSecured')}
