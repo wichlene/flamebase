@@ -83,6 +83,14 @@ export default function Reels() {
   const playerRef = useRef<any>(null)
   const [ytReady, setYtReady] = useState(false)
 
+  // Refs that always hold the latest videos/activeId so the YT player's
+  // onStateChange callback (closed over the initial render) can find
+  // the next video to auto-play when one ends.
+  const videosRef = useRef<YTVideo[]>([])
+  const activeIdRef = useRef<string>('')
+  useEffect(() => { videosRef.current = videos }, [videos])
+  useEffect(() => { activeIdRef.current = activeId }, [activeId])
+
   const effectiveRegion = region === 'AUTO' ? autoRegion : region
 
   // Load YouTube IFrame API once. This gives us real player control
@@ -100,7 +108,8 @@ export default function Reels() {
   }, [])
 
   // When the active video changes, tell the existing player to load it.
-  // First load creates the player; subsequent calls swap the video in place.
+  // First load creates the player and wires onStateChange so the next
+  // video auto-plays when one ends; subsequent calls swap in place.
   useEffect(() => {
     if (!ytReady || !activeId || !playerHostRef.current) return
     const w = window as any
@@ -110,6 +119,16 @@ export default function Reels() {
         playerVars: { autoplay: 1, rel: 0, modestbranding: 1, playsinline: 1 },
         width: '100%',
         height: '100%',
+        events: {
+          onStateChange: (e: any) => {
+            // YT.PlayerState.ENDED === 0 — advance to next video in our list.
+            if (e?.data !== 0) return
+            const list = videosRef.current
+            const idx = list.findIndex(v => v.id === activeIdRef.current)
+            const next = idx >= 0 && idx < list.length - 1 ? list[idx + 1] : list[0]
+            if (next && next.id !== activeIdRef.current) setActiveId(next.id)
+          },
+        },
       })
     } else if (typeof playerRef.current.loadVideoById === 'function') {
       playerRef.current.loadVideoById(activeId)
