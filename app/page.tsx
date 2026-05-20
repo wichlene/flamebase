@@ -84,6 +84,18 @@ export default function Home() {
   const { switchChain } = useSwitchChain()
   const [activeTab, setActiveTab] = useState<Tab>('feed')
   const [reelsEverOpened, setReelsEverOpened] = useState(false)
+  const [theme, setTheme] = useState<'light' | 'dark'>('light')
+
+  // Hydrate theme from localStorage on mount, then sync to <html data-theme>.
+  useEffect(() => {
+    const saved = (localStorage.getItem('flamebase_theme') as 'light' | 'dark' | null) || 'light'
+    setTheme(saved)
+  }, [])
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+    localStorage.setItem('flamebase_theme', theme)
+  }, [theme])
+  const toggleTheme = () => setTheme(t => t === 'dark' ? 'light' : 'dark')
   const [posts, setPosts] = useState<Post[]>([])
   const [seenActivity, setSeenActivity] = useState<Record<string, number>>({})
 
@@ -737,14 +749,19 @@ export default function Home() {
               </div>
             )}
             <ConnectButton />
-            {/* Language selector */}
-            <div className="mt-2">
+            {/* Language selector + theme toggle */}
+            <div className="mt-2 flex gap-2">
               <select value={lang} onChange={e => setLang(e.target.value as Lang)}
-                className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-3 py-2 text-xs text-[#5B6271] focus:outline-none focus:border-[#0052FF] cursor-pointer">
+                className="flex-1 bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-3 py-2 text-xs text-[#5B6271] focus:outline-none focus:border-[#0052FF] cursor-pointer">
                 {(Object.entries(LANG_LABELS) as [Lang, string][]).map(([code, label]) => (
                   <option key={code} value={code}>{label}</option>
                 ))}
               </select>
+              <button onClick={toggleTheme} title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                className="bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-3 py-2 text-sm hover:bg-[#F0F2F5] transition-colors flex-shrink-0"
+                aria-label="Toggle theme">
+                {theme === 'dark' ? '☀️' : '🌙'}
+              </button>
             </div>
           </div>
         </aside>
@@ -772,6 +789,11 @@ export default function Home() {
                 {notifications.length > 0 && (
                   <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white" />
                 )}
+              </button>
+              <button onClick={toggleTheme} title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[#F7F9FC] transition-colors"
+                aria-label="Toggle theme">
+                <span className="text-base">{theme === 'dark' ? '☀️' : '🌙'}</span>
               </button>
               <select value={lang} onChange={e => setLang(e.target.value as Lang)}
                 className="bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1 text-xs text-[#5B6271] focus:outline-none focus:border-[#0052FF] cursor-pointer">

@@ -20,3 +20,57 @@ html, body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #E4E7EB; border-radius: 5px; }
 ::-webkit-scrollbar-thumb:hover { background: #C5CBD3; }
+
+/* ───────────────────────── Dark mode ─────────────────────────
+   The codebase uses hardcoded hex utilities everywhere (bg-white,
+   bg-[#F7F9FC], text-[#0A0B0D], etc.). Instead of touching every
+   call site, we map the most common light-theme tokens to dark
+   equivalents under [data-theme="dark"]. Brand blue / accents
+   stay untouched on purpose.
+*/
+html[data-theme="dark"] { color-scheme: dark; }
+html[data-theme="dark"], html[data-theme="dark"] body {
+  background: #0A0B0D;
+  color: #E4E7EB;
+}
+html[data-theme="dark"] ::-webkit-scrollbar-thumb { background: #2A2D34; }
+html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #3A3D44; }
+
+/* Surfaces */
+[data-theme="dark"] .bg-white,
+[data-theme="dark"] .bg-white\/95 { background-color: #16181C !important; }
+[data-theme="dark"] .bg-\[\#F7F9FC\] { background-color: #1E2025 !important; }
+[data-theme="dark"] .bg-\[\#FAFBFD\] { background-color: #1A1C20 !important; }
+[data-theme="dark"] .bg-\[\#F0F2F5\] { background-color: #25282E !important; }
+[data-theme="dark"] .bg-\[\#F0F4FF\] { background-color: #1A2540 !important; }
+[data-theme="dark"] .bg-\[\#E6EEFF\] { background-color: #1A2A55 !important; }
+[data-theme="dark"] .bg-\[\#FFE8E8\] { background-color: #3A1E1E !important; }
+[data-theme="dark"] .bg-\[\#FFF0EB\] { background-color: #3A2A20 !important; }
+[data-theme="dark"] .bg-\[\#1f2125\] { background-color: #0A0B0D !important; }
+
+/* Hover surfaces */
+[data-theme="dark"] .hover\:bg-\[\#F7F9FC\]:hover { background-color: #25282E !important; }
+[data-theme="dark"] .hover\:bg-\[\#F0F4FF\]:hover { background-color: #1A2540 !important; }
+[data-theme="dark"] .hover\:bg-\[\#E6EEFF\]:hover { background-color: #1A2A55 !important; }
+[data-theme="dark"] .hover\:bg-\[\#FFE8E8\]:hover { background-color: #3A1E1E !important; }
+[data-theme="dark"] .hover\:bg-\[\#FFF0EB\]:hover { background-color: #3A2A20 !important; }
+[data-theme="dark"] .hover\:bg-white\/5:hover { background-color: rgba(255,255,255,0.05) !important; }
+
+/* Borders */
+[data-theme="dark"] .border-\[\#E4E7EB\] { border-color: #2A2D34 !important; }
+[data-theme="dark"] .border-\[\#EEF1F5\] { border-color: #25282E !important; }
+
+/* Text */
+[data-theme="dark"] .text-\[\#0A0B0D\] { color: #E4E7EB !important; }
+[data-theme="dark"] .text-\[\#5B6271\] { color: #9CA3AF !important; }
+[data-theme="dark"] .text-\[\#8A919E\] { color: #6B7280 !important; }
+[data-theme="dark"] .text-\[\#C5CBD3\] { color: #5B6271 !important; }
+[data-theme="dark"] .placeholder-\[\#8A919E\]::placeholder { color: #6B7280 !important; }
+
+/* Inputs / selects keep their dark surface */
+[data-theme="dark"] input,
+[data-theme="dark"] textarea,
+[data-theme="dark"] select { color-scheme: dark; }
+
+/* Backdrop blur surfaces in headers stay readable */
+[data-theme="dark"] .backdrop-blur { background-color: rgba(22, 24, 28, 0.85) !important; }
