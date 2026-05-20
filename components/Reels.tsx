@@ -77,6 +77,7 @@ export default function Reels() {
   const [search, setSearch] = useState('')
   const [activeId, setActiveId] = useState<string>('')
   const [refreshKey, setRefreshKey] = useState(0)
+  const [playKey, setPlayKey] = useState(0)
   const [showPlaylist, setShowPlaylist] = useState(true)
 
   const effectiveRegion = region === 'AUTO' ? autoRegion : region
@@ -122,12 +123,12 @@ export default function Reels() {
 
   const doSearch = () => { setSearch(searchInput.trim()); setActiveTab(TABS[0]) }
 
-  // Force iframe to fully unmount before mounting the new one — otherwise
-  // YouTube's player sometimes keeps audio of the previous video alive.
+  // Bump playKey to force the iframe to fully remount on every click.
+  // Otherwise YouTube's player keeps the previous video's audio alive
+  // and the playlist param can override the new video selection.
   const switchVideo = (newId: string) => {
-    if (newId === activeId) return
-    setActiveId('')
-    requestAnimationFrame(() => setActiveId(newId))
+    setActiveId(newId)
+    setPlayKey(k => k + 1)
   }
 
   if (loading) return (
@@ -137,10 +138,10 @@ export default function Reels() {
     </div>
   )
 
-  // Build YouTube playlist URL with all video IDs
-  const otherIds = videos.filter(v => v.id !== activeId).map(v => v.id).join(',')
+  // Single-video embed. Our sidebar handles next/prev, so no playlist param
+  // — YouTube's playlist mode was overriding the selected video.
   const embedUrl = activeId
-    ? `https://www.youtube.com/embed/${activeId}?autoplay=1&rel=0&modestbranding=1&playsinline=1${otherIds ? `&playlist=${otherIds}` : ''}`
+    ? `https://www.youtube.com/embed/${activeId}?autoplay=1&rel=0&modestbranding=1&playsinline=1`
     : ''
 
   return (
@@ -198,7 +199,7 @@ export default function Reels() {
         <div className="flex-1 bg-black flex items-center justify-center">
           {activeId && (
             <iframe
-              key={`${activeId}-${refreshKey}`}
+              key={`${activeId}-${playKey}-${refreshKey}`}
               src={embedUrl}
               className="w-full h-full"
               allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
