@@ -88,6 +88,7 @@ export default function Reels() {
     const pickedCat = activeTab.cats.length > 0
       ? activeTab.cats[Math.floor(Math.random() * activeTab.cats.length)]
       : ''
+    const isShorts = activeTab.label === '📱 Shorts'
     const params = new URLSearchParams({
       region: effectiveRegion,
       lang: effectiveRegion.toLowerCase(),
@@ -97,6 +98,7 @@ export default function Reels() {
           ? { videoCategoryId: pickedCat }
           : { q: activeTab.q }
       ),
+      ...(isShorts && { shortsOnly: '1' }),
       _: String(Date.now()),
     })
     fetch(`/api/youtube?${params}`)

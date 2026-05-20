@@ -17,7 +17,15 @@ export async function GET(request: Request) {
   const pageToken = searchParams.get('pageToken') || ''
   const q = searchParams.get('q') || ''
   const videoCategoryId = searchParams.get('videoCategoryId') || '0'
+  const shortsOnly = searchParams.get('shortsOnly') === '1'
   const KEY = process.env.YOUTUBE_API_KEY
+
+  // ISO 8601 → seconds. PT1M30S → 90, PT45S → 45
+  const parseDuration = (iso: string): number => {
+    const m = iso?.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/)
+    if (!m) return 0
+    return (parseInt(m[1] || '0') * 3600) + (parseInt(m[2] || '0') * 60) + parseInt(m[3] || '0')
+  }
   // Random sort order for variety on every refresh
   const orders = ['relevance', 'viewCount', 'date', 'rating']
   const order = orders[Math.floor(Math.random() * orders.length)]
@@ -68,6 +76,12 @@ export async function GET(request: Request) {
       nextPageToken = data.nextPageToken || ''
       items = data.items || []
     }
+
+    // Filter by duration: Shorts tab → ≤62s only; everything else → exclude Shorts (>62s)
+    items = items.filter(item => {
+      const secs = parseDuration(item.contentDetails?.duration || '')
+      return shortsOnly ? secs <= 62 : secs > 62
+    })
 
     // Shuffle for variety — never the same order twice
     items = items.sort(() => Math.random() - 0.5)
