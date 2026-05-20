@@ -19,7 +19,7 @@ export function GET() {
       primaryCategory: 'social',
       tags: ['social', 'web3', 'base', 'onchain', 'crypto'],
       tagline: 'Own your social graph',
-      ogTitle: 'FlameBase — On-chain social on Base',
+      ogTitle: 'FlameBase — Social on Base',
       ogDescription: 'Every like, tip, and comment lives on Base.',
       ogImageUrl: 'https://flamebase.xyz/logo.png',
     },
