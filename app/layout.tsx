@@ -68,6 +68,9 @@ export const metadata: Metadata = {
     shortcut: '/icon.png',
     apple: '/icon.png',
   },
+  other: {
+    'base:app_id': '6a0e223b6e6e49b3da234251',
+  },
 }
 
 export const viewport: Viewport = {
