@@ -4,6 +4,13 @@ export const dynamic = 'force-static'
 
 export function GET() {
   return NextResponse.json({
+    accountAssociation: {
+      header:
+        'eyJmaWQiOjEzNTM3MDYsInR5cGUiOiJjdXN0b2R5Iiwia2V5IjoiMHg3RTJCRUUyYjZFMzdFQUI5QjM1YjA3RjgzZTVjQzJDNDQ1QjlDNjA0In0',
+      payload: 'eyJkb21haW4iOiJmbGFtZWJhc2UueHl6In0',
+      signature:
+        'lpzx0l3BVyl8Dh2BwU19i8GfG1AEGpUInrqAyjKbsFRGpfhVIhVjBExxEZbZNHEjjEO1au9dS5Rr0hbUeItV9Bw=',
+    },
     miniapp: {
       version: '1',
       name: 'FlameBase',
