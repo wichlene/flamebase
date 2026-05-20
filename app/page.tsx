@@ -832,7 +832,7 @@ export default function Home() {
 
           {/* Notification dropdown */}
           {showNotifications && (
-            <div className="fixed top-16 right-4 z-[200] bg-white rounded-2xl shadow-2xl border border-[#EEF1F5] w-80 max-h-96 overflow-y-auto">
+            <div className="fixed top-16 left-2 right-2 md:left-auto md:right-4 md:w-80 z-[200] bg-white rounded-2xl shadow-2xl border border-[#EEF1F5] max-h-[70vh] md:max-h-96 overflow-y-auto">
               <div className="px-4 py-3 border-b border-[#EEF1F5] flex items-center justify-between sticky top-0 bg-white">
                 <h3 className="font-black text-sm text-[#0A0B0D]">🔔 Notifications</h3>
                 {notifications.length > 0 && (
@@ -1032,7 +1032,7 @@ export default function Home() {
                               </div>
                             )}
 
-                            <div className="flex items-center gap-0.5 -ml-2 mt-1">
+                            <div className="flex items-center gap-0.5 -ml-2 mt-1 flex-wrap">
                               <button onClick={() => handleLike(post.id)} disabled={isLiking || !isConnected}
                                 title={!isConnected ? t('connectWallet') : ''}
                                 className="flex items-center gap-1.5 text-[#5B6271] hover:text-[#FF6B35] hover:bg-[#FFF0EB] rounded-xl px-3 py-2 text-sm transition-all group disabled:opacity-50 disabled:hover:bg-transparent">
