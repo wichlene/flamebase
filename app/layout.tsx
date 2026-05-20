@@ -6,19 +6,67 @@ import { Providers } from './providers'
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 
 export const metadata: Metadata = {
-  title: 'FlameBase — On-chain social on Base',
-  description: 'Every like, comment, and tip is a real transaction on Base. Web3 social media.',
+  metadataBase: new URL('https://flamebase.xyz'),
+  title: {
+    default: 'FlameBase — On-chain social on Base',
+    template: '%s · FlameBase',
+  },
+  description:
+    'Every like, comment, and tip is a real on-chain transaction on Base. The first truly on-chain social network — own your posts, own your followers, own your tips.',
+  keywords: [
+    'Base', 'on-chain social', 'Web3 social', 'Farcaster', 'crypto social',
+    'Base chain', 'XMTP', 'decentralized social', 'social finance', 'tip jar',
+    'on-chain likes', 'wallet social', 'FlameBase',
+  ],
+  authors: [{ name: 'FlameBase' }],
+  creator: 'FlameBase',
+  publisher: 'FlameBase',
+  applicationName: 'FlameBase',
+  category: 'social',
+  alternates: {
+    canonical: '/',
+  },
   openGraph: {
-    title: 'FlameBase',
-    description: 'On-chain social on Base.',
     type: 'website',
-    images: ['/logo.png'],
+    locale: 'en_US',
+    url: 'https://flamebase.xyz',
+    siteName: 'FlameBase',
+    title: 'FlameBase — On-chain social on Base',
+    description:
+      'Every like, comment, and tip is a real transaction on Base. Own your social graph.',
+    images: [
+      {
+        url: '/logo.png',
+        width: 1200,
+        height: 630,
+        alt: 'FlameBase — on-chain social on Base',
+      },
+    ],
   },
   twitter: {
-    card: 'summary',
-    title: 'FlameBase',
-    description: 'On-chain social on Base.',
+    card: 'summary_large_image',
+    site: '@PrimeAirdropTR',
+    creator: '@PrimeAirdropTR',
+    title: 'FlameBase — On-chain social on Base',
+    description:
+      'Every like, comment, and tip is a real transaction on Base. Own your social graph.',
     images: ['/logo.png'],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+      'max-video-preview': -1,
+    },
+  },
+  icons: {
+    icon: '/icon.png',
+    shortcut: '/icon.png',
+    apple: '/icon.png',
   },
 }
 
