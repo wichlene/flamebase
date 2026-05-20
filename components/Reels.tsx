@@ -122,6 +122,14 @@ export default function Reels() {
 
   const doSearch = () => { setSearch(searchInput.trim()); setActiveTab(TABS[0]) }
 
+  // Force iframe to fully unmount before mounting the new one — otherwise
+  // YouTube's player sometimes keeps audio of the previous video alive.
+  const switchVideo = (newId: string) => {
+    if (newId === activeId) return
+    setActiveId('')
+    requestAnimationFrame(() => setActiveId(newId))
+  }
+
   if (loading) return (
     <div className="flex flex-col items-center justify-center py-24 gap-3">
       <div className="text-5xl animate-bounce">▶️</div>
@@ -208,7 +216,7 @@ export default function Reels() {
             {videos.map((v, i) => (
               <button
                 key={v.id}
-                onClick={() => setActiveId(v.id)}
+                onClick={() => switchVideo(v.id)}
                 className={`w-full text-left p-2 flex gap-2 hover:bg-white/5 transition-colors border-b border-white/5 ${activeId === v.id ? 'bg-red-600/20' : ''}`}
               >
                 <div className="w-24 flex-shrink-0 aspect-video bg-black relative overflow-hidden rounded">
