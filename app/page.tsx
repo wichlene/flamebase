@@ -929,7 +929,7 @@ export default function Home() {
             </div>
           )}
 
-          <div className="pt-[60px] md:pt-0 pb-10 max-w-2xl mx-auto">
+          <div className="pt-[60px] md:pt-0 pb-24 md:pb-10 max-w-2xl mx-auto">
 
             {/* ══ FEED ══ */}
             {activeTab === 'feed' && (
@@ -1845,7 +1845,7 @@ export default function Home() {
       </div>
 
       {/* ── Mobile bottom nav ── */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t border-[#E4E7EB] z-50 shadow-[0_-4px_20px_-4px_rgba(0,0,0,0.05)]">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t border-[#E4E7EB] z-50 shadow-[0_-4px_20px_-4px_rgba(0,0,0,0.05)] pb-safe">
         <div className="flex">
           {navItems.map(({ tab, icon, labelKey }) => (
             <button key={tab} onClick={() => {

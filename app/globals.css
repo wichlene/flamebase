@@ -11,6 +11,11 @@ html, body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Safe area utilities for iPhone notch/home indicator */
+.pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+.pt-safe { padding-top: env(safe-area-inset-top, 0px); }
+.mb-nav  { margin-bottom: calc(56px + env(safe-area-inset-bottom, 0px)); }
+
 ::selection {
   background: #0052FF;
   color: white;
