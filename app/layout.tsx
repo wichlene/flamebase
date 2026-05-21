@@ -36,9 +36,9 @@ export const metadata: Metadata = {
       'Every like, comment, and tip is a real transaction on Base. Own your social graph.',
     images: [
       {
-        url: '/logo.png',
+        url: '/thumbnail-base.png',
         width: 1200,
-        height: 630,
+        height: 628,
         alt: 'FlameBase — on-chain social on Base',
       },
     ],
@@ -50,7 +50,7 @@ export const metadata: Metadata = {
     title: 'FlameBase — On-chain social on Base',
     description:
       'Every like, comment, and tip is a real transaction on Base. Own your social graph.',
-    images: ['/logo.png'],
+    images: ['/thumbnail-base.png'],
   },
   robots: {
     index: true,
@@ -68,6 +68,7 @@ export const metadata: Metadata = {
     shortcut: '/icon.png',
     apple: '/icon.png',
   },
+  manifest: '/manifest.json',
   other: {
     'base:app_id': '6a0e223b6e6e49b3da234251',
   },
@@ -79,10 +80,26 @@ export const viewport: Viewport = {
   initialScale: 1,
 }
 
+const organizationSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'WebApplication',
+  name: 'FlameBase',
+  url: 'https://flamebase.xyz',
+  description: 'The first truly on-chain social network on Base. Every like, comment, and tip is a real on-chain transaction.',
+  applicationCategory: 'SocialNetworkingApplication',
+  operatingSystem: 'Web',
+  offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+  publisher: { '@type': 'Organization', name: 'FlameBase', url: 'https://flamebase.xyz', logo: 'https://flamebase.xyz/icon.png' },
+}
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <body className={`${inter.variable} font-sans antialiased bg-white text-[#0A0B0D]`}>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }}
+        />
         <Providers>{children}</Providers>
       </body>
     </html>
