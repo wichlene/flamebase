@@ -875,15 +875,17 @@ export default function Home() {
                   <option key={code} value={code}>{label.split(' ')[0]}</option>
                 ))}
               </select>
-              <ConnectButton accountStatus="avatar" chainStatus="none" showBalance={false} />
-              {isConnected && (
+              {isConnected ? (
                 <button
                   onClick={() => disconnect()}
-                  className="text-[10px] text-[#8A919E] hover:text-red-500 transition-colors px-2 py-1 rounded-lg hover:bg-[#FEE2E2]"
+                  className="flex items-center gap-1.5 bg-[#FEE2E2] hover:bg-red-100 text-red-600 font-bold text-xs px-3 py-2 rounded-xl transition-colors"
                   title="Disconnect wallet"
                 >
-                  ✕
+                  <span>🔌</span>
+                  <span className="hidden sm:inline">Disconnect</span>
                 </button>
+              ) : (
+                <ConnectButton accountStatus="avatar" chainStatus="none" showBalance={false} />
               )}
             </div>
           </header>
