@@ -1,7 +1,7 @@
 'use client'
 
 import { ConnectButton } from '@rainbow-me/rainbowkit'
-import { useAccount, useWriteContract, useReadContract, usePublicClient, useBalance, useSwitchChain, useChainId } from 'wagmi'
+import { useAccount, useWriteContract, useReadContract, usePublicClient, useBalance, useSwitchChain, useChainId, useDisconnect } from 'wagmi'
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { parseEther, formatEther } from 'viem'
 import { base } from 'wagmi/chains'
@@ -82,6 +82,7 @@ function ConnectPrompt({ message, label = 'Connect Wallet' }: { message: string;
 
 export default function Home() {
   const { address, isConnected } = useAccount()
+  const { disconnect } = useDisconnect()
   const chainId = useChainId()
   const { switchChain } = useSwitchChain()
   const [activeTab, setActiveTab] = useState<Tab>('feed')
@@ -875,6 +876,15 @@ export default function Home() {
                 ))}
               </select>
               <ConnectButton accountStatus="avatar" chainStatus="none" showBalance={false} />
+              {isConnected && (
+                <button
+                  onClick={() => disconnect()}
+                  className="text-[10px] text-[#8A919E] hover:text-red-500 transition-colors px-2 py-1 rounded-lg hover:bg-[#FEE2E2]"
+                  title="Disconnect wallet"
+                >
+                  ✕
+                </button>
+              )}
             </div>
           </header>
 
