@@ -9,12 +9,31 @@ html, body {
   color: #0A0B0D;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+  /* Use dynamic viewport so mobile address bars don't cut content. */
+  min-height: 100dvh;
 }
 
-/* Safe area utilities for iPhone notch/home indicator */
-.pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
-.pt-safe { padding-top: env(safe-area-inset-top, 0px); }
-.mb-nav  { margin-bottom: calc(56px + env(safe-area-inset-bottom, 0px)); }
+/* Combine native env() insets with Farcaster mini-app insets (--fc-inset-*),
+   set by providers.tsx when running inside a Farcaster client. */
+:root {
+  --inset-top: max(env(safe-area-inset-top, 0px), var(--fc-inset-top, 0px));
+  --inset-bottom: max(env(safe-area-inset-bottom, 0px), var(--fc-inset-bottom, 0px));
+  --inset-left: max(env(safe-area-inset-left, 0px), var(--fc-inset-left, 0px));
+  --inset-right: max(env(safe-area-inset-right, 0px), var(--fc-inset-right, 0px));
+}
+
+/* Apply horizontal insets at the body level so all fixed/absolute children
+   stay clear of Farcaster's gesture rails. */
+body {
+  padding-left: var(--inset-left);
+  padding-right: var(--inset-right);
+}
+
+/* Safe area utilities — now combine OS env() with Farcaster insets. */
+.pb-safe { padding-bottom: var(--inset-bottom); }
+.pt-safe { padding-top: var(--inset-top); }
+.mb-nav  { margin-bottom: calc(56px + var(--inset-bottom)); }
 
 ::selection {
   background: #0052FF;

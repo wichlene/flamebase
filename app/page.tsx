@@ -1290,7 +1290,7 @@ export default function Home() {
           {/* Mobile header */}
           <header
             className="md:hidden fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur border-b border-[#E4E7EB] px-4 pb-3 flex items-center justify-between gap-2"
-            style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top, 0px))' }}
+            style={{ paddingTop: 'max(0.75rem, var(--inset-top, 0px))' }}
           >
             <div className="flex items-center gap-2">
               <FlameLogo size={32} />
@@ -1400,7 +1400,7 @@ export default function Home() {
             </div>
           )}
 
-          <div className="pt-[calc(60px+env(safe-area-inset-top,0px))] md:pt-0 pb-24 md:pb-10 max-w-2xl mx-auto">
+          <div className="pt-[calc(60px+var(--inset-top,0px))] md:pt-0 pb-24 md:pb-10 max-w-2xl mx-auto">
 
             {/* ══ FEED ══ */}
             {activeTab === 'feed' && (

@@ -79,7 +79,28 @@ function FarcasterAutoConnect() {
 
 export function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => {
+    let cancelled = false
     sdk.actions.ready().catch(() => {})
+
+    // Read Farcaster safe-area insets and expose them as CSS vars so the
+    // app can dodge the host's chrome (notch, status bar, gesture area).
+    sdk.context
+      .then(ctx => {
+        if (cancelled) return
+        const insets = ctx?.client?.safeAreaInsets
+        if (!insets) return
+        const root = document.documentElement
+        root.style.setProperty('--fc-inset-top', `${insets.top}px`)
+        root.style.setProperty('--fc-inset-bottom', `${insets.bottom}px`)
+        root.style.setProperty('--fc-inset-left', `${insets.left}px`)
+        root.style.setProperty('--fc-inset-right', `${insets.right}px`)
+        root.dataset.fcMiniapp = 'true'
+      })
+      .catch(() => {})
+
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   return (
