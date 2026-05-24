@@ -937,7 +937,7 @@ export default function Home() {
     if (deployingLogoNft || !NFT_FACTORY_DEPLOYED) return
     setDeployingLogoNft(true)
     try {
-      // 1. Setup IPFS metadata
+      // 1. Upload logo to IPFS — get imageHash + baseURI (our metadata API)
       showToast('success', 'Uploading logo to IPFS…')
       const setupRes = await fetch('/api/setup-logo-nft', { method: 'POST' })
       const setupData = await setupRes.json()
@@ -965,7 +965,10 @@ export default function Home() {
           const mine = cols.filter(c => c.creator.toLowerCase() === address?.toLowerCase() && c.name === 'FlameBase Logo').pop()
           if (mine) {
             setDeployedLogoNftAddr(mine.addr)
-            showToast('success', `📍 Address: ${mine.addr.slice(0,8)}…${mine.addr.slice(-4)} — save it as NEXT_PUBLIC_FLAME_NFT`)
+            showToast('success', `📍 Kontrat: ${mine.addr} — Bunu NEXT_PUBLIC_FLAME_NFT olarak kaydet`)
+            if (setupData.imageHash) {
+              showToast('success', `🖼️ Image hash: ${setupData.imageHash} — Bunu FLAME_NFT_IMAGE_HASH olarak kaydet`)
+            }
           }
         } catch {}
       }, 5000)
@@ -2335,28 +2338,30 @@ export default function Home() {
                           </div>
                         </div>
 
-                        {/* Logo NFT collection — only show deploy button if not yet deployed */}
-                        {!FLAME_NFT_ADDRESS && (
-                          <div className="bg-gradient-to-br from-orange-500 to-red-500 rounded-xl p-4 mb-3 text-white">
-                            <p className="font-black text-sm mb-1">🎨 Deploy Logo NFT Collection</p>
-                            <p className="text-white/80 text-xs mb-3">
-                              FlameBase logosunu IPFS&apos;e yükler + 10.000 maxSupply, $0.50 mint price NFT koleksiyonu deploy eder. Mint geliri sana gelir.
-                            </p>
-                            {deployedLogoNftAddr && (
-                              <div className="bg-white/10 rounded-lg p-2 mb-2 text-xs break-all font-mono">
-                                ✅ {deployedLogoNftAddr}
-                                <p className="font-sans mt-1 text-white/70 text-[10px]">⚠️ Bu adresi NEXT_PUBLIC_FLAME_NFT env var olarak kaydet</p>
-                              </div>
-                            )}
-                            <button
-                              onClick={deployLogoNft}
-                              disabled={deployingLogoNft || !NFT_FACTORY_DEPLOYED}
-                              className="w-full bg-white text-orange-600 py-2.5 rounded-lg font-black text-sm hover:bg-white/90 disabled:opacity-50 transition-colors"
-                            >
-                              {deployingLogoNft ? 'Deploying… (2-3 dk)' : '🎨 Deploy FlameBase Logo NFT'}
-                            </button>
-                          </div>
-                        )}
+                        {/* Logo NFT deploy — always shown so admin can redeploy with fixed metadata */}
+                        <div className="bg-gradient-to-br from-orange-500 to-red-500 rounded-xl p-4 mb-3 text-white">
+                          <p className="font-black text-sm mb-1">
+                            {FLAME_NFT_ADDRESS ? '🔄 Yeniden Deploy (Resim Düzeltme)' : '🎨 Deploy Logo NFT Collection'}
+                          </p>
+                          <p className="text-white/80 text-xs mb-3">
+                            {FLAME_NFT_ADDRESS
+                              ? 'Resim görünmüyorsa yeni deploy yapabilirsin. Yeni adres Vercel\'e kaydedilmeli.'
+                              : 'FlameBase logosunu IPFS\'e yükler + 10.000 maxSupply, $0.50 mint price NFT koleksiyonu deploy eder.'}
+                          </p>
+                          {deployedLogoNftAddr && (
+                            <div className="bg-white/10 rounded-lg p-2 mb-2 text-xs break-all font-mono space-y-1">
+                              <p>✅ Kontrat: {deployedLogoNftAddr}</p>
+                              <p className="text-white/70">→ NEXT_PUBLIC_FLAME_NFT olarak Vercel&apos;e kaydet</p>
+                            </div>
+                          )}
+                          <button
+                            onClick={deployLogoNft}
+                            disabled={deployingLogoNft || !NFT_FACTORY_DEPLOYED}
+                            className="w-full bg-white text-orange-600 py-2.5 rounded-lg font-black text-sm hover:bg-white/90 disabled:opacity-50 transition-colors"
+                          >
+                            {deployingLogoNft ? 'Deploying… (1-2 dk)' : FLAME_NFT_ADDRESS ? '🔄 Yeniden Deploy Et' : '🎨 Deploy FlameBase Logo NFT'}
+                          </button>
+                        </div>
 
                         <div className="space-y-2">
                           <a href={`https://basescan.org/address/${CONTRACT_ADDRESS}#writeContract`} target="_blank"
