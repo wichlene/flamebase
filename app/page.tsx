@@ -1,7 +1,8 @@
 'use client'
 
 import { ConnectButton } from '@rainbow-me/rainbowkit'
-import { useAccount, useWriteContract, useReadContract, usePublicClient, useBalance, useSwitchChain, useChainId, useDisconnect } from 'wagmi'
+import { useAccount, useWriteContract, useReadContract, usePublicClient, useBalance, useSwitchChain, useChainId, useDisconnect, useConnect } from 'wagmi'
+import { sdk as fcSdk } from '@farcaster/miniapp-sdk'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { parseEther, formatEther } from 'viem'
 import { base } from 'wagmi/chains'
@@ -169,8 +170,19 @@ function ConnectPrompt({ message, label = 'Connect Wallet' }: { message: string;
 export default function Home() {
   const { address, isConnected } = useAccount()
   const { disconnect } = useDisconnect()
+  const { connect, connectors: wagmiConnectors } = useConnect()
   const chainId = useChainId()
   const { switchChain } = useSwitchChain()
+  const [isInFarcaster, setIsInFarcaster] = useState(false)
+
+  useEffect(() => {
+    fcSdk.isInMiniApp().then(setIsInFarcaster).catch(() => setIsInFarcaster(false))
+  }, [])
+
+  const connectFarcaster = useCallback(() => {
+    const fc = wagmiConnectors.find(c => c.id === 'farcaster')
+    if (fc) connect({ connector: fc, chainId: base.id })
+  }, [connect, wagmiConnectors])
   const [activeTab, setActiveTab] = useState<Tab>('feed')
   const [reelsEverOpened, setReelsEverOpened] = useState(false)
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
@@ -1230,7 +1242,23 @@ export default function Home() {
                 </div>
               </div>
             )}
-            <ConnectButton />
+            {isConnected ? (
+              <button
+                onClick={() => disconnect()}
+                className="w-full flex items-center justify-center gap-2 bg-[#FEE2E2] hover:bg-red-100 text-red-600 font-bold text-sm px-3 py-2.5 rounded-xl transition-colors"
+              >
+                <span>🔌</span><span>Disconnect</span>
+              </button>
+            ) : isInFarcaster ? (
+              <button
+                onClick={connectFarcaster}
+                className="w-full flex items-center justify-center gap-2 bg-[#855DCD] hover:bg-[#7449C2] text-white font-bold text-sm px-3 py-2.5 rounded-xl transition-colors"
+              >
+                <span>🟣</span><span>Connect Farcaster</span>
+              </button>
+            ) : (
+              <ConnectButton />
+            )}
             {/* Language selector + theme toggle */}
             <div className="mt-2 flex gap-2">
               <select value={lang} onChange={e => setLang(e.target.value as Lang)}
@@ -1257,7 +1285,10 @@ export default function Home() {
         <main className="flex-1 md:ml-60 xl:mr-96 min-h-screen border-x border-[#EEF1F5]">
 
           {/* Mobile header */}
-          <header className="md:hidden fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur border-b border-[#E4E7EB] px-4 py-3 flex items-center justify-between gap-2">
+          <header
+            className="md:hidden fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur border-b border-[#E4E7EB] px-4 pb-3 flex items-center justify-between gap-2"
+            style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top, 0px))' }}
+          >
             <div className="flex items-center gap-2">
               <FlameLogo size={32} />
               <span className="font-black text-base text-[#0A0B0D]">FlameBase</span>
@@ -1301,6 +1332,13 @@ export default function Home() {
                 >
                   <span>🔌</span>
                   <span className="hidden sm:inline">Disconnect</span>
+                </button>
+              ) : isInFarcaster ? (
+                <button
+                  onClick={connectFarcaster}
+                  className="flex items-center gap-1.5 bg-[#855DCD] hover:bg-[#7449C2] text-white font-bold text-xs px-3 py-2 rounded-xl transition-colors"
+                >
+                  <span>🟣</span><span>Connect</span>
                 </button>
               ) : (
                 <ConnectButton accountStatus="avatar" chainStatus="none" showBalance={false} />
@@ -1359,7 +1397,7 @@ export default function Home() {
             </div>
           )}
 
-          <div className="pt-[60px] md:pt-0 pb-24 md:pb-10 max-w-2xl mx-auto">
+          <div className="pt-[calc(60px+env(safe-area-inset-top,0px))] md:pt-0 pb-24 md:pb-10 max-w-2xl mx-auto">
 
             {/* ══ FEED ══ */}
             {activeTab === 'feed' && (
