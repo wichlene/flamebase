@@ -309,6 +309,18 @@ export default function Home() {
   // AI post improvement
   const [improving, setImproving] = useState(false)
 
+  const [bookmarks, setBookmarks] = useState<Set<string>>(new Set())
+  const [showBookmarks, setShowBookmarks] = useState(false)
+  const [quotingPost, setQuotingPost] = useState<Post | null>(null)
+  const [showPollCreator, setShowPollCreator] = useState(false)
+  const [pollQuestion, setPollQuestion] = useState('')
+  const [pollOptions, setPollOptions] = useState(['', ''])
+  const [pollVotes, setPollVotes] = useState<Record<string, number>>({})
+  const [boostedPosts, setBoostedPosts] = useState<Record<string, number>>({})
+  const [tokenGateEnabled, setTokenGateEnabled] = useState(false)
+  const [tokenGateAddress, setTokenGateAddress] = useState('')
+  const [tokenGateMin, setTokenGateMin] = useState('1')
+
   // Friends system (stored in localStorage)
   const [following, setFollowing] = useState<Set<string>>(new Set())
 
@@ -457,6 +469,12 @@ export default function Home() {
     if (actStored) {
       try { setSeenActivity(JSON.parse(actStored)) } catch {}
     }
+    const bkStored = localStorage.getItem('flamebase_bookmarks')
+    if (bkStored) { try { setBookmarks(new Set(JSON.parse(bkStored))) } catch {} }
+    const boostStored = localStorage.getItem('flamebase_boosted')
+    if (boostStored) { try { const p = JSON.parse(boostStored); const now = Date.now(); setBoostedPosts(Object.fromEntries(Object.entries(p).filter(([,v]) => (v as number) > now))) } catch {} }
+    const pvStored = localStorage.getItem('flamebase_poll_votes')
+    if (pvStored) { try { setPollVotes(JSON.parse(pvStored)) } catch {} }
   }, [])
 
   // Notifications: detect new likes AND tips on the connected user's posts
@@ -713,6 +731,42 @@ export default function Home() {
     localStorage.setItem('flamebase_hidden_posts', JSON.stringify([...updated]))
   }
 
+  const toggleBookmark = (postId: string) => {
+    const next = new Set(bookmarks)
+    if (next.has(postId)) next.delete(postId); else next.add(postId)
+    setBookmarks(next)
+    localStorage.setItem('flamebase_bookmarks', JSON.stringify([...next]))
+  }
+
+  const quotePost = (post: Post) => {
+    const author = getUsername(post.author)
+    const preview = post.content ? post.content.slice(0, 120) : '📎 media'
+    setNewPost(`\n\n📌 @${author}: "${preview}${post.content.length > 120 ? '…' : ''}"`)
+    setQuotingPost(post)
+    setActiveTab('post')
+  }
+
+  const boostPost = async (postId: string) => {
+    const weiAmount = parseEther((1 / ethPrice).toFixed(10))
+    setLoadingAction(`boost-${postId}`)
+    try {
+      await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'tip', args: [BigInt(postId)], value: weiAmount }, 'boost')
+      const expires = Date.now() + 24 * 60 * 60 * 1000
+      const next = { ...boostedPosts, [postId]: expires }
+      setBoostedPosts(next)
+      localStorage.setItem('flamebase_boosted', JSON.stringify(next))
+      showToast('success', '🚀 Boosted! Post will appear at the top for 24h')
+    } catch { showToast('error', 'Boost failed') }
+    setLoadingAction(null)
+  }
+
+  const votePoll = (postId: string, optionIndex: number) => {
+    if (pollVotes[postId] !== undefined) return
+    const next = { ...pollVotes, [postId]: optionIndex }
+    setPollVotes(next)
+    localStorage.setItem('flamebase_poll_votes', JSON.stringify(next))
+  }
+
   // Avatar upload
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -755,6 +809,18 @@ export default function Home() {
     }
     return true
   })
+
+  const sortedVisiblePosts = (() => {
+    const now = Date.now()
+    if (showBookmarks) return visiblePosts.filter(p => bookmarks.has(p.id.toString()))
+    return [...visiblePosts].sort((a, b) => {
+      const aB = (boostedPosts[a.id.toString()] || 0) > now
+      const bB = (boostedPosts[b.id.toString()] || 0) > now
+      if (aB && !bB) return -1
+      if (!aB && bB) return 1
+      return 0
+    })
+  })()
 
   // Trending hashtags: pull #tags from post content, count by frequency,
   // boost recent posts a bit so yesterday's news doesn't dominate forever.
@@ -1045,6 +1111,11 @@ export default function Home() {
                         <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white" />
                       )}
                     </button>
+                    <button onClick={() => setShowBookmarks(b => !b)}
+                      title={showBookmarks ? 'Show all posts' : 'Show bookmarks'}
+                      className={`w-9 h-9 flex items-center justify-center rounded-full transition-colors ${showBookmarks ? 'bg-[#E6EEFF] text-[#0052FF]' : 'hover:bg-[#F7F9FC]'}`}>
+                      <span className="text-lg">🔖</span>
+                    </button>
                     <button onClick={() => setActiveTab('post')}
                       className="bg-[#0052FF] hover:bg-[#1652F0] text-white px-5 py-2 rounded-xl font-bold text-sm transition-colors shadow-sm">
                       {t('navNewPost')}
@@ -1152,7 +1223,7 @@ export default function Home() {
                   </div>
                 )}
 
-                {visiblePosts.map(post => {
+                {sortedVisiblePosts.map(post => {
                   const key = post.id.toString()
                   const comments = postComments[key] || []
                   const isLiking = loadingAction === `like-${post.id}`
@@ -1178,6 +1249,9 @@ export default function Home() {
                               <span className="text-[#8A919E] text-xs">{post.author.slice(0,6)}...{post.author.slice(-4)}</span>
                               <span className="text-[#8A919E] text-xs">·</span>
                               <span className="text-[#8A919E] text-xs">{timeAgo(post.timestamp)}</span>
+                              {(boostedPosts[key] || 0) > Date.now() && (
+                                <span className="bg-orange-100 text-orange-600 text-[10px] font-black px-2 py-0.5 rounded-full">🚀 Boosted</span>
+                              )}
                               <a href={`https://basescan.org/address/${post.author}`} target="_blank"
                                 className="ml-auto text-[#8A919E] hover:text-[#0052FF] text-xs transition-colors">↗</a>
                               {isOwnPost && (
@@ -1191,20 +1265,75 @@ export default function Home() {
                               )}
                             </div>
 
-                            {post.content && (
-                              <p className="text-[#0A0B0D] text-[15px] leading-relaxed mb-3 whitespace-pre-wrap">
-                                {post.content.split(/(#[\p{L}0-9_]{2,30})/gu).map((part, i) =>
-                                  part.startsWith('#')
-                                    ? <span key={i} role="button" tabIndex={0}
-                                        onClick={(e) => { e.stopPropagation(); setSearchQuery(part.toLowerCase()) }}
-                                        onKeyDown={(e) => { if (e.key === 'Enter') setSearchQuery(part.toLowerCase()) }}
-                                        className="text-[#0052FF] hover:underline cursor-pointer font-semibold">
-                                        {part}
-                                      </span>
-                                    : <span key={i}>{part}</span>
-                                )}
-                              </p>
-                            )}
+                            {post.content && (() => {
+                              const content = post.content
+                              // Poll rendering
+                              const pollMatch = content.match(/^\[POLL\](.*?)\[OPTIONS\](.*?)\[\/POLL\]([\s\S]*)/);
+                              if (pollMatch) {
+                                const question = pollMatch[1].trim()
+                                const options = pollMatch[2].split('|').map((o: string) => o.trim())
+                                const voted = pollVotes[key]
+                                const totalVotes = voted !== undefined ? options.length : 0
+                                return (
+                                  <div className="mb-3">
+                                    {pollMatch[3].trim() && <p className="text-[#0A0B0D] text-[15px] leading-relaxed mb-2 whitespace-pre-wrap">{pollMatch[3].trim()}</p>}
+                                    <div className="bg-[#F7F9FC] border border-[#E4E7EB] rounded-2xl p-4">
+                                      <p className="font-bold text-[#0A0B0D] mb-3">📊 {question}</p>
+                                      <div className="space-y-2">
+                                        {options.map((opt: string, i: number) => {
+                                          const isVoted = voted === i
+                                          const pct = voted !== undefined ? (isVoted ? 100 : 0) : null
+                                          return (
+                                            <button key={i} onClick={() => isConnected && votePoll(key, i)}
+                                              disabled={voted !== undefined || !isConnected}
+                                              className={`w-full text-left rounded-xl px-4 py-2.5 text-sm font-semibold transition-all relative overflow-hidden border ${isVoted ? 'border-[#0052FF] text-[#0052FF]' : 'border-[#E4E7EB] text-[#0A0B0D] hover:border-[#0052FF]'}`}>
+                                              {pct !== null && <div className={`absolute inset-0 ${isVoted ? 'bg-[#E6EEFF]' : 'bg-[#F7F9FC]'}`} style={{ width: `${pct}%` }} />}
+                                              <span className="relative">{opt} {isVoted && '✓'}</span>
+                                              {pct !== null && <span className="relative float-right text-[#8A919E] text-xs">{pct}%</span>}
+                                            </button>
+                                          )
+                                        })}
+                                      </div>
+                                      {voted === undefined && isConnected && <p className="text-[10px] text-[#8A919E] mt-2">Tap to vote</p>}
+                                      {!isConnected && <p className="text-[10px] text-[#8A919E] mt-2">Connect wallet to vote</p>}
+                                    </div>
+                                  </div>
+                                )
+                              }
+                              // Token gate rendering
+                              const gateMatch = content.match(/^\[GATE:(0x[a-fA-F0-9]{40}):(\d+)\]([\s\S]*)/)
+                              if (gateMatch) {
+                                const tokenAddr = gateMatch[1]
+                                const minBal = BigInt(gateMatch[2])
+                                const hiddenContent = gateMatch[3].trim()
+                                return (
+                                  <div className="mb-3">
+                                    <div className="bg-[#FFF8E6] border border-[#FFD97D] rounded-2xl p-4">
+                                      <p className="font-bold text-[#856404] text-sm mb-1">🔒 Token Gated Post</p>
+                                      <p className="text-[#856404] text-xs">Requires {minBal.toString()} of {tokenAddr.slice(0,8)}…{tokenAddr.slice(-4)}</p>
+                                      {isConnected && address && <p className="text-[#856404] text-xs mt-1 opacity-60">(Token balance check coming soon)</p>}
+                                      {!isConnected && <p className="text-[#856404] text-xs mt-1 opacity-60">Connect wallet to check access</p>}
+                                    </div>
+                                    <p className="text-[#0A0B0D] text-[15px] leading-relaxed mt-2 whitespace-pre-wrap">{hiddenContent}</p>
+                                  </div>
+                                )
+                              }
+                              // Normal content: hashtags + @mentions
+                              return (
+                                <p className="text-[#0A0B0D] text-[15px] leading-relaxed mb-3 whitespace-pre-wrap">
+                                  {content.split(/(#[\p{L}0-9_]{2,30}|@[\w]+)/gu).map((part, i) =>
+                                    part.startsWith('#')
+                                      ? <span key={i} role="button" tabIndex={0}
+                                          onClick={(e) => { e.stopPropagation(); setSearchQuery(part.toLowerCase()) }}
+                                          onKeyDown={(e) => { if (e.key === 'Enter') setSearchQuery(part.toLowerCase()) }}
+                                          className="text-[#0052FF] hover:underline cursor-pointer font-semibold">{part}</span>
+                                      : part.startsWith('@')
+                                        ? <span key={i} className="text-[#0052FF] font-semibold">{part}</span>
+                                        : <span key={i}>{part}</span>
+                                  )}
+                                </p>
+                              )
+                            })()}
 
                             {post.ipfsHash && (
                               <div className="rounded-2xl overflow-hidden mb-3 border border-[#E4E7EB]">
@@ -1272,6 +1401,24 @@ export default function Home() {
                                   )
                                 })()}
                               </div>
+
+                              <button onClick={() => toggleBookmark(key)}
+                                title={bookmarks.has(key) ? 'Remove bookmark' : 'Bookmark'}
+                                className={`flex items-center gap-1 rounded-xl px-3 py-2 text-sm transition-all ${bookmarks.has(key) ? 'text-[#0052FF] bg-[#E6EEFF]' : 'text-[#5B6271] hover:text-[#0052FF] hover:bg-[#E6EEFF]'}`}>
+                                <span className="text-lg">🔖</span>
+                              </button>
+                              <button onClick={() => quotePost(post)}
+                                title="Quote post"
+                                className="flex items-center gap-1 text-[#5B6271] hover:text-[#0052FF] hover:bg-[#E6EEFF] rounded-xl px-3 py-2 text-sm transition-all">
+                                <span className="text-lg">💬</span>
+                              </button>
+                              {isConnected && (
+                                <button onClick={() => boostPost(key)} disabled={loadingAction === `boost-${key}` || !isConnected || (boostedPosts[key] || 0) > Date.now()}
+                                  title="Boost post ($1)"
+                                  className={`flex items-center gap-1 rounded-xl px-3 py-2 text-sm transition-all disabled:opacity-40 ${(boostedPosts[key] || 0) > Date.now() ? 'text-orange-500 bg-orange-50' : 'text-[#5B6271] hover:text-orange-500 hover:bg-orange-50'}`}>
+                                  <span className="text-lg">🚀</span>
+                                </button>
+                              )}
 
                               <div className="flex items-center gap-1 ml-auto">
                                 {[0.5, 1, 5].map(amt => (
