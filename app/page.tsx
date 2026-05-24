@@ -472,7 +472,7 @@ export default function Home() {
     const bkStored = localStorage.getItem('flamebase_bookmarks')
     if (bkStored) { try { setBookmarks(new Set(JSON.parse(bkStored))) } catch {} }
     const boostStored = localStorage.getItem('flamebase_boosted')
-    if (boostStored) { try { const p = JSON.parse(boostStored); const now = Date.now(); setBoostedPosts(Object.fromEntries(Object.entries(p).filter(([,v]) => (v as number) > now))) } catch {} }
+    if (boostStored) { try { const p = JSON.parse(boostStored) as Record<string, number>; const now = Date.now(); setBoostedPosts(Object.fromEntries(Object.entries(p).filter(([,v]) => v > now))) } catch {} }
     const pvStored = localStorage.getItem('flamebase_poll_votes')
     if (pvStored) { try { setPollVotes(JSON.parse(pvStored)) } catch {} }
   }, [])
@@ -646,6 +646,8 @@ export default function Home() {
       setNewPost(''); setSelectedFile(null); setPreviewUrl(null)
       setTimeout(() => refetchCount(), 3000)
       setActiveTab('feed')
+      setQuotingPost(null)
+      setShowPollCreator(false)
       SFX.post()
       showToast('success', 'Post published — confirming on Base…')
     } catch (e) {
@@ -1273,7 +1275,6 @@ export default function Home() {
                                 const question = pollMatch[1].trim()
                                 const options = pollMatch[2].split('|').map((o: string) => o.trim())
                                 const voted = pollVotes[key]
-                                const totalVotes = voted !== undefined ? options.length : 0
                                 return (
                                   <div className="mb-3">
                                     {pollMatch[3].trim() && <p className="text-[#0A0B0D] text-[15px] leading-relaxed mb-2 whitespace-pre-wrap">{pollMatch[3].trim()}</p>}
@@ -1540,6 +1541,16 @@ export default function Home() {
                         <p className="text-xs text-[#5B6271]">Post fee: $0.04</p>
                       </div>
                     </div>
+                    {quotingPost && (
+                      <div className="mx-4 mt-3 p-3 bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl text-sm">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-[10px] font-black text-[#8A919E] uppercase">Quoting</span>
+                          <span className="font-bold text-[#0A0B0D] text-xs">{getUsername(quotingPost.author)}</span>
+                          <button onClick={() => { setQuotingPost(null); setNewPost('') }} className="ml-auto text-[#8A919E] hover:text-red-500 text-xs">✕</button>
+                        </div>
+                        <p className="text-[#5B6271] text-xs line-clamp-2">{quotingPost.content || '📎 media'}</p>
+                      </div>
+                    )}
                     <textarea placeholder={t('postPlaceholder')} value={newPost}
                       onChange={e => setNewPost(e.target.value)} rows={6}
                       className="w-full bg-transparent px-5 py-4 text-[#0A0B0D] placeholder-[#8A919E] resize-none focus:outline-none text-[16px] leading-relaxed" />
@@ -1552,6 +1563,62 @@ export default function Home() {
                         )}
                         <button onClick={() => { setSelectedFile(null); setPreviewUrl(null) }}
                           className="absolute top-3 right-3 bg-black/70 backdrop-blur rounded-full w-8 h-8 flex items-center justify-center text-white text-sm hover:bg-black transition-colors">✕</button>
+                      </div>
+                    )}
+                    {showPollCreator && (
+                      <div className="px-5 py-3 border-t border-[#EEF1F5] bg-[#FAFBFD] space-y-2">
+                        <p className="text-xs font-black text-[#5B6271] uppercase tracking-wide">📊 Poll</p>
+                        <input value={pollQuestion} onChange={e => setPollQuestion(e.target.value)}
+                          placeholder="Poll question..." maxLength={100}
+                          className="w-full bg-white border border-[#E4E7EB] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#0052FF]" />
+                        {pollOptions.map((opt, i) => (
+                          <div key={i} className="flex gap-2">
+                            <input value={opt} onChange={e => { const next = [...pollOptions]; next[i] = e.target.value; setPollOptions(next) }}
+                              placeholder={`Option ${i + 1}`} maxLength={60}
+                              className="flex-1 bg-white border border-[#E4E7EB] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#0052FF]" />
+                            {pollOptions.length > 2 && (
+                              <button onClick={() => setPollOptions(pollOptions.filter((_, j) => j !== i))} className="text-red-400 hover:text-red-600 px-2">✕</button>
+                            )}
+                          </div>
+                        ))}
+                        {pollOptions.length < 4 && (
+                          <button onClick={() => setPollOptions([...pollOptions, ''])} className="text-[#0052FF] text-xs font-bold hover:underline">+ Add option</button>
+                        )}
+                        <button onClick={() => {
+                          if (!pollQuestion.trim() || pollOptions.filter(o => o.trim()).length < 2) return
+                          const validOpts = pollOptions.filter(o => o.trim())
+                          const pollStr = `[POLL]${pollQuestion}[OPTIONS]${validOpts.join('|')}[/POLL]`
+                          setNewPost(prev => pollStr + (prev ? '\n\n' + prev : ''))
+                          setShowPollCreator(false)
+                          setPollQuestion('')
+                          setPollOptions(['', ''])
+                        }} disabled={!pollQuestion.trim() || pollOptions.filter(o => o.trim()).length < 2}
+                        className="w-full bg-purple-500 hover:bg-purple-600 text-white py-2 rounded-lg text-xs font-bold disabled:opacity-40 transition-colors">
+                          Add Poll to Post
+                        </button>
+                      </div>
+                    )}
+                    {tokenGateEnabled && (
+                      <div className="px-5 py-3 border-t border-[#EEF1F5] bg-[#FFFBEB] space-y-2">
+                        <p className="text-xs font-black text-yellow-700 uppercase tracking-wide">🔒 Token Gate</p>
+                        <input value={tokenGateAddress} onChange={e => setTokenGateAddress(e.target.value)}
+                          placeholder="ERC-20 token address (0x...)" maxLength={42}
+                          className="w-full bg-white border border-yellow-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-yellow-500" />
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-yellow-700">Min balance:</span>
+                          <input value={tokenGateMin} onChange={e => setTokenGateMin(e.target.value)}
+                            type="number" min="1"
+                            className="w-24 bg-white border border-yellow-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-yellow-500" />
+                        </div>
+                        <button onClick={() => {
+                          if (!tokenGateAddress.match(/^0x[a-fA-F0-9]{40}$/)) { showToast('error', 'Invalid token address'); return }
+                          const prefix = `[GATE:${tokenGateAddress}:${tokenGateMin}]`
+                          setNewPost(prev => prefix + (prev || ''))
+                          setTokenGateEnabled(false)
+                          setTokenGateAddress('')
+                        }} className="w-full bg-yellow-500 hover:bg-yellow-600 text-white py-2 rounded-lg text-xs font-bold transition-colors">
+                          Apply Token Gate
+                        </button>
                       </div>
                     )}
                     <div className="flex items-center gap-3 px-4 py-3 border-t border-[#EEF1F5]">
@@ -1578,6 +1645,16 @@ export default function Home() {
                         title="Improve with AI"
                         className="flex items-center gap-1.5 bg-gradient-to-r from-[#7B3FE4] to-[#0052FF] text-white px-3 py-1.5 rounded-lg text-xs font-bold disabled:opacity-40 transition-all hover:opacity-90 flex-shrink-0">
                         {improving ? '…' : '✨ AI'}
+                      </button>
+                      <button type="button" onClick={() => setShowPollCreator(p => !p)}
+                        title="Add poll"
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex-shrink-0 ${showPollCreator ? 'bg-purple-100 text-purple-600' : 'bg-[#F0F2F5] text-[#5B6271] hover:bg-purple-100 hover:text-purple-600'}`}>
+                        📊 Poll
+                      </button>
+                      <button type="button" onClick={() => setTokenGateEnabled(t => !t)}
+                        title="Token gate this post"
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex-shrink-0 ${tokenGateEnabled ? 'bg-yellow-100 text-yellow-700' : 'bg-[#F0F2F5] text-[#5B6271] hover:bg-yellow-100 hover:text-yellow-700'}`}>
+                        🔒 Gate
                       </button>
                       <EmojiPicker onSelect={e => setNewPost(prev => prev + e)} />
                       <span className="text-[#8A919E] text-xs flex-1">{newPost.length}/500</span>
@@ -1932,6 +2009,10 @@ export default function Home() {
             <p className="text-center text-xs text-[#C5CBD3]">
               © {new Date().getFullYear()} FlameBase. {t('footerRights')} {t('footerSecured')}
             </p>
+          </footer>
+          <footer className="border-t border-[#EEF1F5] py-6 px-4 text-center text-xs text-[#8A919E] mt-8">
+            <p>FlameBase · On-chain social on Base</p>
+            <p className="mt-1">Contact: <a href="mailto:emrckc52@gmail.com" className="text-[#0052FF] hover:underline">emrckc52@gmail.com</a></p>
           </footer>
         </main>
 
