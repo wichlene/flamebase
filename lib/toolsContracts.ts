@@ -28,7 +28,19 @@ export const NFT_FACTORY_ABI = [
   { name: 'DEPLOY_FEE', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
   { name: 'deployNFT', type: 'function', stateMutability: 'payable', inputs: [{ name: '_name', type: 'string' }, { name: '_symbol', type: 'string' }, { name: '_maxSupply', type: 'uint256' }, { name: '_mintPrice', type: 'uint256' }, { name: '_baseURI', type: 'string' }], outputs: [{ type: 'address' }] },
   { name: 'collectionCount', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
+  { name: 'getCollections', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ components: [{ name: 'addr', type: 'address' }, { name: 'name', type: 'string' }, { name: 'symbol', type: 'string' }, { name: 'creator', type: 'address' }, { name: 'maxSupply', type: 'uint256' }, { name: 'mintPrice', type: 'uint256' }], type: 'tuple[]' }] },
 ] as const
+
+export const FLAME_NFT_ABI = [
+  { name: 'mint', type: 'function', stateMutability: 'payable', inputs: [], outputs: [{ type: 'uint256' }] },
+  { name: 'totalSupply', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
+  { name: 'maxSupply', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
+  { name: 'mintPrice', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
+  { name: 'name', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'string' }] },
+  { name: 'balanceOf', type: 'function', stateMutability: 'view', inputs: [{ name: '', type: 'address' }], outputs: [{ type: 'uint256' }] },
+] as const
+
+export const FLAME_NFT_ADDRESS = (process.env.NEXT_PUBLIC_FLAME_NFT || '') as `0x${string}`
 
 export const DAO_ABI = [
   { name: 'PROPOSE_FEE', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },

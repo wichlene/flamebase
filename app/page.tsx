@@ -8,7 +8,7 @@ import { base } from 'wagmi/chains'
 import dynamic from 'next/dynamic'
 import { CONTRACT_ADDRESS, CONTRACT_ABI } from '../lib/contract'
 import { T, LANG_LABELS, type Lang } from '../lib/i18n'
-import { TOOLS_ADDRESS, TOKEN_FACTORY_ADDRESS, NFT_FACTORY_ADDRESS, DAO_ADDRESS, TOOLS_ABI, TOKEN_FACTORY_ABI, NFT_FACTORY_ABI, DAO_ABI } from '../lib/toolsContracts'
+import { TOOLS_ADDRESS, TOKEN_FACTORY_ADDRESS, NFT_FACTORY_ADDRESS, DAO_ADDRESS, TOOLS_ABI, TOKEN_FACTORY_ABI, NFT_FACTORY_ABI, DAO_ABI, FLAME_NFT_ADDRESS, FLAME_NFT_ABI } from '../lib/toolsContracts'
 import { SFX, isSoundEnabled, setSoundEnabled } from '../lib/sounds'
 import { ToastStack, type ToastItem, type ToastKind } from '../components/Toast'
 
@@ -338,6 +338,9 @@ export default function Home() {
   const [nfts, setNfts] = useState<Array<{name: string; image: string; collection: string}>>([])
   const [loadingNfts, setLoadingNfts] = useState(false)
   const [nftsFetched, setNftsFetched] = useState(false)
+  const [deployingLogoNft, setDeployingLogoNft] = useState(false)
+  const [mintingLogoNft, setMintingLogoNft] = useState(false)
+  const [deployedLogoNftAddr, setDeployedLogoNftAddr] = useState<string>('')
 
   // Friends system (stored in localStorage)
   const [following, setFollowing] = useState<Set<string>>(new Set())
@@ -454,6 +457,36 @@ export default function Home() {
     abi: DAO_ABI,
     functionName: 'proposalCount',
     query: { enabled: DAO_DEPLOYED },
+  })
+
+  // Resolve which Logo NFT address to use: env var, or locally deployed (admin only, current session)
+  const logoNftAddr = (FLAME_NFT_ADDRESS || deployedLogoNftAddr) as `0x${string}`
+  const logoNftDeployed = logoNftAddr.length > 0
+
+  const { data: logoNftTotalSupply, refetch: refetchLogoNftSupply } = useReadContract({
+    address: logoNftAddr,
+    abi: FLAME_NFT_ABI,
+    functionName: 'totalSupply',
+    query: { enabled: logoNftDeployed },
+  })
+  const { data: logoNftMaxSupply } = useReadContract({
+    address: logoNftAddr,
+    abi: FLAME_NFT_ABI,
+    functionName: 'maxSupply',
+    query: { enabled: logoNftDeployed },
+  })
+  const { data: logoNftMintPrice } = useReadContract({
+    address: logoNftAddr,
+    abi: FLAME_NFT_ABI,
+    functionName: 'mintPrice',
+    query: { enabled: logoNftDeployed },
+  })
+  const { data: logoNftBalance, refetch: refetchLogoNftBalance } = useReadContract({
+    address: logoNftAddr,
+    abi: FLAME_NFT_ABI,
+    functionName: 'balanceOf',
+    args: address ? [address] : undefined,
+    query: { enabled: logoNftDeployed && !!address },
   })
 
   const hasProfile = myProfile && myProfile[2]
@@ -887,6 +920,67 @@ export default function Home() {
     setLoadingNfts(false)
   }
 
+  // Deploy the official FlameBase Logo NFT collection (admin only)
+  const deployLogoNft = async () => {
+    if (deployingLogoNft || !NFT_FACTORY_DEPLOYED) return
+    setDeployingLogoNft(true)
+    try {
+      // 1. Setup IPFS metadata
+      showToast('success', 'Uploading logo to IPFS…')
+      const setupRes = await fetch('/api/setup-logo-nft', { method: 'POST' })
+      const setupData = await setupRes.json()
+      if (!setupRes.ok || !setupData.baseURI) {
+        showToast('error', 'IPFS setup failed')
+        setDeployingLogoNft(false)
+        return
+      }
+      // 2. Deploy via factory — $0.50 mint price
+      const mintPriceWei = parseEther((0.50 / ethPrice).toFixed(10))
+      showToast('success', 'Deploying NFT collection on Base…')
+      await writeContractAsync({
+        address: NFT_FACTORY_ADDRESS, abi: NFT_FACTORY_ABI, functionName: 'deployNFT',
+        args: ['FlameBase Logo', 'FLAME', 10000n, mintPriceWei, setupData.baseURI],
+        value: fixedFee,
+      }, 'deployLogoNft')
+      showToast('success', '🎉 Logo NFT collection deployed! Find address in factory.')
+      // Wait a bit and try to grab the latest collection address from factory
+      setTimeout(async () => {
+        try {
+          if (!publicClient) return
+          const cols = await publicClient.readContract({
+            address: NFT_FACTORY_ADDRESS, abi: NFT_FACTORY_ABI, functionName: 'getCollections',
+          }) as unknown as Array<{ addr: string; name: string; creator: string }>
+          const mine = cols.filter(c => c.creator.toLowerCase() === address?.toLowerCase() && c.name === 'FlameBase Logo').pop()
+          if (mine) {
+            setDeployedLogoNftAddr(mine.addr)
+            showToast('success', `📍 Address: ${mine.addr.slice(0,8)}…${mine.addr.slice(-4)} — save it as NEXT_PUBLIC_FLAME_NFT`)
+          }
+        } catch {}
+      }, 5000)
+    } catch (e) {
+      console.error(e)
+      showToast('error', 'Deploy failed')
+    }
+    setDeployingLogoNft(false)
+  }
+
+  // Mint the FlameBase Logo NFT (public — any wallet)
+  const mintLogoNft = async () => {
+    if (mintingLogoNft || !logoNftDeployed || !logoNftMintPrice) return
+    setMintingLogoNft(true)
+    try {
+      await writeContractAsync({
+        address: logoNftAddr, abi: FLAME_NFT_ABI, functionName: 'mint',
+        value: logoNftMintPrice as bigint,
+      }, 'mintLogoNft')
+      showToast('success', '🎉 Minted! Welcome to the FlameBase NFT family')
+      setTimeout(() => { refetchLogoNftSupply(); refetchLogoNftBalance() }, 3000)
+    } catch {
+      showToast('error', 'Mint failed')
+    }
+    setMintingLogoNft(false)
+  }
+
   const quotePost = (post: Post) => {
     const author = getUsername(post.author)
     const preview = post.content ? post.content.slice(0, 120) : '📎 media'
@@ -1300,6 +1394,44 @@ export default function Home() {
                     className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-4 py-2.5 text-sm text-[#0A0B0D] placeholder-[#8A919E] focus:outline-none focus:border-[#0052FF]"
                   />
                 </div>
+
+                {/* FlameBase Logo NFT mint card */}
+                {logoNftDeployed && (
+                  <div className="mx-4 my-3 bg-gradient-to-br from-orange-500 via-red-500 to-pink-500 rounded-2xl p-5 text-white shadow-lg">
+                    <div className="flex items-center gap-4">
+                      <img src="/logo.png" alt="FlameBase Logo" className="w-16 h-16 rounded-xl bg-white/10 p-1.5 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-black text-base">🎨 FlameBase Logo NFT</p>
+                        <p className="text-white/80 text-xs mt-0.5">Official collection on Base</p>
+                        {logoNftTotalSupply !== undefined && logoNftMaxSupply !== undefined && (
+                          <div className="mt-2">
+                            <div className="flex justify-between text-[10px] mb-1">
+                              <span>Minted</span>
+                              <span className="font-bold">{(logoNftTotalSupply as bigint).toString()} / {(logoNftMaxSupply as bigint).toString()}</span>
+                            </div>
+                            <div className="w-full h-1.5 bg-white/20 rounded-full overflow-hidden">
+                              <div className="h-full bg-white" style={{ width: `${Math.min(100, Number((logoNftTotalSupply as bigint) * 100n / (logoNftMaxSupply as bigint)))}%` }} />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="mt-3 flex items-center gap-2">
+                      {logoNftBalance !== undefined && (logoNftBalance as bigint) > 0n && (
+                        <span className="bg-white/20 text-white text-xs font-bold px-2.5 py-1.5 rounded-lg">
+                          ✨ You own {(logoNftBalance as bigint).toString()}
+                        </span>
+                      )}
+                      <button
+                        onClick={mintLogoNft}
+                        disabled={!isConnected || mintingLogoNft || (logoNftTotalSupply !== undefined && logoNftMaxSupply !== undefined && (logoNftTotalSupply as bigint) >= (logoNftMaxSupply as bigint))}
+                        className="ml-auto bg-white hover:bg-white/90 text-orange-600 disabled:opacity-50 font-black text-sm px-5 py-2.5 rounded-xl transition-colors shadow-sm"
+                      >
+                        {mintingLogoNft ? 'Minting…' : !isConnected ? 'Connect to mint' : (logoNftTotalSupply !== undefined && logoNftMaxSupply !== undefined && (logoNftTotalSupply as bigint) >= (logoNftMaxSupply as bigint)) ? 'Sold out' : '🔥 Mint $0.50'}
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Trending hashtags — clickable chips that filter the feed */}
                 {trendingTags.length > 0 && (
@@ -2184,6 +2316,27 @@ export default function Home() {
                             {loading ? 'Setting prices… (4 tx)' : '🚀 Set all fees to $0.04'}
                           </button>
                         </div>
+                        {/* Deploy FlameBase Logo NFT */}
+                        <div className="bg-gradient-to-br from-orange-500 to-red-500 rounded-xl p-4 mb-3 text-white">
+                          <p className="font-black text-sm mb-1">🎨 Deploy Logo NFT Collection</p>
+                          <p className="text-white/80 text-xs mb-3">
+                            FlameBase logosunu IPFS&apos;e yükler + 10.000 maxSupply, $0.50 mint price NFT koleksiyonu deploy eder. Mint geliri sana gelir.
+                          </p>
+                          {deployedLogoNftAddr && (
+                            <div className="bg-white/10 rounded-lg p-2 mb-2 text-xs break-all font-mono">
+                              ✅ {deployedLogoNftAddr}
+                              <p className="font-sans mt-1 text-white/70 text-[10px]">⚠️ Bu adresi NEXT_PUBLIC_FLAME_NFT env var olarak kaydet</p>
+                            </div>
+                          )}
+                          <button
+                            onClick={deployLogoNft}
+                            disabled={deployingLogoNft || !NFT_FACTORY_DEPLOYED}
+                            className="w-full bg-white text-orange-600 py-2.5 rounded-lg font-black text-sm hover:bg-white/90 disabled:opacity-50 transition-colors"
+                          >
+                            {deployingLogoNft ? 'Deploying… (2-3 dk)' : '🎨 Deploy FlameBase Logo NFT'}
+                          </button>
+                        </div>
+
                         <div className="space-y-2">
                           <a href={`https://basescan.org/address/${CONTRACT_ADDRESS}#writeContract`} target="_blank"
                             className="flex items-center justify-between bg-[#E6EEFF] border border-[#D6E2FF] text-[#0052FF] py-3 px-4 rounded-xl text-sm hover:bg-[#D6E2FF] transition-colors font-semibold">
