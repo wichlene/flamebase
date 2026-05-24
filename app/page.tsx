@@ -223,6 +223,9 @@ export default function Home() {
   const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({})
   const [postComments, setPostComments] = useState<Record<string, Comment[]>>({})
   const [replyingTo, setReplyingTo] = useState<Record<string, string>>({})
+  const [nextPostIndex, setNextPostIndex] = useState<number | null>(null)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [allPostsLoaded, setAllPostsLoaded] = useState(false)
   const [lang, setLang] = useState<Lang>('en')
   const t = (key: string, vars?: Record<string, string>) => {
     let str = T[lang][key] || T['en'][key] || key
@@ -538,34 +541,47 @@ export default function Home() {
     } catch { return null }
   }, [publicClient])
 
+  const BATCH = 20
+
+  const loadPostsBatch = useCallback(async (fromIndex: number, append: boolean) => {
+    if (!publicClient) return
+    setLoadingMore(true)
+    const fetched: Post[] = []
+    const authors = new Set<string>()
+    const stopAt = Math.max(0, fromIndex - BATCH + 1)
+    for (let i = fromIndex; i >= stopAt; i--) {
+      try {
+        const post = await publicClient.readContract({
+          address: CONTRACT_ADDRESS, abi: CONTRACT_ABI,
+          functionName: 'getPost', args: [BigInt(i)],
+        }) as Post
+        fetched.push(post)
+        authors.add(post.author.toLowerCase())
+      } catch {}
+    }
+    if (append) setPosts(prev => [...prev, ...fetched])
+    else setPosts(fetched)
+    const nextIdx = stopAt - 1
+    if (nextIdx < 0) { setAllPostsLoaded(true); setNextPostIndex(null) }
+    else setNextPostIndex(nextIdx)
+    const map: Record<string, ProfileData> = {}
+    for (const a of authors) {
+      const p = await fetchProfileData(a)
+      if (p) map[a] = p
+    }
+    setProfiles(prev => ({ ...prev, ...map }))
+    setLoadingMore(false)
+  }, [publicClient, fetchProfileData])
+
   useEffect(() => {
     if (!postCount || !publicClient) return
-    const run = async () => {
-      const count = Number(postCount)
-      const fetched: Post[] = []
-      const authors = new Set<string>()
-      for (let i = count - 1; i >= Math.max(0, count - 30); i--) {
-        try {
-          const post = await publicClient.readContract({
-            address: CONTRACT_ADDRESS,
-            abi: CONTRACT_ABI,
-            functionName: 'getPost',
-            args: [BigInt(i)],
-          }) as Post
-          fetched.push(post)
-          authors.add(post.author.toLowerCase())
-        } catch {}
-      }
-      setPosts(fetched)
-      const map: Record<string, ProfileData> = {}
-      for (const a of authors) {
-        const p = await fetchProfileData(a)
-        if (p) map[a] = p
-      }
-      setProfiles(map)
-    }
-    run()
-  }, [postCount, publicClient, fetchProfileData])
+    const count = Number(postCount)
+    if (count === 0) return
+    setAllPostsLoaded(false)
+    setNextPostIndex(null)
+    setPosts([])
+    loadPostsBatch(count - 1, false)
+  }, [postCount, publicClient, loadPostsBatch])
 
   const getUsername = (addr: string) => {
     const p = profiles[addr.toLowerCase()]
@@ -1225,7 +1241,20 @@ export default function Home() {
                   </div>
                 )}
 
-                {sortedVisiblePosts.map(post => {
+                {loadingMore && posts.length === 0 && (
+                  <div className="divide-y divide-[#EEF1F5]">
+                    {Array.from({ length: 4 }).map((_, i) => (
+                      <div key={i} className="p-4 flex gap-3">
+                        <div className="skeleton w-10 h-10 rounded-full flex-shrink-0" />
+                        <div className="flex-1 space-y-2">
+                          <div className="skeleton h-3 w-24" /><div className="skeleton h-4 w-full" /><div className="skeleton h-4 w-3/4" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {sortedVisiblePosts.map((post) => {
                   const key = post.id.toString()
                   const comments = postComments[key] || []
                   const isLiking = loadingAction === `like-${post.id}`
@@ -1506,6 +1535,27 @@ export default function Home() {
                     </article>
                   )
                 })}
+
+                {/* Load more / all loaded */}
+                {activeTab === 'feed' && !showBookmarks && !searchQuery && posts.length > 0 && (
+                  <div className="py-6 flex justify-center">
+                    {allPostsLoaded ? (
+                      <p className="text-[#8A919E] text-sm">🎉 Tüm postlar yüklendi</p>
+                    ) : (
+                      <button
+                        onClick={() => nextPostIndex !== null && loadPostsBatch(nextPostIndex, true)}
+                        disabled={loadingMore || nextPostIndex === null}
+                        className="flex items-center gap-2 bg-[#F0F4FF] hover:bg-[#E6EEFF] text-[#0052FF] font-bold text-sm px-6 py-3 rounded-2xl transition-colors disabled:opacity-50">
+                        {loadingMore ? (
+                          <><span className="animate-spin">⏳</span> Yükleniyor…</>
+                        ) : (
+                          <>⬇️ Daha fazla yükle</>
+                        )}
+                      </button>
+                    )}
+                  </div>
+                )}
+
               </div>
             )}
 
