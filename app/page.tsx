@@ -749,7 +749,7 @@ export default function Home() {
   }
 
   const boostPost = async (postId: string) => {
-    const weiAmount = parseEther((1 / ethPrice).toFixed(10))
+    const weiAmount = parseEther((0.09 / ethPrice).toFixed(10))
     setLoadingAction(`boost-${postId}`)
     try {
       await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'tip', args: [BigInt(postId)], value: weiAmount }, 'boost')
@@ -1415,7 +1415,7 @@ export default function Home() {
                               </button>
                               {isConnected && (
                                 <button onClick={() => boostPost(key)} disabled={loadingAction === `boost-${key}` || !isConnected || (boostedPosts[key] || 0) > Date.now()}
-                                  title="Boost post ($1)"
+                                  title="Boost post ($0.09)"
                                   className={`flex items-center gap-1 rounded-xl px-3 py-2 text-sm transition-all disabled:opacity-40 ${(boostedPosts[key] || 0) > Date.now() ? 'text-orange-500 bg-orange-50' : 'text-[#5B6271] hover:text-orange-500 hover:bg-orange-50'}`}>
                                   <span className="text-lg">🚀</span>
                                 </button>
