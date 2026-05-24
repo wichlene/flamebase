@@ -2,7 +2,7 @@
 
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { useAccount, useWriteContract, useReadContract, usePublicClient, useBalance, useSwitchChain, useChainId, useDisconnect } from 'wagmi'
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { parseEther, formatEther } from 'viem'
 import { base } from 'wagmi/chains'
 import dynamic from 'next/dynamic'
@@ -324,6 +324,21 @@ export default function Home() {
   const [tokenGateAddress, setTokenGateAddress] = useState('')
   const [tokenGateMin, setTokenGateMin] = useState('1')
 
+  // ── Feature state ──
+  const [pushEnabled, setPushEnabled] = useState(false)
+  const [translatedPosts, setTranslatedPosts] = useState<Record<string, string>>({})
+  const [translatingPost, setTranslatingPost] = useState<string | null>(null)
+  const [profileBanners, setProfileBanners] = useState<Record<string, string>>({})
+  const [uploadingBanner, setUploadingBanner] = useState(false)
+  const [premiumUsers, setPremiumUsers] = useState<Set<string>>(new Set())
+  const [buyingPremium, setBuyingPremium] = useState(false)
+  const [postViews, setPostViews] = useState<Record<string, number>>({})
+  const seenInSession = useRef<Set<string>>(new Set())
+  const [ensNames, setEnsNames] = useState<Record<string, string>>({})
+  const [nfts, setNfts] = useState<Array<{name: string; image: string; collection: string}>>([])
+  const [loadingNfts, setLoadingNfts] = useState(false)
+  const [nftsFetched, setNftsFetched] = useState(false)
+
   // Friends system (stored in localStorage)
   const [following, setFollowing] = useState<Set<string>>(new Set())
 
@@ -478,6 +493,13 @@ export default function Home() {
     if (boostStored) { try { const p = JSON.parse(boostStored) as Record<string, number>; const now = Date.now(); setBoostedPosts(Object.fromEntries(Object.entries(p).filter(([,v]) => v > now))) } catch {} }
     const pvStored = localStorage.getItem('flamebase_poll_votes')
     if (pvStored) { try { setPollVotes(JSON.parse(pvStored)) } catch {} }
+    if (localStorage.getItem('flamebase_push') === 'true' && typeof Notification !== 'undefined' && Notification.permission === 'granted') setPushEnabled(true)
+    const bannerStored = localStorage.getItem('flamebase_banners')
+    if (bannerStored) { try { setProfileBanners(JSON.parse(bannerStored)) } catch {} }
+    const premiumStored = localStorage.getItem('flamebase_premium')
+    if (premiumStored) { try { setPremiumUsers(new Set(JSON.parse(premiumStored))) } catch {} }
+    const viewsStored = localStorage.getItem('flamebase_views')
+    if (viewsStored) { try { setPostViews(JSON.parse(viewsStored)) } catch {} }
   }, [])
 
   // Notifications: detect new likes AND tips on the connected user's posts
@@ -527,6 +549,17 @@ export default function Home() {
     localStorage.setItem('flamebase_last_likes', JSON.stringify(nextLikes))
     localStorage.setItem('flamebase_last_tips', JSON.stringify(nextTips))
   }, [posts, address])
+
+  useEffect(() => {
+    if (!pushEnabled || notifications.length === 0) return
+    const latest = notifications[0]
+    if (Date.now() - latest.timestamp < 8000 && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      new Notification('FlameBase 🔥', {
+        body: latest.type === 'tip' ? `💸 You received ${latest.delta} ETH in tips!` : `🔥 +${latest.delta} new flames on your post!`,
+        icon: '/icon.png',
+      })
+    }
+  }, [notifications, pushEnabled])
 
   const fetchProfileData = useCallback(async (addr: string): Promise<ProfileData | null> => {
     if (!publicClient) return null
@@ -583,7 +616,21 @@ export default function Home() {
     loadPostsBatch(count - 1, false)
   }, [postCount, publicClient, loadPostsBatch])
 
+  useEffect(() => {
+    const addrs = [...new Set(posts.map(p => p.author.toLowerCase()))]
+    addrs.forEach(addr => {
+      if (ensNames[addr] !== undefined) return
+      setEnsNames(prev => ({ ...prev, [addr]: '' })) // mark as loading
+      fetch(`https://api.ensideas.com/ens/resolve/${addr}`)
+        .then(r => r.json())
+        .then(d => { if (d?.name) setEnsNames(prev => ({ ...prev, [addr]: d.name })) })
+        .catch(() => {})
+    })
+  }, [posts]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const getUsername = (addr: string) => {
+    const ens = ensNames[addr.toLowerCase()]
+    if (ens) return ens
     const p = profiles[addr.toLowerCase()]
     return p?.exists ? p.username : `${addr.slice(0, 6)}...${addr.slice(-4)}`
   }
@@ -756,6 +803,90 @@ export default function Home() {
     localStorage.setItem('flamebase_bookmarks', JSON.stringify([...next]))
   }
 
+  const requestPush = async () => {
+    if (typeof Notification === 'undefined') { showToast('error', 'Browser notifications not supported'); return }
+    const perm = await Notification.requestPermission()
+    if (perm === 'granted') {
+      setPushEnabled(true)
+      localStorage.setItem('flamebase_push', 'true')
+      showToast('success', '🔔 Push notifications enabled!')
+    } else {
+      showToast('error', 'Notification permission denied')
+    }
+  }
+
+  const translatePost = async (postId: string, content: string) => {
+    if (translatedPosts[postId]) { setTranslatedPosts(prev => { const n = {...prev}; delete n[postId]; return n }); return }
+    setTranslatingPost(postId)
+    try {
+      const res = await fetch('/api/ai', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: [{ role: 'user', content: `Translate the following text to English. Reply with ONLY the translation, nothing else: "${content}"` }] }),
+      })
+      const data = await res.json()
+      if (data.content) setTranslatedPosts(prev => ({ ...prev, [postId]: data.content }))
+    } catch {}
+    setTranslatingPost(null)
+  }
+
+  const uploadBanner = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !address) return
+    setUploadingBanner(true)
+    try {
+      const fd = new FormData(); fd.append('file', file)
+      const res = await fetch('/api/upload', { method: 'POST', body: fd })
+      const data = await res.json()
+      if (data.ipfsHash) {
+        const next = { ...profileBanners, [address.toLowerCase()]: data.ipfsHash }
+        setProfileBanners(next)
+        localStorage.setItem('flamebase_banners', JSON.stringify(next))
+        showToast('success', 'Banner uploaded!')
+      }
+    } catch {}
+    setUploadingBanner(false)
+  }
+
+  const buyPremium = async () => {
+    if (!address || buyingPremium) return
+    setBuyingPremium(true)
+    try {
+      const weiAmount = parseEther((0.09 / ethPrice).toFixed(10))
+      await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'tip', args: [0n], value: weiAmount }, 'premium')
+      const next = new Set(premiumUsers); next.add(address.toLowerCase())
+      setPremiumUsers(next)
+      localStorage.setItem('flamebase_premium', JSON.stringify([...next]))
+      showToast('success', '✨ Premium badge activated!')
+    } catch { showToast('error', 'Purchase failed') }
+    setBuyingPremium(false)
+  }
+
+  const fetchNFTs = async (addr: string) => {
+    setLoadingNfts(true)
+    try {
+      const res = await fetch(`https://base.blockscout.com/api/v2/addresses/${addr}/nft/collections?type=ERC-721,ERC-1155`)
+      const data = await res.json()
+      const items: Array<{name: string; image: string; collection: string}> = []
+      if (data.items) {
+        for (const col of data.items) {
+          const instances = col.token_instances || []
+          for (const t of instances.slice(0, 3)) {
+            items.push({
+              name: t.metadata?.name || col.token?.name || 'NFT',
+              image: t.image_url || t.metadata?.image || '',
+              collection: col.token?.name || '',
+            })
+            if (items.length >= 12) break
+          }
+          if (items.length >= 12) break
+        }
+      }
+      setNfts(items)
+      setNftsFetched(true)
+    } catch { setNftsFetched(true) }
+    setLoadingNfts(false)
+  }
+
   const quotePost = (post: Post) => {
     const author = getUsername(post.author)
     const preview = post.content ? post.content.slice(0, 120) : '📎 media'
@@ -839,6 +970,25 @@ export default function Home() {
       return 0
     })
   })()
+
+  // Track post views — must come after sortedVisiblePosts is declared
+  useEffect(() => {
+    if (activeTab !== 'feed') return
+    const toUpdate: Record<string, number> = {}
+    sortedVisiblePosts.slice(0, 10).forEach(p => {
+      const k = p.id.toString()
+      if (!seenInSession.current.has(k)) {
+        seenInSession.current.add(k)
+        toUpdate[k] = (postViews[k] || 0) + 1
+      }
+    })
+    if (Object.keys(toUpdate).length === 0) return
+    setPostViews(prev => {
+      const next = { ...prev, ...toUpdate }
+      localStorage.setItem('flamebase_views', JSON.stringify(next))
+      return next
+    })
+  }, [sortedVisiblePosts, activeTab]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Trending hashtags: pull #tags from post content, count by frequency,
   // boost recent posts a bit so yesterday's news doesn't dominate forever.
@@ -1277,9 +1427,13 @@ export default function Home() {
                               >
                                 {getUsername(post.author)}
                               </button>
+                              {premiumUsers.has(post.author.toLowerCase()) && <span className="text-yellow-500 text-sm" title="Premium">✨</span>}
                               <span className="text-[#8A919E] text-xs">{post.author.slice(0,6)}...{post.author.slice(-4)}</span>
                               <span className="text-[#8A919E] text-xs">·</span>
                               <span className="text-[#8A919E] text-xs">{timeAgo(post.timestamp)}</span>
+                              {postViews[key] && postViews[key] > 1 && (
+                                <span className="text-[#C5CBD3] text-xs">· 👁 {postViews[key] > 999 ? `${(postViews[key]/1000).toFixed(1)}k` : postViews[key]}</span>
+                              )}
                               {(boostedPosts[key] || 0) > Date.now() && (
                                 <span className="bg-orange-100 text-orange-600 text-[10px] font-black px-2 py-0.5 rounded-full">🚀 Boosted</span>
                               )}
@@ -1365,6 +1519,13 @@ export default function Home() {
                               )
                             })()}
 
+                            {translatedPosts[key] && (
+                              <div className="mb-3 px-3 py-2.5 bg-green-50 border border-green-200 rounded-xl">
+                                <p className="text-[10px] font-black text-green-700 uppercase tracking-wide mb-1">🌐 Translation</p>
+                                <p className="text-[#0A0B0D] text-sm leading-relaxed">{translatedPosts[key]}</p>
+                              </div>
+                            )}
+
                             {post.ipfsHash && (
                               <div className="rounded-2xl overflow-hidden mb-3 border border-[#E4E7EB]">
                                 {post.ipfsHash.startsWith('vid_') ? (
@@ -1432,6 +1593,13 @@ export default function Home() {
                                 })()}
                               </div>
 
+                              {post.content && post.content.length > 5 && (
+                                <button onClick={() => translatePost(key, post.content)}
+                                  title={translatedPosts[key] ? 'Hide translation' : 'Translate post'}
+                                  className={`flex items-center gap-1 rounded-xl px-3 py-2 text-sm transition-all ${translatedPosts[key] ? 'text-green-600 bg-green-50' : 'text-[#5B6271] hover:text-green-600 hover:bg-green-50'}`}>
+                                  <span className="text-lg">{translatingPost === key ? '⏳' : '🌐'}</span>
+                                </button>
+                              )}
                               <button onClick={() => toggleBookmark(key)}
                                 title={bookmarks.has(key) ? 'Remove bookmark' : 'Bookmark'}
                                 className={`flex items-center gap-1 rounded-xl px-3 py-2 text-sm transition-all ${bookmarks.has(key) ? 'text-[#0052FF] bg-[#E6EEFF]' : 'text-[#5B6271] hover:text-[#0052FF] hover:bg-[#E6EEFF]'}`}>
@@ -1808,7 +1976,19 @@ export default function Home() {
                 ) : myProfile ? (
                   <>
                     <div className="bg-white border border-[#E4E7EB] rounded-2xl overflow-hidden shadow-sm">
-                      <div className="h-28 bg-gradient-to-r from-[#0052FF] via-[#1652F0] to-[#4D8FFF]" />
+                      <div className="h-28 relative overflow-hidden group">
+                        {profileBanners[address!.toLowerCase()] ? (
+                          <IpfsImage hash={profileBanners[address!.toLowerCase()]} className="w-full h-full object-cover" alt="banner" />
+                        ) : (
+                          <div className="w-full h-full bg-gradient-to-r from-[#0052FF] via-[#1652F0] to-[#4D8FFF]" />
+                        )}
+                        <label className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-colors cursor-pointer">
+                          <span className="opacity-0 group-hover:opacity-100 bg-black/60 text-white text-xs px-3 py-1.5 rounded-lg transition-opacity">
+                            {uploadingBanner ? 'Uploading…' : '📷 Change banner'}
+                          </span>
+                          <input type="file" accept="image/*" className="hidden" onChange={uploadBanner} disabled={uploadingBanner} />
+                        </label>
+                      </div>
                       <div className="px-6 pb-6">
                         <div className="relative -mt-12 mb-4 inline-block">
                           <Avatar addr={address!} profiles={profiles} size="lg" />
@@ -1823,6 +2003,7 @@ export default function Home() {
                           )}
                         </div>
                         <h2 className="text-2xl font-black text-[#0A0B0D]">{myProfile[0]}</h2>
+                        {premiumUsers.has(address!.toLowerCase()) && <span className="text-yellow-500 text-2xl" title="Premium member">✨</span>}
                         <p className="text-[#5B6271] text-sm mb-1">{address?.slice(0,10)}...{address?.slice(-6)}</p>
                         {walletBalance && (
                           <p className="text-[#0052FF] text-sm font-bold mb-5">
