@@ -51,9 +51,16 @@ type Tab = 'feed' | 'post' | 'activity' | 'messages' | 'profile' | 'ai' | 'reels
 
 function Avatar({ addr, profiles, size = 'md' }: { addr: string; profiles: Record<string, ProfileData>; size?: 'sm' | 'md' | 'lg' }) {
   const p = profiles[addr.toLowerCase()]
-  const avatarUrl = p?.avatarHash ? `https://gateway.pinata.cloud/ipfs/${p.avatarHash}` : null
+  const [gwIdx, setGwIdx] = useState(0)
   const dims = size === 'sm' ? 'w-8 h-8 text-xs' : size === 'lg' ? 'w-20 h-20 text-2xl' : 'w-10 h-10 text-sm'
-  if (avatarUrl) return <img src={avatarUrl} className={`${dims} rounded-full object-cover flex-shrink-0`} alt="avatar" />
+  if (p?.avatarHash) return (
+    <img
+      src={IPFS_GATEWAYS[gwIdx] + p.avatarHash}
+      className={`${dims} rounded-full object-cover flex-shrink-0`}
+      alt="avatar"
+      onError={() => { if (gwIdx < IPFS_GATEWAYS.length - 1) setGwIdx(i => i + 1) }}
+    />
+  )
   return (
     <div className={`${dims} rounded-full bg-gradient-to-br from-[#0052FF] to-[#1652F0] flex items-center justify-center font-bold text-white flex-shrink-0`}>
       {addr.slice(2, 4).toUpperCase()}
@@ -64,6 +71,43 @@ function Avatar({ addr, profiles, size = 'md' }: { addr: string; profiles: Recor
 function FlameLogo({ size = 32 }: { size?: number }) {
   return (
     <img src="/logo.png" alt="FlameBase" width={size} height={size} className="flex-shrink-0 object-contain" />
+  )
+}
+
+const IPFS_GATEWAYS = [
+  'https://gateway.pinata.cloud/ipfs/',
+  'https://cloudflare-ipfs.com/ipfs/',
+  'https://ipfs.io/ipfs/',
+]
+
+function IpfsImage({ hash, className, alt = '' }: { hash: string; className?: string; alt?: string }) {
+  const [gatewayIndex, setGatewayIndex] = useState(0)
+  const src = IPFS_GATEWAYS[gatewayIndex] + hash
+  return (
+    <img
+      src={src}
+      className={className}
+      alt={alt}
+      onError={() => {
+        if (gatewayIndex < IPFS_GATEWAYS.length - 1) setGatewayIndex(i => i + 1)
+      }}
+    />
+  )
+}
+
+function IpfsVideo({ hash, className }: { hash: string; className?: string }) {
+  const [gatewayIndex, setGatewayIndex] = useState(0)
+  const src = IPFS_GATEWAYS[gatewayIndex] + hash
+  return (
+    <video
+      src={src}
+      controls
+      playsInline
+      className={className}
+      onError={() => {
+        if (gatewayIndex < IPFS_GATEWAYS.length - 1) setGatewayIndex(i => i + 1)
+      }}
+    />
   )
 }
 
@@ -1165,11 +1209,9 @@ export default function Home() {
                             {post.ipfsHash && (
                               <div className="rounded-2xl overflow-hidden mb-3 border border-[#E4E7EB]">
                                 {post.ipfsHash.startsWith('vid_') ? (
-                                  <video src={`https://gateway.pinata.cloud/ipfs/${post.ipfsHash.slice(4)}`}
-                                    controls playsInline className="w-full max-h-[520px] bg-black" />
+                                  <IpfsVideo hash={post.ipfsHash.slice(4)} className="w-full max-h-[520px] bg-black" />
                                 ) : (
-                                  <img src={`https://gateway.pinata.cloud/ipfs/${post.ipfsHash}`}
-                                    className="w-full max-h-[520px] object-cover" alt="post" />
+                                  <IpfsImage hash={post.ipfsHash} className="w-full max-h-[520px] object-cover" alt="post" />
                                 )}
                               </div>
                             )}
@@ -1612,8 +1654,7 @@ export default function Home() {
                                   <span className="text-white text-2xl">▶</span>
                                 </div>
                               ) : post.ipfsHash ? (
-                                <img src={`https://gateway.pinata.cloud/ipfs/${post.ipfsHash}`}
-                                  className="w-full h-full object-cover" alt="" />
+                                <IpfsImage hash={post.ipfsHash} className="w-full h-full object-cover" alt="" />
                               ) : (
                                 <div className="w-full h-full flex items-center justify-center p-2">
                                   <p className="text-xs text-[#5B6271] text-center line-clamp-3 leading-tight">{post.content}</p>
@@ -1993,8 +2034,8 @@ export default function Home() {
                   <div key={post.id.toString()} className="bg-[#F7F9FC] rounded-2xl p-4 border border-[#EEF1F5]">
                     {post.content && <p className="text-sm text-[#0A0B0D] mb-2">{post.content}</p>}
                     {post.ipfsHash && (post.ipfsHash.startsWith('vid_')
-                      ? <video src={`https://gateway.pinata.cloud/ipfs/${post.ipfsHash.slice(4)}`} controls playsInline className="w-full max-h-40 bg-black rounded-xl mb-2" />
-                      : <img src={`https://gateway.pinata.cloud/ipfs/${post.ipfsHash}`} className="w-full max-h-40 object-cover rounded-xl mb-2" alt="" />)}
+                      ? <IpfsVideo hash={post.ipfsHash.slice(4)} className="w-full max-h-40 bg-black rounded-xl mb-2" />
+                      : <IpfsImage hash={post.ipfsHash} className="w-full max-h-40 object-cover rounded-xl mb-2" alt="" />)}
                     <div className="flex items-center gap-3 text-xs text-[#8A919E]">
                       <span>🔥 {post.likes.toString()}</span>
                       <span>💸 {parseFloat(formatEther(post.tips)).toFixed(4)} ETH</span>
