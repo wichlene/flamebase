@@ -87,7 +87,7 @@ function IpfsImage({ hash, className, alt = '' }: { hash: string; className?: st
   return (
     <img
       src={src}
-      className={className}
+      className={`max-w-full ${className ?? ''}`}
       alt={alt}
       onError={() => {
         if (gatewayIndex < IPFS_GATEWAYS.length - 1) setGatewayIndex(i => i + 1)
@@ -104,7 +104,7 @@ function IpfsVideo({ hash, className }: { hash: string; className?: string }) {
       src={src}
       controls
       playsInline
-      className={className}
+      className={`max-w-full ${className ?? ''}`}
       onError={() => {
         if (gatewayIndex < IPFS_GATEWAYS.length - 1) setGatewayIndex(i => i + 1)
       }}
@@ -1285,7 +1285,7 @@ export default function Home() {
         </aside>
 
         {/* ── Main Content ── */}
-        <main className="flex-1 md:ml-60 xl:mr-96 min-h-screen border-x border-[#EEF1F5]">
+        <main className="flex-1 md:ml-60 xl:mr-96 min-h-screen border-x border-[#EEF1F5] overflow-x-hidden">
 
           {/* Mobile header */}
           <header
@@ -1590,7 +1590,7 @@ export default function Home() {
                   const isOwnPost = address && post.author.toLowerCase() === address.toLowerCase()
 
                   return (
-                    <article key={key} className="border-b border-[#EEF1F5] hover:bg-[#FAFBFD] hover:shadow-sm transition-all duration-200">
+                    <article key={key} className="border-b border-[#EEF1F5] hover:bg-[#FAFBFD] hover:shadow-sm transition-all duration-200 overflow-hidden">
                       <div className="p-4">
                         <div className="flex gap-3">
                           <button onClick={() => setSelectedUser(post.author)} className="flex-shrink-0 cursor-pointer">
