@@ -966,7 +966,9 @@ export default function Home() {
 
   // Mint the FlameBase Logo NFT (public — any wallet)
   const mintLogoNft = async () => {
-    if (mintingLogoNft || !logoNftDeployed || !logoNftMintPrice) return
+    if (mintingLogoNft) return
+    if (!logoNftDeployed) { showToast('error', 'NFT contract not configured'); return }
+    if (logoNftMintPrice === undefined) { showToast('error', 'Mint price loading… try again'); return }
     setMintingLogoNft(true)
     try {
       await writeContractAsync({
@@ -975,8 +977,10 @@ export default function Home() {
       }, 'mintLogoNft')
       showToast('success', '🎉 Minted! Welcome to the FlameBase NFT family')
       setTimeout(() => { refetchLogoNftSupply(); refetchLogoNftBalance() }, 3000)
-    } catch {
-      showToast('error', 'Mint failed')
+    } catch (e) {
+      console.error('mintLogoNft failed', e)
+      const msg = e instanceof Error ? e.message : 'Mint failed'
+      showToast('error', msg.length > 80 ? msg.slice(0, 80) + '…' : msg)
     }
     setMintingLogoNft(false)
   }
@@ -1424,10 +1428,10 @@ export default function Home() {
                       )}
                       <button
                         onClick={mintLogoNft}
-                        disabled={!isConnected || mintingLogoNft || (logoNftTotalSupply !== undefined && logoNftMaxSupply !== undefined && (logoNftTotalSupply as bigint) >= (logoNftMaxSupply as bigint))}
+                        disabled={!isConnected || mintingLogoNft || logoNftMintPrice === undefined || (logoNftTotalSupply !== undefined && logoNftMaxSupply !== undefined && (logoNftTotalSupply as bigint) >= (logoNftMaxSupply as bigint))}
                         className="ml-auto bg-white hover:bg-white/90 text-orange-600 disabled:opacity-50 font-black text-sm px-5 py-2.5 rounded-xl transition-colors shadow-sm"
                       >
-                        {mintingLogoNft ? 'Minting…' : !isConnected ? 'Connect to mint' : (logoNftTotalSupply !== undefined && logoNftMaxSupply !== undefined && (logoNftTotalSupply as bigint) >= (logoNftMaxSupply as bigint)) ? 'Sold out' : '🔥 Mint $0.50'}
+                        {mintingLogoNft ? 'Minting…' : !isConnected ? 'Connect to mint' : logoNftMintPrice === undefined ? 'Loading…' : (logoNftTotalSupply !== undefined && logoNftMaxSupply !== undefined && (logoNftTotalSupply as bigint) >= (logoNftMaxSupply as bigint)) ? 'Sold out' : '🔥 Mint $0.50'}
                       </button>
                     </div>
                   </div>
@@ -2293,49 +2297,28 @@ export default function Home() {
                           </div>
                         </div>
 
-                        {/* One-click price setup */}
-                        <div className="bg-gradient-to-br from-[#0052FF] to-[#1652F0] rounded-xl p-4 mb-3 text-white">
-                          <p className="font-black text-sm mb-1">⚡ One-Click Setup</p>
-                          <p className="text-white/80 text-xs mb-3">Sets all fees to $0.04 — approve all 4 MetaMask transactions.</p>
-                          <button
-                            onClick={async () => {
-                              if (loading) return
-                              setLoading(true)
-                              try {
-                                const zero = 0n
-                                await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'setLikePrice', args: [zero] }, 'setLikePrice')
-                                await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'setCommentPrice', args: [zero] }, 'setCommentPrice')
-                                await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'setPostPrice', args: [zero] }, 'setPostPrice')
-                                await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'setPhotoPrice', args: [zero] }, 'setPhotoPrice')
-                              } catch (e) { console.error(e) }
-                              setLoading(false)
-                            }}
-                            disabled={loading}
-                            className="w-full bg-white text-[#0052FF] py-2.5 rounded-lg font-black text-sm hover:bg-white/90 disabled:opacity-50 transition-colors"
-                          >
-                            {loading ? 'Setting prices… (4 tx)' : '🚀 Set all fees to $0.04'}
-                          </button>
-                        </div>
-                        {/* Deploy FlameBase Logo NFT */}
-                        <div className="bg-gradient-to-br from-orange-500 to-red-500 rounded-xl p-4 mb-3 text-white">
-                          <p className="font-black text-sm mb-1">🎨 Deploy Logo NFT Collection</p>
-                          <p className="text-white/80 text-xs mb-3">
-                            FlameBase logosunu IPFS&apos;e yükler + 10.000 maxSupply, $0.50 mint price NFT koleksiyonu deploy eder. Mint geliri sana gelir.
-                          </p>
-                          {deployedLogoNftAddr && (
-                            <div className="bg-white/10 rounded-lg p-2 mb-2 text-xs break-all font-mono">
-                              ✅ {deployedLogoNftAddr}
-                              <p className="font-sans mt-1 text-white/70 text-[10px]">⚠️ Bu adresi NEXT_PUBLIC_FLAME_NFT env var olarak kaydet</p>
-                            </div>
-                          )}
-                          <button
-                            onClick={deployLogoNft}
-                            disabled={deployingLogoNft || !NFT_FACTORY_DEPLOYED}
-                            className="w-full bg-white text-orange-600 py-2.5 rounded-lg font-black text-sm hover:bg-white/90 disabled:opacity-50 transition-colors"
-                          >
-                            {deployingLogoNft ? 'Deploying… (2-3 dk)' : '🎨 Deploy FlameBase Logo NFT'}
-                          </button>
-                        </div>
+                        {/* Logo NFT collection — only show deploy button if not yet deployed */}
+                        {!FLAME_NFT_ADDRESS && (
+                          <div className="bg-gradient-to-br from-orange-500 to-red-500 rounded-xl p-4 mb-3 text-white">
+                            <p className="font-black text-sm mb-1">🎨 Deploy Logo NFT Collection</p>
+                            <p className="text-white/80 text-xs mb-3">
+                              FlameBase logosunu IPFS&apos;e yükler + 10.000 maxSupply, $0.50 mint price NFT koleksiyonu deploy eder. Mint geliri sana gelir.
+                            </p>
+                            {deployedLogoNftAddr && (
+                              <div className="bg-white/10 rounded-lg p-2 mb-2 text-xs break-all font-mono">
+                                ✅ {deployedLogoNftAddr}
+                                <p className="font-sans mt-1 text-white/70 text-[10px]">⚠️ Bu adresi NEXT_PUBLIC_FLAME_NFT env var olarak kaydet</p>
+                              </div>
+                            )}
+                            <button
+                              onClick={deployLogoNft}
+                              disabled={deployingLogoNft || !NFT_FACTORY_DEPLOYED}
+                              className="w-full bg-white text-orange-600 py-2.5 rounded-lg font-black text-sm hover:bg-white/90 disabled:opacity-50 transition-colors"
+                            >
+                              {deployingLogoNft ? 'Deploying… (2-3 dk)' : '🎨 Deploy FlameBase Logo NFT'}
+                            </button>
+                          </div>
+                        )}
 
                         <div className="space-y-2">
                           <a href={`https://basescan.org/address/${CONTRACT_ADDRESS}#writeContract`} target="_blank"
