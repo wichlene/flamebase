@@ -67,6 +67,48 @@ function FlameLogo({ size = 32 }: { size?: number }) {
   )
 }
 
+function EmojiPicker({ onSelect }: { onSelect: (emoji: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const emojis = [
+    '😀','😂','😍','🥰','😊','😎','🤔','😢','😅','🙏',
+    '👍','👎','❤️','🔥','✨','💯','🎉','🙌','💪','🤝',
+    '😏','🤩','😤','🥳','😭','🥺','😡','🤗','😜','🤪',
+    '🌟','💫','⚡','🎯','🚀','💎','🏆','💸','😈','🤣',
+    '👀','💀','🫡','🤯','🎊','🌈','🍀','🐐','💥','🫶',
+  ]
+  return (
+    <div className="relative flex-shrink-0">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-[#F0F2F5] transition-colors text-xl"
+        title="Add emoji"
+      >
+        😊
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />
+          <div className="absolute z-30 bottom-full mb-2 left-0 bg-white border border-[#E4E7EB] rounded-2xl shadow-xl p-3 w-72">
+            <div className="grid grid-cols-10 gap-0.5">
+              {emojis.map(e => (
+                <button
+                  key={e}
+                  type="button"
+                  onClick={() => { onSelect(e); setOpen(false) }}
+                  className="w-[26px] h-[26px] flex items-center justify-center text-lg hover:bg-[#F0F2F5] rounded-lg transition-colors"
+                >
+                  {e}
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 function ConnectPrompt({ message, label = 'Connect Wallet' }: { message: string; label?: string }) {
   return (
     <div className="bg-white border border-[#E4E7EB] rounded-2xl p-8 text-center shadow-sm">
@@ -1253,6 +1295,7 @@ export default function Home() {
                                     onKeyDown={e => e.key === 'Enter' && handleComment(post.id)}
                                     className="flex-1 bg-white border border-[#E4E7EB] rounded-xl px-3 py-2 text-sm text-[#0A0B0D] placeholder-[#8A919E] focus:outline-none focus:border-[#0052FF]"
                                   />
+                                  <EmojiPicker onSelect={e => setCommentTexts(prev => ({ ...prev, [key]: (prev[key] || '') + e }))} />
                                   <button onClick={() => handleComment(post.id)} disabled={isCommenting || !commentTexts[key]}
                                     className="bg-[#0052FF] hover:bg-[#1652F0] text-white disabled:opacity-40 px-4 py-2 rounded-xl text-sm font-bold transition-colors">
                                     {isCommenting ? '...' : '↑'}
@@ -1347,6 +1390,7 @@ export default function Home() {
                         className="flex items-center gap-1.5 bg-gradient-to-r from-[#7B3FE4] to-[#0052FF] text-white px-3 py-1.5 rounded-lg text-xs font-bold disabled:opacity-40 transition-all hover:opacity-90 flex-shrink-0">
                         {improving ? '…' : '✨ AI'}
                       </button>
+                      <EmojiPicker onSelect={e => setNewPost(prev => prev + e)} />
                       <span className="text-[#8A919E] text-xs flex-1">{newPost.length}/500</span>
                       <button onClick={createPost} disabled={loading || !newPost}
                         className="bg-[#0052FF] hover:bg-[#1652F0] text-white px-8 py-2.5 rounded-xl font-bold disabled:opacity-40 transition-colors shadow-sm">
