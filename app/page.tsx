@@ -272,10 +272,14 @@ export default function Home() {
   // $0.04 fixed fee in ETH — recalculated when ETH price updates
   const fixedFeeETH = (0.04 / ethPrice).toFixed(10)
   const fixedFee = parseEther(fixedFeeETH)
-  // Use the higher of contract price or fixedFee so transactions always pass
-  const effectiveFee = (contractFee?: bigint) => {
-    if (!contractFee || contractFee === 0n) return fixedFee
-    return contractFee > fixedFee ? contractFee : fixedFee
+  // Contract default prices (must match FlameBase.sol constructor values)
+  const DEFAULT_LIKE_PRICE = parseEther('0.0001')
+  const DEFAULT_COMMENT_PRICE = parseEther('0.0003')
+  const DEFAULT_POST_PRICE = parseEther('0.0002')
+  // Use the higher of contract price or fixedFee; fall back to contractDefault if price not loaded yet
+  const effectiveFee = (contractFee: bigint | undefined, contractDefault: bigint) => {
+    const base = contractFee !== undefined ? contractFee : contractDefault
+    return base > fixedFee ? base : fixedFee
   }
   // Show real USD price based on what's actually sent
   const usdLabel = (ethAmount: bigint) => {
@@ -749,7 +753,7 @@ export default function Home() {
       }
       await writeContractAsync({
         address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'createPost',
-        args: [newPost, ipfsHash], value: effectiveFee(postPrice as bigint | undefined),
+        args: [newPost, ipfsHash], value: effectiveFee(postPrice as bigint | undefined, DEFAULT_POST_PRICE),
       })
       setNewPost(''); setSelectedFile(null); setPreviewUrl(null)
       setTimeout(() => refetchCount(), 3000)
@@ -773,11 +777,18 @@ export default function Home() {
     SFX.like()
     setLoadingAction(`like-${postId}`)
     try {
-      await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'like', args: [postId], value: effectiveFee(likePrice as bigint | undefined) })
+      await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'like', args: [postId], value: effectiveFee(likePrice as bigint | undefined, DEFAULT_LIKE_PRICE) })
       setPosts(prev => prev.map(p => p.id === postId ? { ...p, likes: p.likes + 1n } : p))
-    } catch (e) {
+    } catch (e: unknown) {
       console.error(e)
-      showToast('error', 'Like failed — transaction rejected or reverted')
+      const msg = e instanceof Error ? e.message : String(e)
+      if (msg.toLowerCase().includes('user rejected') || msg.toLowerCase().includes('denied')) {
+        showToast('error', 'İşlem iptal edildi')
+      } else if (msg.toLowerCase().includes('insufficient') || msg.toLowerCase().includes('funds')) {
+        showToast('error', 'Yetersiz ETH bakiyesi')
+      } else {
+        showToast('error', 'Like başarısız — ' + msg.slice(0, 80))
+      }
     }
     setLoadingAction(null)
   }
@@ -788,7 +799,7 @@ export default function Home() {
     if (!text) return
     setLoadingAction(`comment-${postId}`)
     try {
-      await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'comment', args: [postId, text], value: effectiveFee(commentPrice as bigint | undefined) })
+      await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'comment', args: [postId, text], value: effectiveFee(commentPrice as bigint | undefined, DEFAULT_COMMENT_PRICE) })
       setCommentTexts(prev => ({ ...prev, [key]: '' }))
       setReplyingTo(prev => ({ ...prev, [key]: '' }))
       await loadComments(key)
