@@ -18,7 +18,7 @@ import {
 } from '@rainbow-me/rainbowkit/wallets'
 import { WagmiProvider, createConfig, useConnect, useAccount } from 'wagmi'
 import { base } from 'wagmi/chains'
-import { http } from 'wagmi'
+import { http, fallback } from 'wagmi'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import '@rainbow-me/rainbowkit/styles.css'
 import { farcasterConnector } from '../lib/farcasterConnector'
@@ -43,7 +43,14 @@ const connectors = connectorsForWallets(
 const config = createConfig({
   chains: [base],
   connectors: [...connectors, farcasterConnector()],
-  transports: { [base.id]: http() },
+  transports: {
+    [base.id]: fallback([
+      http('https://mainnet.base.org'),
+      http('https://base.drpc.org'),
+      http('https://base-rpc.publicnode.com'),
+      http('https://base.llamarpc.com'),
+    ]),
+  },
   ssr: true,
 })
 

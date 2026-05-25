@@ -791,8 +791,10 @@ export default function Home() {
         showToast('error', 'Yetersiz ETH bakiyesi')
       } else if (msg.toLowerCase().includes('chain') || msg.toLowerCase().includes('network')) {
         showToast('error', 'Base ağına geçin — cüzdanınızda Base (8453) ekli olmalı')
+      } else if (msg.toLowerCase().includes('rpc') || msg.toLowerCase().includes('request failed') || msg.toLowerCase().includes('fetch')) {
+        showToast('error', 'Ağ hatası — tekrar deneyin')
       } else {
-        showToast('error', 'Like başarısız — ' + msg.slice(0, 80))
+        showToast('error', 'Like başarısız — tekrar deneyin')
       }
     }
     setLoadingAction(null)
