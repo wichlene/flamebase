@@ -261,7 +261,27 @@ export default function Home() {
       try {
         await switchChainAsync({ chainId: base.id })
       } catch {
-        throw new Error('Base ağına geçilemedi — cüzdanınızda Base ağını ekleyin (chainId: 8453)')
+        // switchChain fails when Base isn't in the wallet — add it via EIP-3085
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const provider = (window as any).ethereum
+          if (provider) {
+            await provider.request({
+              method: 'wallet_addEthereumChain',
+              params: [{
+                chainId: '0x2105',
+                chainName: 'Base',
+                nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+                rpcUrls: ['https://mainnet.base.org'],
+                blockExplorerUrls: ['https://basescan.org'],
+              }],
+            })
+          } else {
+            await switchChainAsync({ chainId: base.id })
+          }
+        } catch {
+          throw new Error('Please switch to Base network (chainId 8453) in your wallet')
+        }
       }
     }
     const hash = await rawWriteContract(config)
