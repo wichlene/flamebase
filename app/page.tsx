@@ -168,7 +168,7 @@ function ConnectPrompt({ message, label = 'Connect Wallet' }: { message: string;
 }
 
 export default function Home() {
-  const { address, isConnected } = useAccount()
+  const { address, isConnected, connector } = useAccount()
   const { disconnect } = useDisconnect()
   const { connect, connectors: wagmiConnectors } = useConnect()
   const chainId = useChainId()
@@ -261,24 +261,20 @@ export default function Home() {
       try {
         await switchChainAsync({ chainId: base.id })
       } catch {
-        // switchChain fails when Base isn't in the wallet — add it via EIP-3085
+        // switchChain fails when Base isn't registered — add via EIP-3085 using connector provider
         try {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const provider = (window as any).ethereum
-          if (provider) {
-            await provider.request({
-              method: 'wallet_addEthereumChain',
-              params: [{
-                chainId: '0x2105',
-                chainName: 'Base',
-                nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-                rpcUrls: ['https://mainnet.base.org'],
-                blockExplorerUrls: ['https://basescan.org'],
-              }],
-            })
-          } else {
-            await switchChainAsync({ chainId: base.id })
-          }
+          const provider: any = connector ? await connector.getProvider() : (window as any).ethereum
+          await provider.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId: '0x2105',
+              chainName: 'Base',
+              nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+              rpcUrls: ['https://mainnet.base.org'],
+              blockExplorerUrls: ['https://basescan.org'],
+            }],
+          })
         } catch {
           throw new Error('Please switch to Base network (chainId 8453) in your wallet')
         }
