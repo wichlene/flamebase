@@ -276,6 +276,7 @@ export default function Home() {
   const DEFAULT_LIKE_PRICE = parseEther('0.0001')
   const DEFAULT_COMMENT_PRICE = parseEther('0.0003')
   const DEFAULT_POST_PRICE = parseEther('0.0002')
+  const DEFAULT_PHOTO_PRICE = parseEther('0.0005')
   // Use the higher of contract price or fixedFee; fall back to contractDefault if price not loaded yet
   const effectiveFee = (contractFee: bigint | undefined, contractDefault: bigint) => {
     const base = contractFee !== undefined ? contractFee : contractDefault
@@ -400,6 +401,7 @@ export default function Home() {
   const { data: likePrice } = useReadContract({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'likePrice' })
   const { data: commentPrice } = useReadContract({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'commentPrice' })
   const { data: postPrice } = useReadContract({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'postPrice' })
+  const { data: photoPrice } = useReadContract({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'photoPrice' })
 
   const { data: walletBalance, refetch: refetchBalance } = useBalance({
     address: address,
@@ -1056,7 +1058,7 @@ export default function Home() {
           abi: CONTRACT_ABI,
           functionName: 'uploadAvatar',
           args: [data.ipfsHash],
-          value: fixedFee,
+          value: effectiveFee(photoPrice as bigint | undefined, DEFAULT_PHOTO_PRICE),
         })
         setTimeout(() => refetchProfile(), 3000)
       }
