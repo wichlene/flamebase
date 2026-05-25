@@ -179,7 +179,7 @@ export default function Reels() {
   const switchVideo = (newId: string) => setActiveId(newId)
 
   return (
-    <div className="flex flex-col select-none" style={{ height: 'calc(100vh - 56px)' }}>
+    <div className="flex flex-col select-none" style={{ height: 'calc(100dvh - calc(60px + var(--inset-top, 0px)) - calc(56px + var(--inset-bottom, 0px)))' }}>
 
       <div className="flex gap-2 px-3 py-2 border-b border-[#EEF1F5] bg-white flex-shrink-0">
         <input value={searchInput} onChange={e => setSearchInput(e.target.value)}
@@ -226,13 +226,11 @@ export default function Reels() {
         </button>
       </div>
 
-      {/* Main: YouTube iframe (left) + thumbnail playlist (right) */}
-      <div className="flex-1 flex overflow-hidden bg-black">
+      {/* Main: mobile = vertical stack, desktop = side by side */}
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden bg-black min-h-0">
 
-        {/* YouTube IFrame API mounts the player into this div and reuses it
-            across video switches via loadVideoById — so the old video really
-            stops, the new one really starts, no half-mounted iframes. */}
-        <div className="flex-1 bg-black flex items-center justify-center relative">
+        {/* YouTube player — fixed aspect on mobile, fills height on desktop */}
+        <div className={`${showPlaylist ? 'aspect-video md:aspect-auto' : 'flex-1'} md:flex-1 bg-black flex items-center justify-center relative w-full flex-shrink-0 md:flex-shrink`}>
           <div ref={playerHostRef} className="w-full h-full" />
           {loading && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/80 z-10">
@@ -242,9 +240,9 @@ export default function Reels() {
           )}
         </div>
 
-        {/* Playlist sidebar — click thumbnail to switch video */}
+        {/* Playlist — full width below player on mobile, sidebar on desktop */}
         {showPlaylist && (
-          <div className="w-72 flex-shrink-0 bg-[#0A0B0D] overflow-y-auto border-l border-white/10" style={{ scrollbarWidth: 'thin' }}>
+          <div className="flex-1 md:flex-none md:w-72 bg-[#0A0B0D] overflow-y-auto border-t md:border-t-0 md:border-l border-white/10 min-h-0" style={{ scrollbarWidth: 'thin' }}>
             <div className="px-3 py-2 text-white/60 text-[11px] font-bold sticky top-0 bg-[#0A0B0D] border-b border-white/10">
               {videos.length} VIDEOS
             </div>
@@ -254,11 +252,11 @@ export default function Reels() {
                 onClick={() => switchVideo(v.id)}
                 className={`w-full text-left p-2 flex gap-2 hover:bg-white/5 transition-colors border-b border-white/5 ${activeId === v.id ? 'bg-red-600/20' : ''}`}
               >
-                <div className="w-24 flex-shrink-0 aspect-video bg-black relative overflow-hidden rounded">
+                <div className="w-20 flex-shrink-0 aspect-video bg-black relative overflow-hidden rounded">
                   <img src={v.thumbnail} alt="" className="w-full h-full object-cover" />
                   {activeId === v.id && (
                     <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-                      <span className="text-white text-xs">▶ Playing</span>
+                      <span className="text-white text-xs">▶</span>
                     </div>
                   )}
                   <span className="absolute top-0.5 left-0.5 text-[9px] bg-black/70 text-white px-1 rounded">{i + 1}</span>
