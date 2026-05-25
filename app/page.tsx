@@ -1312,56 +1312,45 @@ export default function Home() {
               <FlameLogo size={32} />
               <span className="font-black text-base text-[#0A0B0D]">FlameBase</span>
             </div>
-            <div className="flex items-center gap-2 ml-auto">
-              <button onClick={() => setShowTerminal(true)}
-                className="bg-[#0A0B0D] text-green-400 font-mono text-[11px] px-2 py-1 rounded-lg hover:bg-[#1f2125]">
-                $ tx{txLog.length > 0 ? ` (${txLog.length})` : ''}
-              </button>
-              {/* Notification bell */}
-              <button
-                onClick={() => setShowNotifications(!showNotifications)}
-                className="relative w-9 h-9 flex items-center justify-center rounded-full hover:bg-[#F7F9FC] transition-colors"
-              >
-                <span className="text-lg">🔔</span>
-                {notifications.length > 0 && (
-                  <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white" />
-                )}
-              </button>
-              <button onClick={toggleTheme} title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-                className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[#F7F9FC] transition-colors"
-                aria-label="Toggle theme">
-                <span className="text-base">{theme === 'dark' ? '☀️' : '🌙'}</span>
-              </button>
-              <button onClick={toggleSound} title={soundOn ? 'Mute' : 'Enable sound'}
-                className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[#F7F9FC] transition-colors"
-                aria-label="Toggle sound">
-                <span className="text-base">{soundOn ? '🔊' : '🔇'}</span>
-              </button>
-              <select value={lang} onChange={e => setLang(e.target.value as Lang)}
-                className="bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1 text-xs text-[#5B6271] focus:outline-none focus:border-[#0052FF] cursor-pointer">
-                {(Object.entries(LANG_LABELS) as [Lang, string][]).map(([code, label]) => (
-                  <option key={code} value={code}>{label.split(' ')[0]}</option>
-                ))}
-              </select>
+            <div className="flex items-center gap-1.5 ml-auto">
+              {/* Wallet button — always first/most prominent */}
               {isConnected ? (
                 <button
                   onClick={() => disconnect()}
-                  className="flex items-center gap-1.5 bg-[#FEE2E2] hover:bg-red-100 text-red-600 font-bold text-xs px-3 py-2 rounded-xl transition-colors"
+                  className="flex items-center gap-1 bg-[#FEE2E2] hover:bg-red-100 text-red-600 font-bold text-xs px-2.5 py-2 rounded-xl transition-colors flex-shrink-0"
                   title="Disconnect wallet"
                 >
                   <span>🔌</span>
-                  <span className="hidden sm:inline">Disconnect</span>
+                  <span className="text-[10px]">{address ? address.slice(0,4)+'…'+address.slice(-3) : 'Disconnect'}</span>
                 </button>
               ) : isInFarcaster ? (
                 <button
                   onClick={connectFarcaster}
-                  className="flex items-center gap-1.5 bg-[#855DCD] hover:bg-[#7449C2] text-white font-bold text-xs px-3 py-2 rounded-xl transition-colors"
+                  className="flex items-center gap-1 bg-[#855DCD] hover:bg-[#7449C2] text-white font-bold text-xs px-2.5 py-2 rounded-xl transition-colors flex-shrink-0"
                 >
-                  <span>🟣</span><span>Connect</span>
+                  <span>🟣</span><span>Bağlan</span>
                 </button>
               ) : (
                 <ConnectButton accountStatus="avatar" chainStatus="none" showBalance={false} />
               )}
+              <button onClick={() => setShowTerminal(true)}
+                className="bg-[#0A0B0D] text-green-400 font-mono text-[11px] px-2 py-1 rounded-lg hover:bg-[#1f2125] flex-shrink-0">
+                ${txLog.length > 0 ? `(${txLog.length})` : ''}
+              </button>
+              <button
+                onClick={() => setShowNotifications(!showNotifications)}
+                className="relative w-8 h-8 flex items-center justify-center rounded-full hover:bg-[#F7F9FC] transition-colors flex-shrink-0"
+              >
+                <span className="text-base">🔔</span>
+                {notifications.length > 0 && (
+                  <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border border-white" />
+                )}
+              </button>
+              <button onClick={toggleTheme}
+                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-[#F7F9FC] transition-colors flex-shrink-0"
+                aria-label="Toggle theme">
+                <span className="text-base">{theme === 'dark' ? '☀️' : '🌙'}</span>
+              </button>
             </div>
           </header>
 
