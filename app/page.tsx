@@ -257,30 +257,8 @@ export default function Home() {
   // Wrap writeContractAsync: auto-switch to Base if needed, then log tx
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const writeContractAsync = async (config: any, type?: string) => {
-    if (chainId !== base.id) {
-      try {
-        await switchChainAsync({ chainId: base.id })
-      } catch {
-        // switchChain fails when Base isn't registered — add via EIP-3085 using connector provider
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const provider: any = connector ? await connector.getProvider() : (window as any).ethereum
-          await provider.request({
-            method: 'wallet_addEthereumChain',
-            params: [{
-              chainId: '0x2105',
-              chainName: 'Base',
-              nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-              rpcUrls: ['https://mainnet.base.org'],
-              blockExplorerUrls: ['https://basescan.org'],
-            }],
-          })
-        } catch {
-          throw new Error('Please switch to Base network (chainId 8453) in your wallet')
-        }
-      }
-    }
-    const hash = await rawWriteContract(config)
+    // Always include chainId so wagmi auto-switches to Base before sending
+    const hash = await rawWriteContract({ ...config, chainId: base.id })
     if (hash) {
       const entry = { hash, type: type || config?.functionName || 'tx', time: Date.now() }
       setTxLog(prev => {
