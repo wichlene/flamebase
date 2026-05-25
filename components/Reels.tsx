@@ -226,23 +226,29 @@ export default function Reels() {
         </button>
       </div>
 
-      {/* Main: mobile = vertical stack, desktop = side by side */}
+      {/* Main area */}
       <div className="flex-1 flex flex-col md:flex-row overflow-hidden bg-black min-h-0">
 
-        {/* YouTube player — fixed aspect on mobile, fills height on desktop */}
-        <div className={`${showPlaylist ? 'aspect-video md:aspect-auto' : 'flex-1'} md:flex-1 bg-black flex items-center justify-center relative w-full flex-shrink-0 md:flex-shrink`}>
+        {/* Player */}
+        <div
+          className="w-full flex-shrink-0 bg-black flex items-center justify-center relative md:flex-1 md:flex-shrink"
+          style={{ height: showPlaylist ? '45%' : '100%' }}
+        >
           <div ref={playerHostRef} className="w-full h-full" />
           {loading && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/80 z-10">
               <div className="text-5xl animate-bounce">▶️</div>
-              <p className="text-white/70 text-sm font-semibold">Loading videos…</p>
+              <p className="text-white/70 text-sm font-semibold">Loading…</p>
             </div>
           )}
         </div>
 
-        {/* Playlist — full width below player on mobile, sidebar on desktop */}
+        {/* Playlist — scrollable below player on mobile, sidebar on desktop */}
         {showPlaylist && (
-          <div className="flex-1 md:flex-none md:w-72 bg-[#0A0B0D] overflow-y-auto border-t md:border-t-0 md:border-l border-white/10 min-h-0" style={{ scrollbarWidth: 'thin' }}>
+          <div
+            className="w-full flex-1 min-h-0 md:flex-none md:w-64 bg-[#0A0B0D] overflow-y-auto border-t md:border-t-0 md:border-l border-white/10"
+            style={{ scrollbarWidth: 'thin' }}
+          >
             <div className="px-3 py-2 text-white/60 text-[11px] font-bold sticky top-0 bg-[#0A0B0D] border-b border-white/10">
               {videos.length} VIDEOS
             </div>
