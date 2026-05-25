@@ -172,7 +172,7 @@ export default function Home() {
   const { disconnect } = useDisconnect()
   const { connect, connectors: wagmiConnectors } = useConnect()
   const chainId = useChainId()
-  const { switchChain } = useSwitchChain()
+  const { switchChain, switchChainAsync } = useSwitchChain()
   const [isInFarcaster, setIsInFarcaster] = useState(false)
 
   useEffect(() => {
@@ -254,9 +254,16 @@ export default function Home() {
   const publicClient = usePublicClient()
   const { writeContractAsync: rawWriteContract } = useWriteContract()
 
-  // Wrap writeContractAsync to log transactions to terminal
+  // Wrap writeContractAsync: auto-switch to Base if needed, then log tx
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const writeContractAsync = async (config: any, type?: string) => {
+    if (chainId !== base.id) {
+      try {
+        await switchChainAsync({ chainId: base.id })
+      } catch {
+        throw new Error('Base ağına geçilemedi — cüzdanınızda Base ağını ekleyin (chainId: 8453)')
+      }
+    }
     const hash = await rawWriteContract(config)
     if (hash) {
       const entry = { hash, type: type || config?.functionName || 'tx', time: Date.now() }
@@ -788,6 +795,8 @@ export default function Home() {
         showToast('error', 'İşlem iptal edildi')
       } else if (msg.toLowerCase().includes('insufficient') || msg.toLowerCase().includes('funds')) {
         showToast('error', 'Yetersiz ETH bakiyesi')
+      } else if (msg.toLowerCase().includes('chain') || msg.toLowerCase().includes('network')) {
+        showToast('error', 'Base ağına geçin — cüzdanınızda Base (8453) ekli olmalı')
       } else {
         showToast('error', 'Like başarısız — ' + msg.slice(0, 80))
       }
