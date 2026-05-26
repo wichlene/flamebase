@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
-const MODEL = 'llama-3.1-8b-instant'
+const MODEL = 'llama-3.3-70b-versatile'
 
 const SYSTEM_PROMPTS: Record<string, string> = {
   chat: `You are FlameBase AI — an assistant for a Web3 social media platform built on Base blockchain.
