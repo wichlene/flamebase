@@ -20,7 +20,7 @@ FlameBase is a decentralized social media platform on Base where every interacti
 ## Read endpoints
 
 ```
-GET https://flamebase-omega.vercel.app/api/mcp
+GET https://flamebase.xyz/api/mcp
 ```
 
 Returns contract addresses and list of supported actions.
@@ -32,7 +32,7 @@ Returns contract addresses and list of supported actions.
 All prepare endpoints follow this pattern:
 
 ```
-GET https://flamebase-omega.vercel.app/api/mcp/prepare/<action>?from=<address>&<params>
+GET https://flamebase.xyz/api/mcp/prepare/<action>?from=<address>&<params>
 ```
 
 ### Social Actions
@@ -177,7 +177,7 @@ Pass `data.to`, `data.data`, `data.value` to `send_calls`:
 
 ## About
 
-- **App:** https://flamebase-omega.vercel.app
+- **App:** https://flamebase.xyz
 - **Builder:** wichlene.base.eth
 - **Builder Code:** bc_m8fvx957
 - **Network:** Base Mainnet (chainId: 8453)
