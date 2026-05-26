@@ -8,6 +8,7 @@ import { parseEther, formatEther } from 'viem'
 import { base } from 'wagmi/chains'
 import dynamic from 'next/dynamic'
 import { CONTRACT_ADDRESS, CONTRACT_ABI } from '../lib/contract'
+import { BUILDER_CODE_DATA_SUFFIX } from './providers'
 import { T, LANG_LABELS, type Lang } from '../lib/i18n'
 import { TOOLS_ADDRESS, TOKEN_FACTORY_ADDRESS, NFT_FACTORY_ADDRESS, DAO_ADDRESS, TOOLS_ABI, TOKEN_FACTORY_ABI, NFT_FACTORY_ABI, DAO_ABI, FLAME_NFT_ADDRESS, FLAME_NFT_ABI } from '../lib/toolsContracts'
 import { SFX, isSoundEnabled, setSoundEnabled } from '../lib/sounds'
@@ -257,8 +258,9 @@ export default function Home() {
   // Wrap writeContractAsync: auto-switch to Base if needed, then log tx
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const writeContractAsync = async (config: any, type?: string) => {
-    // Always include chainId so wagmi auto-switches to Base before sending
-    const hash = await rawWriteContract({ ...config, chainId: base.id })
+    // Always include chainId so wagmi auto-switches to Base before sending.
+    // dataSuffix appends Base Builder Code so every tx is attributed to FlameBase.
+    const hash = await rawWriteContract({ ...config, chainId: base.id, dataSuffix: BUILDER_CODE_DATA_SUFFIX })
     if (hash) {
       const entry = { hash, type: type || config?.functionName || 'tx', time: Date.now() }
       setTxLog(prev => {
