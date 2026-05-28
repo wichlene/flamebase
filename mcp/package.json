@@ -1,0 +1,9 @@
+{
+  "name": "flamebase-agent",
+  "version": "1.0.0",
+  "type": "commonjs",
+  "main": "server.js",
+  "dependencies": {
+    "ethers": "^6.16.0"
+  }
+}
