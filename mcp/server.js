@@ -131,13 +131,19 @@ async function callTool(id, params) {
   }
 }
 
-function fetchJson(url) {
+function fetchJson(url, depth = 0) {
   return new Promise((resolve, reject) => {
-    https.get(url, (res) => {
+    if (depth > 5) return reject(new Error('Too many redirects'));
+    https.get(url, { headers: { 'Accept': 'application/json', 'User-Agent': 'FlameBase-Agent/2.0' } }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        const next = res.headers.location.startsWith('http') ? res.headers.location : `https://flamebase.xyz${res.headers.location}`;
+        res.resume();
+        return fetchJson(next, depth + 1).then(resolve).catch(reject);
+      }
       let data = '';
       res.on('data', (c) => data += c);
       res.on('end', () => {
-        try { resolve(JSON.parse(data)); } catch (e) { reject(e); }
+        try { resolve(JSON.parse(data)); } catch (e) { reject(new Error(`API returned non-JSON (status ${res.statusCode}): ${data.slice(0, 200)}`)); }
       });
     }).on('error', reject);
   });
