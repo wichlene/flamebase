@@ -624,29 +624,27 @@ export default function Home() {
   const loadPostsBatch = useCallback(async (fromIndex: number, append: boolean) => {
     if (!publicClient) return
     setLoadingMore(true)
-    const fetched: Post[] = []
-    const authors = new Set<string>()
     const stopAt = Math.max(0, fromIndex - BATCH + 1)
-    for (let i = fromIndex; i >= stopAt; i--) {
-      try {
-        const post = await publicClient.readContract({
-          address: CONTRACT_ADDRESS, abi: CONTRACT_ABI,
-          functionName: 'getPost', args: [BigInt(i)],
-        }) as Post
-        fetched.push(post)
-        authors.add(post.author.toLowerCase())
-      } catch {}
-    }
+    const indices = Array.from({ length: fromIndex - stopAt + 1 }, (_, k) => fromIndex - k)
+    const results = await Promise.allSettled(
+      indices.map(i => publicClient.readContract({
+        address: CONTRACT_ADDRESS, abi: CONTRACT_ABI,
+        functionName: 'getPost', args: [BigInt(i)],
+      }) as Promise<Post>)
+    )
+    const fetched = results.flatMap(r => r.status === 'fulfilled' ? [r.value] : [])
+    const authors = new Set(fetched.map(p => p.author.toLowerCase()))
     if (append) setPosts(prev => [...prev, ...fetched])
     else setPosts(fetched)
     const nextIdx = stopAt - 1
     if (nextIdx < 0) { setAllPostsLoaded(true); setNextPostIndex(null) }
     else setNextPostIndex(nextIdx)
+    const profileResults = await Promise.allSettled([...authors].map(a => fetchProfileData(a)))
     const map: Record<string, ProfileData> = {}
-    for (const a of authors) {
-      const p = await fetchProfileData(a)
-      if (p) map[a] = p
-    }
+    ;[...authors].forEach((a, i) => {
+      const r = profileResults[i]
+      if (r.status === 'fulfilled' && r.value) map[a] = r.value
+    })
     setProfiles(prev => ({ ...prev, ...map }))
     setLoadingMore(false)
   }, [publicClient, fetchProfileData])
