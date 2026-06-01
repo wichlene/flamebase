@@ -1515,6 +1515,38 @@ export default function Home() {
                   </div>
                 )}
 
+                {/* $FLM Token Banner */}
+                <div className="mx-4 mt-3 p-4 rounded-2xl bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200">
+                  <div className="flex items-center gap-3">
+                    <img src="/logo.png" alt="FLM" className="w-10 h-10 rounded-full object-cover flex-shrink-0 border-2 border-orange-300" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-[#0A0B0D] text-sm">$FLM Token is Live 🔥</span>
+                        <span className="text-[10px] bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-semibold border border-orange-200">BASE</span>
+                      </div>
+                      <p className="text-[#5B6271] text-xs mt-0.5">FlameBase community token on Base mainnet</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 mt-3">
+                    <a
+                      href="https://app.uniswap.org/explore/tokens/base/0xadead5e8ca2893be6e8239cbbae83049a701cb07"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 bg-[#FF6B00] hover:bg-[#E55A00] text-white text-xs font-bold px-3 py-2 rounded-xl text-center transition-colors shadow-sm"
+                    >
+                      Buy $FLM on Uniswap
+                    </a>
+                    <a
+                      href="https://clanker.world/clanker/0xaDead5e8cA2893bE6E8239CbBaE83049a701cB07"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 bg-white hover:bg-[#F0F4FF] text-[#0052FF] text-xs font-bold px-3 py-2 rounded-xl text-center transition-colors border border-[#D6E2FF]"
+                    >
+                      📊 Chart
+                    </a>
+                  </div>
+                </div>
+
                 {posts.length === 0 && postCount === undefined && (
                   <div className="divide-y divide-[#EEF1F5]">
                     {Array.from({ length: 4 }).map((_, i) => (
