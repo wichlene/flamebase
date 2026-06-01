@@ -1,10 +1,15 @@
 import { NextResponse } from 'next/server'
 
 const BS = 'https://base.blockscout.com/api/v2'
+const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
+const MODEL = 'llama-3.3-70b-versatile'
 
-async function get(url: string) {
-  const res = await fetch(url, { headers: { Accept: 'application/json' }, next: { revalidate: 120 } })
-  if (!res.ok) throw new Error(`HTTP ${res.status} — ${url}`)
+async function bsFetch(path: string) {
+  const res = await fetch(`${BS}${path}`, {
+    headers: { Accept: 'application/json' },
+    next: { revalidate: 120 },
+  })
+  if (!res.ok) return null
   return res.json()
 }
 
@@ -15,125 +20,185 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Geçersiz adres' }, { status: 400 })
     }
 
-    // 1. Address summary — gives accurate total tx + token_transfers + gas_used
-    // 2. NFT collections
-    // 3. Oldest tx (age) — sort asc, limit 1
-    // 4. Newest 100 txs for ETH volume calc
-    const [addrRes, nftRes, oldestRes, txRes] = await Promise.allSettled([
-      get(`${BS}/addresses/${address}`),
-      get(`${BS}/addresses/${address}/nft/collections?type=ERC-721,ERC-1155`),
-      get(`${BS}/addresses/${address}/transactions?filter=from&sort=asc&limit=1`),
-      get(`${BS}/addresses/${address}/transactions?filter=from&sort=desc&limit=100`),
+    // Fetch everything in parallel
+    const [addrData, nftData, oldestTxData, recentTxData] = await Promise.all([
+      bsFetch(`/addresses/${address}`),
+      bsFetch(`/addresses/${address}/nft/collections?type=ERC-721,ERC-1155`),
+      bsFetch(`/addresses/${address}/transactions?filter=from&sort=asc&limit=1`),
+      bsFetch(`/addresses/${address}/transactions?filter=from&sort=desc&limit=50`),
     ])
 
-    const addr   = addrRes.status   === 'fulfilled' ? addrRes.value   : {}
-    const nfts   = nftRes.status    === 'fulfilled' ? nftRes.value    : { items: [] }
-    const oldest = oldestRes.status === 'fulfilled' ? oldestRes.value : { items: [] }
-    const txs    = txRes.status     === 'fulfilled' ? txRes.value     : { items: [] }
+    // ── Raw stats ──
+    const txCount: number = addrData?.transaction_count ?? 0
+    const tokenTransfers: number = addrData?.token_transfers_count ?? 0
+    const ethBalanceWei: bigint = addrData?.coin_balance ? BigInt(addrData.coin_balance) : 0n
+    const ethBalance = parseFloat((Number(ethBalanceWei) / 1e18).toFixed(4))
 
-    // ── Real transaction count from Blockscout address summary ──
-    const txCount: number = addr.transaction_count ?? 0
-    const tokenTransfers: number = addr.token_transfers_count ?? 0
-    const gasUsedWei: bigint = addr.gas_used ? BigInt(addr.gas_used) : BigInt(0)
-    // gas_used is in gas units, not wei — multiply by avg gas price ~0.001 gwei for rough ETH cost
-    const gasSpentEth = Number(gasUsedWei) * 1e-9 * 0.001
-
-    // ── NFT count — sum across all collections ──
+    // NFTs
     let nftCount = 0
-    if (Array.isArray(nfts.items)) {
-      for (const col of nfts.items) {
-        const n = parseInt(col.amount ?? col.token_instances?.length ?? '1', 10)
+    let nftCollections = 0
+    if (Array.isArray(nftData?.items)) {
+      nftCollections = nftData.items.length
+      for (const col of nftData.items) {
+        const n = parseInt(col.amount ?? col.value ?? '1', 10)
         nftCount += isNaN(n) ? 1 : n
       }
     }
 
-    // ── Age on Base — from first ever tx timestamp ──
-    let firstTxDaysAgo = 0
+    // Age — from oldest transaction
+    let ageDays = 0
     let firstTxDate = ''
-    const oldestItems: any[] = oldest.items ?? []
-    if (oldestItems.length > 0 && oldestItems[0].timestamp) {
-      const ms = Date.now() - new Date(oldestItems[0].timestamp).getTime()
-      firstTxDaysAgo = Math.floor(ms / 86400000)
-      firstTxDate = new Date(oldestItems[0].timestamp).toLocaleDateString('tr-TR')
+    const firstTx = oldestTxData?.items?.[0]
+    if (firstTx?.timestamp) {
+      const ms = Date.now() - new Date(firstTx.timestamp).getTime()
+      ageDays = Math.floor(ms / 86400000)
+      firstTxDate = new Date(firstTx.timestamp).toLocaleDateString('tr-TR')
     }
 
-    // ── ETH Volume — sum value sent in last 100 txs ──
-    let volumeWei = BigInt(0)
-    const txItems: any[] = txs.items ?? []
-    for (const tx of txItems) {
+    // Recent txs — volume + unique contracts
+    const recentTxs: any[] = recentTxData?.items ?? []
+    let volumeWei = 0n
+    const contractSet = new Set<string>()
+    let activeDaysSet = new Set<string>()
+    let contractTxCount = 0
+
+    for (const tx of recentTxs) {
       if (tx.value && tx.value !== '0') {
         try { volumeWei += BigInt(tx.value) } catch { /* skip */ }
       }
+      if (tx.to?.hash) {
+        contractSet.add(tx.to.hash.toLowerCase())
+        if (tx.to.is_contract) contractTxCount++
+      }
+      if (tx.timestamp) {
+        activeDaysSet.add(new Date(tx.timestamp).toDateString())
+      }
     }
+
     const volumeEth = parseFloat((Number(volumeWei) / 1e18).toFixed(4))
+    const uniqueContracts = contractSet.size
+    const activeDays = activeDaysSet.size
 
-    // ── Unique contracts interacted with (diversity score) ──
-    const uniqueContracts = new Set(
-      txItems.filter(tx => tx.to?.is_contract).map(tx => tx.to?.hash?.toLowerCase())
-    ).size
+    // ── Sybil signals ──
+    const txPerDay = ageDays > 0 ? (txCount / ageDays).toFixed(2) : '0'
+    const contractDiversity = uniqueContracts > 0 && recentTxs.length > 0
+      ? ((uniqueContracts / recentTxs.length) * 100).toFixed(0)
+      : '0'
+    const sybilFlags: string[] = []
+    if (ageDays < 30) sybilFlags.push('Çok yeni cüzdan (<30 gün)')
+    if (txCount > 50 && uniqueContracts < 3) sybilFlags.push('Çok az contract çeşitliliği')
+    if (nftCount === 0) sybilFlags.push('NFT yok')
+    if (txCount > 0 && activeDays < 3 && txCount > 20) sybilFlags.push('Txler çok kısa süreye sıkışmış')
+    if (Number(txPerDay) > 20) sybilFlags.push('Günde 20+ TX (bot benzeri)')
 
-    // ── Airdrop scoring ──
+    // ── AI Analysis ──
+    let aiAnalysis = ''
+    let aiScore = 0
+    let aiTier = 'D'
+    let aiDropTokens = 0
+    let aiDropUsd = 0
+
+    if (process.env.GROQ_API_KEY) {
+      const prompt = `Sen bir blockchain analistsin. Aşağıdaki Base cüzdan verilerini analiz et ve JSON formatında yanıt ver.
+
+CÜZDAN VERİLERİ (Base Mainnet):
+- Toplam TX Sayısı: ${txCount}
+- Token Transfer Sayısı: ${tokenTransfers}
+- NFT Adedi: ${nftCount} (${nftCollections} farklı koleksiyon)
+- ETH Bakiye: ${ethBalance} ETH
+- Son 50 TX'te ETH Hacmi: ${volumeEth} ETH
+- Farklı Contract Sayısı (son 50 TX): ${uniqueContracts}
+- Aktif Gün Sayısı (son 50 TX): ${activeDays}
+- Cüzdan Yaşı: ${ageDays} gün (ilk TX: ${firstTxDate || 'bilinmiyor'})
+- Günlük Ortalama TX: ${txPerDay}
+- Contract Çeşitlilik Oranı: ${contractDiversity}%
+- Sybil Uyarıları: ${sybilFlags.length > 0 ? sybilFlags.join(', ') : 'Yok'}
+
+Şu soruları yanıtla:
+1. Sybil riski nedir? (DÜŞÜK / ORTA / YÜKSEK)
+2. Gerçek bir kullanıcı mı yoksa farming mi?
+3. Base aktivite özeti (1-2 cümle)
+4. Score: 0-1000 arası puan ver
+5. Tier: D/C/B/A/S
+6. Olası Base token drop tahmini (Arbitrum/OP/ZkSync precedentlerine göre): token miktarı ve $0.25 fiyatla USD değeri
+
+SADECE şu JSON formatında yanıt ver, başka hiçbir şey yazma:
+{
+  "sybilRisk": "DÜŞÜK|ORTA|YÜKSEK",
+  "userType": "kısa açıklama",
+  "summary": "aktivite özeti",
+  "score": 750,
+  "tier": "A",
+  "dropTokens": 8000,
+  "dropUsd": 2000,
+  "dropRationale": "neden bu kadar aldığının kısa açıklaması"
+}`
+
+      try {
+        const groqRes = await fetch(GROQ_URL, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: MODEL,
+            messages: [{ role: 'user', content: prompt }],
+            max_tokens: 300,
+            temperature: 0.3,
+          }),
+        })
+        const groqData = await groqRes.json()
+        const raw = groqData.choices?.[0]?.message?.content?.trim() ?? ''
+        // Extract JSON from response
+        const jsonMatch = raw.match(/\{[\s\S]*\}/)
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0])
+          aiAnalysis = parsed.summary ?? ''
+          aiScore = Math.min(1000, Math.max(0, parseInt(parsed.score) || 0))
+          aiTier = parsed.tier ?? 'D'
+          aiDropTokens = parseInt(parsed.dropTokens) || 0
+          aiDropUsd = parseInt(parsed.dropUsd) || 0
+          return NextResponse.json({
+            txCount, tokenTransfers, nftCount, nftCollections,
+            ethBalance, volumeEth, uniqueContracts, activeDays,
+            ageDays, firstTxDate, txPerDay, contractDiversity,
+            sybilFlags,
+            sybilRisk: parsed.sybilRisk ?? 'ORTA',
+            userType: parsed.userType ?? '',
+            aiSummary: aiAnalysis,
+            dropRationale: parsed.dropRationale ?? '',
+            score: aiScore,
+            tier: aiTier,
+            estimatedTokens: aiDropTokens,
+            estimatedUsd: aiDropUsd,
+          })
+        }
+      } catch { /* fall through to heuristic */ }
+    }
+
+    // Fallback heuristic scoring if AI fails
     let score = 0
-
-    // TX count — max 350
-    if (txCount >= 1000) score += 350
-    else if (txCount >= 500) score += 280
-    else if (txCount >= 100) score += 200
-    else if (txCount >= 50) score += 140
-    else if (txCount >= 20) score += 90
-    else if (txCount >= 5)  score += 40
-    else if (txCount >= 1)  score += 15
-
-    // NFTs — max 150
-    if (nftCount >= 20)     score += 150
-    else if (nftCount >= 5) score += 100
-    else if (nftCount >= 1) score += 55
-
-    // Age — max 250
-    if (firstTxDaysAgo >= 365)      score += 250
-    else if (firstTxDaysAgo >= 180) score += 200
-    else if (firstTxDaysAgo >= 90)  score += 130
-    else if (firstTxDaysAgo >= 30)  score += 70
-    else if (firstTxDaysAgo >= 7)   score += 25
-
-    // Contract diversity — max 100
-    if (uniqueContracts >= 20)     score += 100
-    else if (uniqueContracts >= 10) score += 70
-    else if (uniqueContracts >= 5)  score += 40
-    else if (uniqueContracts >= 1)  score += 15
-
-    // Token transfers — max 50
-    if (tokenTransfers >= 200)     score += 50
-    else if (tokenTransfers >= 50) score += 35
-    else if (tokenTransfers >= 10) score += 20
-    else if (tokenTransfers >= 1)  score += 8
-
+    if (txCount >= 1000) score += 350; else if (txCount >= 500) score += 280; else if (txCount >= 100) score += 200; else if (txCount >= 50) score += 140; else if (txCount >= 20) score += 90; else if (txCount >= 1) score += 30
+    if (nftCount >= 10) score += 150; else if (nftCount >= 1) score += 80
+    if (ageDays >= 365) score += 250; else if (ageDays >= 180) score += 180; else if (ageDays >= 90) score += 110; else if (ageDays >= 30) score += 55
+    if (uniqueContracts >= 20) score += 100; else if (uniqueContracts >= 10) score += 65; else if (uniqueContracts >= 3) score += 30
+    if (tokenTransfers >= 100) score += 50; else if (tokenTransfers >= 10) score += 25
     score = Math.min(score, 1000)
-
     const tier = score >= 800 ? 'S' : score >= 600 ? 'A' : score >= 400 ? 'B' : score >= 200 ? 'C' : 'D'
-
-    // Drop estimate (hypothetical $BASE at $0.25)
-    const TOKEN_PRICE = 0.25
-    let estimatedTokens = 0
-    if (score >= 800)      estimatedTokens = 15000
-    else if (score >= 600) estimatedTokens = 8000
-    else if (score >= 400) estimatedTokens = 4000
-    else if (score >= 200) estimatedTokens = 1500
-    else if (score >= 50)  estimatedTokens = 400
+    const dropMap: Record<string, number> = { S: 15000, A: 8000, B: 4000, C: 1500, D: 400 }
+    const estTokens = dropMap[tier]
 
     return NextResponse.json({
-      txCount,
-      tokenTransfers,
-      nftCount,
-      volumeEth,
-      gasSpentEth: parseFloat(gasSpentEth.toFixed(6)),
-      uniqueContracts,
-      firstTxDaysAgo,
-      firstTxDate,
-      score,
-      tier,
-      estimatedTokens,
-      estimatedUsd: parseFloat((estimatedTokens * TOKEN_PRICE).toFixed(0)),
+      txCount, tokenTransfers, nftCount, nftCollections,
+      ethBalance, volumeEth, uniqueContracts, activeDays,
+      ageDays, firstTxDate, txPerDay, contractDiversity,
+      sybilFlags,
+      sybilRisk: sybilFlags.length >= 3 ? 'YÜKSEK' : sybilFlags.length >= 1 ? 'ORTA' : 'DÜŞÜK',
+      userType: '', aiSummary: '', dropRationale: '',
+      score, tier,
+      estimatedTokens: estTokens,
+      estimatedUsd: Math.round(estTokens * 0.25),
     })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'Veri çekilemedi' }, { status: 500 })
