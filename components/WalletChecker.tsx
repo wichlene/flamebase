@@ -6,7 +6,10 @@ interface WalletStats {
   tokenTransfers: number
   nftCount: number
   volumeEth: number
+  gasSpentEth: number
+  uniqueContracts: number
   firstTxDaysAgo: number
+  firstTxDate: string
   score: number
   tier: 'S' | 'A' | 'B' | 'C' | 'D'
   estimatedTokens: number
@@ -85,11 +88,13 @@ export default function WalletChecker({ connectedAddress, compact = false, onPay
   const displayAddr = checkedAddr || connectedAddress || ''
 
   const statRows = result ? [
-    { icon: '⚡', label: 'Total Transactions', value: result.txCount.toLocaleString(), sub: 'Base mainnet' },
-    { icon: '🔄', label: 'Token Transfers', value: result.tokenTransfers.toLocaleString(), sub: 'ERC-20 moves' },
-    { icon: '🖼️', label: 'NFTs Owned', value: result.nftCount.toLocaleString(), sub: 'ERC-721 + ERC-1155' },
-    { icon: '💸', label: 'Volume', value: `${result.volumeEth} ETH`, sub: 'Last 50 txs' },
-    { icon: '📅', label: 'Age on Base', value: result.firstTxDaysAgo > 0 ? `${result.firstTxDaysAgo} days` : 'Brand new', sub: 'Since first tx' },
+    { icon: '⚡', label: 'Total TX', value: result.txCount.toLocaleString(), sub: 'Base mainnet — tümü' },
+    { icon: '🔄', label: 'Token Transfers', value: result.tokenTransfers.toLocaleString(), sub: 'ERC-20 işlemleri' },
+    { icon: '🖼️', label: 'NFTs', value: result.nftCount.toLocaleString(), sub: 'ERC-721 + ERC-1155' },
+    { icon: '💸', label: 'ETH Gönderildi', value: `${result.volumeEth} ETH`, sub: 'Son 100 TX toplamı' },
+    { icon: '⛽', label: 'Gas Harcandı', value: `${result.gasSpentEth} ETH`, sub: 'Toplam gas maliyeti' },
+    { icon: '🏗️', label: 'Farklı Contract', value: result.uniqueContracts.toLocaleString(), sub: 'Protocol çeşitliliği' },
+    { icon: '📅', label: 'Base Yaşı', value: result.firstTxDaysAgo > 0 ? `${result.firstTxDaysAgo} gün` : 'Yeni', sub: result.firstTxDate || 'İlk TX tarihi' },
   ] : []
 
   const isBusy = paying || loading
