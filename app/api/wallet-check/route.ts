@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server'
 
-// Etherscan API V2 — single key covers Base (chainid 8453) + 60 other chains.
-// BaseScan deprecated its own API in favour of this unified endpoint.
+// Routescan — free, no-key, Etherscan-compatible API for Base (chainid 8453).
+// Etherscan V2's free tier does NOT cover Base ("Free API access is not
+// supported for this chain"), so Routescan is the primary data source.
+const ROUTESCAN = 'https://api.routescan.io/v2/network/mainnet/evm/8453/etherscan/api'
+// Etherscan V2 used as a fallback only if a paid key is configured.
 const ETHERSCAN_V2 = 'https://api.etherscan.io/v2/api'
 const BASE_CHAIN_ID = '8453'
 // Blockscout v2 used as a no-key fallback for NFT collections.
@@ -11,28 +14,45 @@ const MODEL = 'llama-3.3-70b-versatile'
 
 const ESCAN_KEY = process.env.BASESCAN_API_KEY || process.env.ETHERSCAN_API_KEY || ''
 
-// Call the Etherscan V2 account module for Base. Returns result array/value or null.
+// Normalise an Etherscan-style JSON response into a result array/value or null.
+function parseEtherscan(d: any) {
+  if (!d || typeof d !== 'object') return null
+  if (d.status === '1') return d.result
+  // status "0" with "No transactions found" is a valid empty result
+  if (typeof d.message === 'string' && /no transactions found/i.test(d.message)) return []
+  // A bare numeric string result (e.g. balance of 0) is still valid
+  if (typeof d.result === 'string' && /^\d+$/.test(d.result)) return d.result
+  return null
+}
+
+// Account-module call. Tries Routescan first (free, covers Base), then falls
+// back to Etherscan V2 if a paid key is configured.
 async function escan(params: Record<string, string>) {
-  const qs = new URLSearchParams({
-    chainid: BASE_CHAIN_ID,
-    apikey: ESCAN_KEY,
-    ...params,
-  }).toString()
+  // 1) Routescan (no key needed)
   try {
-    const res = await fetch(`${ETHERSCAN_V2}?${qs}`, {
+    const qs = new URLSearchParams(params).toString()
+    const res = await fetch(`${ROUTESCAN}?${qs}`, {
       headers: { Accept: 'application/json' },
       next: { revalidate: 120 },
     })
-    const d = await res.json()
-    if (d.status === '1') return d.result
-    // status "0" with "No transactions found" is a valid empty result
-    if (typeof d.message === 'string' && /no transactions found/i.test(d.message)) return []
-    // status "0" with a numeric result (e.g. balance of 0) is still valid
-    if (d.result !== undefined && d.result !== null && !Array.isArray(d.result) && typeof d.result !== 'object') return d.result
-    return null
-  } catch {
-    return null
+    if (res.ok) {
+      const parsed = parseEtherscan(await res.json())
+      if (parsed !== null) return parsed
+    }
+  } catch { /* fall through */ }
+
+  // 2) Etherscan V2 fallback (only useful with a paid key)
+  if (ESCAN_KEY) {
+    try {
+      const qs = new URLSearchParams({ chainid: BASE_CHAIN_ID, apikey: ESCAN_KEY, ...params }).toString()
+      const res = await fetch(`${ETHERSCAN_V2}?${qs}`, {
+        headers: { Accept: 'application/json' },
+        next: { revalidate: 120 },
+      })
+      if (res.ok) return parseEtherscan(await res.json())
+    } catch { /* give up */ }
   }
+  return null
 }
 
 async function bsV2(path: string) {
@@ -55,11 +75,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Geçersiz adres' }, { status: 400 })
     }
 
-    if (!ESCAN_KEY) {
-      return NextResponse.json({ error: 'BASESCAN_API_KEY ayarlı değil — Vercel env vars\'a ekle.' }, { status: 500 })
-    }
-
-    // Fetch all in parallel via Etherscan V2 (Base)
+    // Fetch all in parallel (Routescan — free, no key needed)
     const [txList, internalTxList, tokenTxList, nftTxList, balanceRaw, nftData] = await Promise.all([
       // Normal txs (up to 5000, sorted asc for age)
       escan({ module: 'account', action: 'txlist', address, startblock: '0', endblock: '99999999', page: '1', offset: '5000', sort: 'asc' }),
@@ -82,10 +98,11 @@ export async function POST(request: Request) {
     const txCount = txs.length
     const hasMore = txCount >= 5000  // might have more
 
-    // ETH balance
-    const ethBalance = balanceRaw
-      ? parseFloat((Number(BigInt(String(balanceRaw))) / 1e18).toFixed(4))
-      : 0
+    // ETH balance — only parse a clean numeric wei string
+    let ethBalance = 0
+    if (typeof balanceRaw === 'string' && /^\d+$/.test(balanceRaw)) {
+      ethBalance = parseFloat((Number(BigInt(balanceRaw)) / 1e18).toFixed(4))
+    }
 
     // Volume — ETH sent FROM this address
     let volumeWei = 0n
