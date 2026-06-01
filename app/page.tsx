@@ -1549,7 +1549,7 @@ export default function Home() {
                       Buy $FLM on Uniswap
                     </a>
                     <a
-                      href="https://clanker.world/clanker/0xaDeaD5E8cA2893Be6e8239CbBAE83049a701cB07"
+                      href="https://dexscreener.com/base/0xadead5e8ca2893be6e8239cbbae83049a701cb07"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex-1 bg-white hover:bg-[#F0F4FF] text-[#0052FF] text-xs font-bold px-3 py-2 rounded-xl text-center transition-colors border border-[#D6E2FF]"
