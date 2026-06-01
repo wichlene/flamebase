@@ -2269,6 +2269,11 @@ export default function Home() {
                       </div>
                     </div>
 
+                    {/* Base Wallet Analysis */}
+                    <div className="bg-white border border-[#E4E7EB] rounded-2xl shadow-sm overflow-hidden mb-4">
+                      <WalletChecker connectedAddress={address} />
+                    </div>
+
                     {/* Most Popular Post — highest-liked post the user has written */}
                     {(() => {
                       if (myPosts.length === 0) return null
@@ -2611,7 +2616,7 @@ export default function Home() {
             )}
             {activeTool === 'wallet' && (
               <div className="mt-2 border border-[#E4E7EB] rounded-xl overflow-hidden bg-white">
-                <WalletChecker connectedAddress={address} />
+                <WalletChecker connectedAddress={address} compact />
               </div>
             )}
 
