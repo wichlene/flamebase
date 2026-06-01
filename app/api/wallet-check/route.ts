@@ -166,6 +166,15 @@ export async function POST(request: Request) {
     if (nftCount === 0 && txCount > 30)              sybilFlags.push('Hiç NFT yok')
     if (Number(txPerDay) > 30)                       sybilFlags.push(`Günde ${txPerDay} TX — bot benzeri`)
 
+    // Rule-based score (always computed — used as a floor for the AI score).
+    let formulaScore = 0
+    if (txCount >= 1000) formulaScore += 350; else if (txCount >= 500) formulaScore += 280; else if (txCount >= 100) formulaScore += 200; else if (txCount >= 50) formulaScore += 140; else if (txCount >= 20) formulaScore += 90; else if (txCount >= 1) formulaScore += 30
+    if (nftCount >= 10) formulaScore += 150; else if (nftCount >= 1) formulaScore += 80
+    if (ageDays >= 365) formulaScore += 250; else if (ageDays >= 180) formulaScore += 180; else if (ageDays >= 90) formulaScore += 110; else if (ageDays >= 30) formulaScore += 55
+    if (uniqueContracts >= 20) formulaScore += 100; else if (uniqueContracts >= 10) formulaScore += 65; else if (uniqueContracts >= 3) formulaScore += 30
+    if (tokenTransfers >= 100) formulaScore += 50; else if (tokenTransfers >= 10) formulaScore += 25
+    formulaScore = Math.min(formulaScore, 1000)
+
     // AI
     let aiSummary = '', aiScore = 0, aiTier = 'D'
     let aiDropTokens = 0, aiDropUsd = 0
@@ -214,18 +223,12 @@ JSON:
       } catch { /* fallback */ }
     }
 
-    if (!aiScore) {
-      let s = 0
-      if (txCount >= 1000) s += 350; else if (txCount >= 500) s += 280; else if (txCount >= 100) s += 200; else if (txCount >= 50) s += 140; else if (txCount >= 20) s += 90; else if (txCount >= 1) s += 30
-      if (nftCount >= 10) s += 150; else if (nftCount >= 1) s += 80
-      if (ageDays >= 365) s += 250; else if (ageDays >= 180) s += 180; else if (ageDays >= 90) s += 110; else if (ageDays >= 30) s += 55
-      if (uniqueContracts >= 20) s += 100; else if (uniqueContracts >= 10) s += 65; else if (uniqueContracts >= 3) s += 30
-      if (tokenTransfers >= 100) s += 50; else if (tokenTransfers >= 10) s += 25
-      aiScore = Math.min(s, 1000)
-      aiTier = aiScore >= 800 ? 'S' : aiScore >= 600 ? 'A' : aiScore >= 400 ? 'B' : aiScore >= 200 ? 'C' : 'D'
-      const tm: Record<string, number> = { S: 15000, A: 8000, B: 4000, C: 1500, D: 400 }
-      aiDropTokens = tm[aiTier]; aiDropUsd = Math.round(aiDropTokens * 0.25)
-    }
+    // AI score is a bonus on top of the formula — never goes below it.
+    aiScore = Math.max(aiScore, formulaScore)
+    if (!aiScore) aiScore = formulaScore
+    aiTier = aiScore >= 800 ? 'S' : aiScore >= 600 ? 'A' : aiScore >= 400 ? 'B' : aiScore >= 200 ? 'C' : 'D'
+    const tm: Record<string, number> = { S: 15000, A: 8000, B: 4000, C: 1500, D: 400 }
+    if (!aiDropTokens) { aiDropTokens = tm[aiTier]; aiDropUsd = Math.round(aiDropTokens * 0.25) }
 
     return NextResponse.json({
       txCount, hasMore, contractCallCount, tokenTransfers,
