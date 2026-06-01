@@ -17,6 +17,7 @@ import { ToastStack, type ToastItem, type ToastKind } from '../components/Toast'
 const Messages = dynamic(() => import('../components/Messages'), { ssr: false, loading: () => <div className="p-8 text-center text-[#5B6271]">💬 Loading…</div> })
 const AIChat = dynamic(() => import('../components/AIChat'), { ssr: false, loading: () => <div className="p-8 text-center text-[#5B6271]">🤖 Loading AI…</div> })
 const Reels = dynamic(() => import('../components/Reels'), { ssr: false, loading: () => <div className="p-8 text-center text-[#5B6271]">🎬 Loading Reels…</div> })
+const TokenAnalyzer = dynamic(() => import('../components/TokenAnalyzer'), { ssr: false, loading: () => <div className="p-8 text-center text-[#5B6271]">🔍 Loading…</div> })
 
 const TOOLS_DEPLOYED = TOOLS_ADDRESS.length > 0
 const TOKEN_FACTORY_DEPLOYED = TOKEN_FACTORY_ADDRESS.length > 0
@@ -164,6 +165,23 @@ function ConnectPrompt({ message, label = 'Connect Wallet' }: { message: string;
       <p className="text-[#0A0B0D] font-bold mb-1 text-lg">{label}</p>
       <p className="text-[#5B6271] text-sm mb-6">{message}</p>
       <div className="flex justify-center"><ConnectButton /></div>
+    </div>
+  )
+}
+
+function AITabContent() {
+  const [aiSubTab, setAiSubTab] = useState<'chat' | 'analyze'>('chat')
+  return (
+    <div>
+      <div className="flex border-b border-[#E4E7EB] px-4 gap-1 pt-2">
+        {([['chat', '🤖 AI Chat'], ['analyze', '🔍 Token Analyzer']] as const).map(([id, label]) => (
+          <button key={id} onClick={() => setAiSubTab(id)}
+            className={`px-4 py-2 text-sm font-semibold rounded-t-xl transition-colors ${aiSubTab === id ? 'bg-[#F0F4FF] text-[#0052FF] border-b-2 border-[#0052FF]' : 'text-[#5B6271] hover:text-[#0A0B0D]'}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+      {aiSubTab === 'chat' ? <AIChat /> : <TokenAnalyzer />}
     </div>
   )
 }
@@ -2147,11 +2165,9 @@ export default function Home() {
               </div>
             )}
 
-            {/* ══ AI CHAT ══ */}
+            {/* ══ AI CHAT + TOKEN ANALYZER ══ */}
             {activeTab === 'ai' && (
-              <div>
-                <AIChat />
-              </div>
+              <AITabContent />
             )}
 
             {/* ══ REELS ══ — keep mounted once first visited so video plays in background */}
