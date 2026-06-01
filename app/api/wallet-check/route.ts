@@ -1,59 +1,13 @@
 import { NextResponse } from 'next/server'
 
-// Routescan — free, no-key, Etherscan-compatible API for Base (chainid 8453).
-// Etherscan V2's free tier does NOT cover Base ("Free API access is not
-// supported for this chain"), so Routescan is the primary data source.
-const ROUTESCAN = 'https://api.routescan.io/v2/network/mainnet/evm/8453/etherscan/api'
-// Etherscan V2 used as a fallback only if a paid key is configured.
-const ETHERSCAN_V2 = 'https://api.etherscan.io/v2/api'
-const BASE_CHAIN_ID = '8453'
-// Blockscout v2 used as a no-key fallback for NFT collections.
+// Blockscout v2 (base.blockscout.com) is the primary source — it is reliably
+// reachable server-side from Vercel (the NFT endpoint already works), needs no
+// API key, and exposes real counters for Base. Routescan/Etherscan are not
+// reachable / not free for Base, so we no longer depend on them.
 const BS_V2 = 'https://base.blockscout.com/api/v2'
+const BS_COMPAT = 'https://base.blockscout.com/api'
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
 const MODEL = 'llama-3.3-70b-versatile'
-
-const ESCAN_KEY = process.env.BASESCAN_API_KEY || process.env.ETHERSCAN_API_KEY || ''
-
-// Normalise an Etherscan-style JSON response into a result array/value or null.
-function parseEtherscan(d: any) {
-  if (!d || typeof d !== 'object') return null
-  if (d.status === '1') return d.result
-  // status "0" with "No transactions found" is a valid empty result
-  if (typeof d.message === 'string' && /no transactions found/i.test(d.message)) return []
-  // A bare numeric string result (e.g. balance of 0) is still valid
-  if (typeof d.result === 'string' && /^\d+$/.test(d.result)) return d.result
-  return null
-}
-
-// Account-module call. Tries Routescan first (free, covers Base), then falls
-// back to Etherscan V2 if a paid key is configured.
-async function escan(params: Record<string, string>) {
-  // 1) Routescan (no key needed)
-  try {
-    const qs = new URLSearchParams(params).toString()
-    const res = await fetch(`${ROUTESCAN}?${qs}`, {
-      headers: { Accept: 'application/json' },
-      next: { revalidate: 120 },
-    })
-    if (res.ok) {
-      const parsed = parseEtherscan(await res.json())
-      if (parsed !== null) return parsed
-    }
-  } catch { /* fall through */ }
-
-  // 2) Etherscan V2 fallback (only useful with a paid key)
-  if (ESCAN_KEY) {
-    try {
-      const qs = new URLSearchParams({ chainid: BASE_CHAIN_ID, apikey: ESCAN_KEY, ...params }).toString()
-      const res = await fetch(`${ETHERSCAN_V2}?${qs}`, {
-        headers: { Accept: 'application/json' },
-        next: { revalidate: 120 },
-      })
-      if (res.ok) return parseEtherscan(await res.json())
-    } catch { /* give up */ }
-  }
-  return null
-}
 
 async function bsV2(path: string) {
   try {
@@ -68,6 +22,89 @@ async function bsV2(path: string) {
   }
 }
 
+// Oldest tx timestamp (unix seconds) via Blockscout's Etherscan-compatible
+// endpoint on the same reachable host — one tiny asc request, offset 1.
+async function firstTxTimestamp(address: string): Promise<number> {
+  try {
+    const qs = new URLSearchParams({
+      module: 'account', action: 'txlist', address,
+      startblock: '0', endblock: '99999999', page: '1', offset: '1', sort: 'asc',
+    }).toString()
+    const res = await fetch(`${BS_COMPAT}?${qs}`, {
+      headers: { Accept: 'application/json' },
+      next: { revalidate: 600 },
+    })
+    if (!res.ok) return 0
+    const d = await res.json()
+    const ts = Array.isArray(d?.result) ? parseInt(d.result[0]?.timeStamp, 10) : 0
+    return isNaN(ts) ? 0 : ts
+  } catch {
+    return 0
+  }
+}
+
+const num = (v: any) => {
+  const n = parseInt(String(v ?? '').replace(/[^0-9]/g, ''), 10)
+  return isNaN(n) ? 0 : n
+}
+
+// Walk the address transaction list (newest first) up to maxPages to derive
+// volume, contract diversity, active days and the oldest tx seen.
+async function txStats(address: string, maxPages = 16) {
+  const lc = address.toLowerCase()
+  let volumeWei = 0n
+  const contractSet = new Set<string>()
+  const activeDaysSet = new Set<string>()
+  let contractCallCount = 0
+  let oldestTs = 0
+  let newestTs = 0
+  let scanned = 0
+  let next = ''
+
+  for (let i = 0; i < maxPages; i++) {
+    const d = await bsV2(`/addresses/${address}/transactions${next}`)
+    const items: any[] = Array.isArray(d?.items) ? d.items : []
+    if (items.length === 0) break
+
+    for (const tx of items) {
+      scanned++
+      const ts = tx.timestamp ? Math.floor(new Date(tx.timestamp).getTime() / 1000) : 0
+      if (ts) {
+        if (!oldestTs || ts < oldestTs) oldestTs = ts
+        if (ts > newestTs) newestTs = ts
+      }
+      const from = tx.from?.hash?.toLowerCase()
+      if (from === lc) {
+        if (tx.value && tx.value !== '0') {
+          try { volumeWei += BigInt(tx.value) } catch { /* */ }
+        }
+        const to = tx.to?.hash?.toLowerCase()
+        if (to) contractSet.add(to)
+        if (tx.method || (tx.raw_input && tx.raw_input !== '0x')) contractCallCount++
+        if (ts) {
+          const dt = new Date(ts * 1000)
+          activeDaysSet.add(`${dt.getUTCFullYear()}-${dt.getUTCMonth()}-${dt.getUTCDate()}`)
+        }
+      }
+    }
+
+    const np = d?.next_page_params
+    if (!np) break
+    next = `?${new URLSearchParams(np as Record<string, string>).toString()}`
+  }
+
+  return {
+    volumeEth: parseFloat((Number(volumeWei) / 1e18).toFixed(4)),
+    uniqueContracts: contractSet.size,
+    activeDays: activeDaysSet.size,
+    contractCallCount,
+    oldestTs,
+    newestTs,
+    scanned,
+    reachedEnd: scanned > 0 && !next, // best-effort
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const { address } = await request.json()
@@ -75,73 +112,31 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Geçersiz adres' }, { status: 400 })
     }
 
-    // Fetch all in parallel (Routescan — free, no key needed)
-    const [txList, internalTxList, tokenTxList, nftTxList, balanceRaw, nftData] = await Promise.all([
-      // Normal txs (up to 5000, sorted asc for age)
-      escan({ module: 'account', action: 'txlist', address, startblock: '0', endblock: '99999999', page: '1', offset: '5000', sort: 'asc' }),
-      // Internal txs (contract interactions)
-      escan({ module: 'account', action: 'txlistinternal', address, page: '1', offset: '500', sort: 'desc' }),
-      // ERC-20 token transfers
-      escan({ module: 'account', action: 'tokentx', address, page: '1', offset: '500', sort: 'desc' }),
-      // NFT transfers (ERC-721)
-      escan({ module: 'account', action: 'tokennfttx', address, page: '1', offset: '200', sort: 'desc' }),
-      // ETH balance
-      escan({ module: 'account', action: 'balance', address, tag: 'latest' }),
-      // NFTs owned (Blockscout v2 — no key needed, works for current holdings)
+    // All sourced from Blockscout (reachable, no key).
+    const [counters, addrInfo, nftData, stats, firstTs] = await Promise.all([
+      bsV2(`/addresses/${address}/counters`),          // real tx / token-transfer totals
+      bsV2(`/addresses/${address}`),                   // coin balance
       bsV2(`/addresses/${address}/nft/collections?type=ERC-721,ERC-1155`),
+      txStats(address),                                // volume / contracts / active days
+      firstTxTimestamp(address),                       // accurate wallet age
     ])
 
-    const txs: any[] = Array.isArray(txList) ? txList : []
-    const tokenTxs: any[] = Array.isArray(tokenTxList) ? tokenTxList : []
-    const nftTxs: any[] = Array.isArray(nftTxList) ? nftTxList : []
+    // Real totals from Blockscout counters
+    const txCount = num(counters?.transactions_count)
+    const tokenTransfers = num(counters?.token_transfers_count)
 
-    const txCount = txs.length
-    const hasMore = txCount >= 5000  // might have more
-
-    // ETH balance — only parse a clean numeric wei string
+    // ETH balance (coin_balance is wei string)
     let ethBalance = 0
-    if (typeof balanceRaw === 'string' && /^\d+$/.test(balanceRaw)) {
-      ethBalance = parseFloat((Number(BigInt(balanceRaw)) / 1e18).toFixed(4))
+    const cb = addrInfo?.coin_balance
+    if (typeof cb === 'string' && /^\d+$/.test(cb)) {
+      ethBalance = parseFloat((Number(BigInt(cb)) / 1e18).toFixed(4))
     }
 
-    // Volume — ETH sent FROM this address
-    let volumeWei = 0n
-    const contractSet = new Set<string>()
-    const activeDaysSet = new Set<string>()
-    let contractCallCount = 0
+    const { volumeEth, uniqueContracts, activeDays, contractCallCount } = stats
+    // Prefer the accurate first-tx timestamp; fall back to oldest scanned.
+    const oldestTs = firstTs || stats.oldestTs
 
-    for (const tx of txs) {
-      if (tx.from?.toLowerCase() === address.toLowerCase()) {
-        if (tx.value && tx.value !== '0') {
-          try { volumeWei += BigInt(tx.value) } catch { /* */ }
-        }
-        if (tx.to) contractSet.add(tx.to.toLowerCase())
-        if (tx.input && tx.input !== '0x') contractCallCount++
-        if (tx.timeStamp) {
-          const d = new Date(parseInt(tx.timeStamp) * 1000)
-          activeDaysSet.add(`${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`)
-        }
-      }
-    }
-
-    const volumeEth = parseFloat((Number(volumeWei) / 1e18).toFixed(4))
-    const uniqueContracts = contractSet.size
-    const activeDays = activeDaysSet.size
-    const tokenTransfers = tokenTxs.length
-    const nftTransfers = nftTxs.length
-
-    // Age — first tx
-    let ageDays = 0, firstTxDate = ''
-    const firstTx = txs[0]
-    if (firstTx?.timeStamp) {
-      const ms = Date.now() - parseInt(firstTx.timeStamp) * 1000
-      ageDays = Math.floor(ms / 86400000)
-      firstTxDate = new Date(parseInt(firstTx.timeStamp) * 1000).toLocaleDateString('tr-TR')
-    }
-
-    const txPerDay = ageDays > 0 ? (txCount / ageDays).toFixed(1) : '0'
-
-    // NFTs owned (from Blockscout v2)
+    // NFTs owned
     let nftCount = 0, nftCollections = 0
     if (Array.isArray(nftData?.items)) {
       nftCollections = nftData.items.length
@@ -151,13 +146,25 @@ export async function POST(request: Request) {
       }
     }
 
+    // Age — from the oldest tx we scanned. If we didn't reach the very first
+    // tx (very active wallet), this is a lower bound, so flag it.
+    let ageDays = 0, firstTxDate = '', ageApprox = false
+    if (oldestTs) {
+      ageDays = Math.floor((Date.now() - oldestTs * 1000) / 86400000)
+      firstTxDate = new Date(oldestTs * 1000).toLocaleDateString('tr-TR')
+      // Age is exact when it came from the dedicated first-tx lookup.
+      if (!firstTs && txCount > stats.scanned && stats.scanned > 0) ageApprox = true
+    }
+
+    const txPerDay = ageDays > 0 ? (txCount / ageDays).toFixed(1) : '0'
+    const hasMore = txCount > stats.scanned
+
     // Sybil signals
     const sybilFlags: string[] = []
-    if (ageDays > 0 && ageDays < 30)               sybilFlags.push('Çok yeni cüzdan (<30 gün)')
-    if (txCount > 50 && uniqueContracts < 3)        sybilFlags.push('Çok az contract çeşitliliği')
-    if (nftCount === 0 && nftTransfers === 0 && txCount > 30) sybilFlags.push('Hiç NFT yok')
-    if (txCount > 30 && activeDays <= 3)            sybilFlags.push('Txler çok kısa süreye sıkışmış')
-    if (Number(txPerDay) > 30)                      sybilFlags.push(`Günde ${txPerDay} TX — bot benzeri`)
+    if (ageDays > 0 && ageDays < 30 && !ageApprox)  sybilFlags.push('Çok yeni cüzdan (<30 gün)')
+    if (txCount > 50 && uniqueContracts < 3)         sybilFlags.push('Çok az contract çeşitliliği')
+    if (nftCount === 0 && txCount > 30)              sybilFlags.push('Hiç NFT yok')
+    if (Number(txPerDay) > 30)                       sybilFlags.push(`Günde ${txPerDay} TX — bot benzeri`)
 
     // AI
     let aiSummary = '', aiScore = 0, aiTier = 'D'
@@ -165,20 +172,19 @@ export async function POST(request: Request) {
     let sybilRisk = sybilFlags.length >= 3 ? 'YÜKSEK' : sybilFlags.length >= 1 ? 'ORTA' : 'DÜŞÜK'
     let userType = '', dropRationale = ''
 
-    if (process.env.GROQ_API_KEY) {
+    if (process.env.GROQ_API_KEY && txCount > 0) {
       const prompt = `Base mainnet cüzdan verisini analiz et. SADECE JSON döndür, başka hiçbir şey yazma.
 
 GERÇEK VERİ (Blockscout API):
-- Normal TX: ${txCount}${hasMore ? '+' : ''}
-- Contract Çağrısı: ${contractCallCount}
-- ERC-20 Transfer: ${tokenTransfers}+
-- NFT Transfer: ${nftTransfers}+
+- Toplam TX: ${txCount}
+- Contract Çağrısı (taranan): ${contractCallCount}
+- ERC-20/Token Transfer: ${tokenTransfers}
 - NFT Bakiye: ${nftCount} (${nftCollections} koleksiyon)
 - ETH Bakiye: ${ethBalance}
-- Gönderilen ETH: ${volumeEth}
-- Farklı Adres: ${uniqueContracts}
-- Aktif Gün: ${activeDays}
-- Cüzdan Yaşı: ${ageDays} gün${firstTxDate ? ` (${firstTxDate})` : ''}
+- Gönderilen ETH (taranan): ${volumeEth}
+- Farklı Adres (taranan): ${uniqueContracts}
+- Aktif Gün (taranan): ${activeDays}
+- Cüzdan Yaşı: ${ageDays} gün${ageApprox ? '+ (en az)' : ''}${firstTxDate ? ` (ilk görülen: ${firstTxDate})` : ''}
 - Günlük Ort TX: ${txPerDay}
 - Sybil Uyarılar: ${sybilFlags.length > 0 ? sybilFlags.join(' | ') : 'YOK'}
 
@@ -222,9 +228,10 @@ JSON:
     }
 
     return NextResponse.json({
-      txCount, hasMore, contractCallCount, tokenTransfers, nftTransfers,
+      txCount, hasMore, contractCallCount, tokenTransfers,
       nftCount, nftCollections, ethBalance, volumeEth,
-      uniqueContracts, activeDays, ageDays, firstTxDate, txPerDay,
+      uniqueContracts, activeDays, ageDays, ageApprox, firstTxDate, txPerDay,
+      scanned: stats.scanned,
       sybilFlags, sybilRisk, userType, aiSummary, dropRationale,
       score: aiScore, tier: aiTier,
       estimatedTokens: aiDropTokens, estimatedUsd: aiDropUsd,
