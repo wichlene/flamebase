@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 
 interface WalletStats {
   txCount: number
@@ -32,16 +32,19 @@ const TIER_LABEL: Record<string, string> = {
 interface Props {
   connectedAddress?: string
   compact?: boolean
+  onPay?: () => Promise<void>
+  feeLabel?: string
 }
 
-export default function WalletChecker({ connectedAddress, compact = false }: Props) {
+export default function WalletChecker({ connectedAddress, compact = false, onPay, feeLabel = '$0.04' }: Props) {
   const [customAddr, setCustomAddr] = useState('')
   const [loading, setLoading] = useState(false)
+  const [paying, setPaying] = useState(false)
   const [result, setResult] = useState<WalletStats | null>(null)
   const [error, setError] = useState('')
   const [checkedAddr, setCheckedAddr] = useState('')
 
-  const check = async (addr: string) => {
+  const fetch_ = async (addr: string) => {
     const target = addr.trim()
     if (!target) return
     setLoading(true)
@@ -63,12 +66,20 @@ export default function WalletChecker({ connectedAddress, compact = false }: Pro
     setLoading(false)
   }
 
-  // Auto-fetch when connected wallet is provided
-  useEffect(() => {
-    if (connectedAddress && connectedAddress !== checkedAddr) {
-      check(connectedAddress)
+  const handleAnalyze = async (addr: string) => {
+    if (onPay) {
+      setPaying(true)
+      try {
+        await onPay()
+      } catch {
+        setPaying(false)
+        setError('Transaction rejected')
+        return
+      }
+      setPaying(false)
     }
-  }, [connectedAddress]) // eslint-disable-line react-hooks/exhaustive-deps
+    await fetch_(addr)
+  }
 
   const tierClass = result ? TIER_COLOR[result.tier] : ''
   const displayAddr = checkedAddr || connectedAddress || ''
@@ -81,37 +92,58 @@ export default function WalletChecker({ connectedAddress, compact = false }: Pro
     { icon: '📅', label: 'Age on Base', value: result.firstTxDaysAgo > 0 ? `${result.firstTxDaysAgo} days` : 'Brand new', sub: 'Since first tx' },
   ] : []
 
+  const isBusy = paying || loading
+
   return (
     <div className={compact ? 'space-y-3' : 'p-5 space-y-4'}>
       <div className="flex items-center justify-between">
         <div>
           <h2 className="font-black text-[#0A0B0D] text-base">🏦 Base Wallet Analysis</h2>
-          {displayAddr && (
+          {displayAddr && !result && (
             <p className="text-[11px] text-[#8A919E] font-mono mt-0.5">
               {displayAddr.slice(0, 10)}…{displayAddr.slice(-6)}
             </p>
           )}
         </div>
         {result && (
-          <button onClick={() => check(displayAddr)}
-            className="text-xs text-[#0052FF] hover:underline font-semibold">
+          <button onClick={() => handleAnalyze(displayAddr)} disabled={isBusy}
+            className="text-xs text-[#0052FF] hover:underline font-semibold disabled:opacity-40">
             Refresh
           </button>
         )}
       </div>
 
+      {/* Pay & Analyze button — shown when no result yet */}
+      {!result && !loading && connectedAddress && (
+        <div className="bg-gradient-to-br from-[#F0F4FF] to-[#E6EEFF] border border-[#D6E2FF] rounded-2xl p-4 text-center">
+          <p className="text-2xl mb-2">🔍</p>
+          <p className="font-bold text-[#0A0B0D] text-sm mb-1">Cüzdanını analiz et</p>
+          <p className="text-xs text-[#5B6271] mb-4">
+            TX sayısı, NFT, volume ve olası Base drop tahmini.
+            {onPay && <><br /><span className="font-semibold text-[#0052FF]">Ücret: {feeLabel} (on-chain)</span></>}
+          </p>
+          <button
+            onClick={() => handleAnalyze(connectedAddress)}
+            disabled={isBusy}
+            className="w-full bg-[#0052FF] hover:bg-[#1652F0] disabled:opacity-50 text-white font-black py-3 rounded-xl text-sm transition-colors shadow-sm"
+          >
+            {paying ? '⏳ Onay bekleniyor…' : loading ? '🔍 Analiz ediliyor…' : onPay ? `🔍 Analiz Et — ${feeLabel}` : '🔍 Analiz Et'}
+          </button>
+        </div>
+      )}
+
       {/* Search any wallet */}
-      {!compact && (
+      {!compact && !result && (
         <div className="flex gap-2">
           <input
             value={customAddr}
             onChange={e => setCustomAddr(e.target.value)}
-            placeholder="Check any wallet: 0x..."
+            placeholder="Başka cüzdan: 0x..."
             className="flex-1 border border-[#E4E7EB] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#0052FF]/20 focus:border-[#0052FF] bg-white"
-            onKeyDown={e => e.key === 'Enter' && customAddr.trim() && check(customAddr)}
+            onKeyDown={e => e.key === 'Enter' && customAddr.trim() && handleAnalyze(customAddr)}
           />
-          <button onClick={() => customAddr.trim() && check(customAddr)}
-            disabled={loading || !customAddr.trim()}
+          <button onClick={() => customAddr.trim() && handleAnalyze(customAddr)}
+            disabled={isBusy || !customAddr.trim()}
             className="bg-[#F0F4FF] hover:bg-[#E6EEFF] disabled:opacity-40 text-[#0052FF] font-bold px-4 py-2.5 rounded-xl text-sm border border-[#D6E2FF] transition-colors">
             Check
           </button>
