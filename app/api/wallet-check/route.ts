@@ -1,22 +1,34 @@
 import { NextResponse } from 'next/server'
 
-// Blockscout Etherscan-compatible API — no key needed, works server-side
-const BS_COMPAT = 'https://base.blockscout.com/api'
+// Etherscan API V2 — single key covers Base (chainid 8453) + 60 other chains.
+// BaseScan deprecated its own API in favour of this unified endpoint.
+const ETHERSCAN_V2 = 'https://api.etherscan.io/v2/api'
+const BASE_CHAIN_ID = '8453'
+// Blockscout v2 used as a no-key fallback for NFT collections.
 const BS_V2 = 'https://base.blockscout.com/api/v2'
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
 const MODEL = 'llama-3.3-70b-versatile'
 
-async function bsCompat(params: Record<string, string>) {
-  const qs = new URLSearchParams(params).toString()
+const ESCAN_KEY = process.env.BASESCAN_API_KEY || process.env.ETHERSCAN_API_KEY || ''
+
+// Call the Etherscan V2 account module for Base. Returns result array/value or null.
+async function escan(params: Record<string, string>) {
+  const qs = new URLSearchParams({
+    chainid: BASE_CHAIN_ID,
+    apikey: ESCAN_KEY,
+    ...params,
+  }).toString()
   try {
-    const res = await fetch(`${BS_COMPAT}?${qs}`, {
+    const res = await fetch(`${ETHERSCAN_V2}?${qs}`, {
       headers: { Accept: 'application/json' },
       next: { revalidate: 120 },
     })
     const d = await res.json()
-    if (d.status === '1' && d.result) return d.result
-    // Some endpoints return status "0" with valid data (e.g. 0 txs)
-    if (d.message === 'No transactions found') return []
+    if (d.status === '1') return d.result
+    // status "0" with "No transactions found" is a valid empty result
+    if (typeof d.message === 'string' && /no transactions found/i.test(d.message)) return []
+    // status "0" with a numeric result (e.g. balance of 0) is still valid
+    if (d.result !== undefined && d.result !== null && !Array.isArray(d.result) && typeof d.result !== 'object') return d.result
     return null
   } catch {
     return null
@@ -43,19 +55,23 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Geçersiz adres' }, { status: 400 })
     }
 
-    // Fetch all in parallel
+    if (!ESCAN_KEY) {
+      return NextResponse.json({ error: 'BASESCAN_API_KEY ayarlı değil — Vercel env vars\'a ekle.' }, { status: 500 })
+    }
+
+    // Fetch all in parallel via Etherscan V2 (Base)
     const [txList, internalTxList, tokenTxList, nftTxList, balanceRaw, nftData] = await Promise.all([
       // Normal txs (up to 5000, sorted asc for age)
-      bsCompat({ module: 'account', action: 'txlist', address, startblock: '0', endblock: '99999999', page: '1', offset: '5000', sort: 'asc' }),
+      escan({ module: 'account', action: 'txlist', address, startblock: '0', endblock: '99999999', page: '1', offset: '5000', sort: 'asc' }),
       // Internal txs (contract interactions)
-      bsCompat({ module: 'account', action: 'txlistinternal', address, page: '1', offset: '500', sort: 'desc' }),
+      escan({ module: 'account', action: 'txlistinternal', address, page: '1', offset: '500', sort: 'desc' }),
       // ERC-20 token transfers
-      bsCompat({ module: 'account', action: 'tokentx', address, page: '1', offset: '500', sort: 'desc' }),
+      escan({ module: 'account', action: 'tokentx', address, page: '1', offset: '500', sort: 'desc' }),
       // NFT transfers (ERC-721)
-      bsCompat({ module: 'account', action: 'tokennfttx', address, page: '1', offset: '200', sort: 'desc' }),
+      escan({ module: 'account', action: 'tokennfttx', address, page: '1', offset: '200', sort: 'desc' }),
       // ETH balance
-      bsCompat({ module: 'account', action: 'balance', address, tag: 'latest' }),
-      // NFTs owned (Blockscout v2 — this one works)
+      escan({ module: 'account', action: 'balance', address, tag: 'latest' }),
+      // NFTs owned (Blockscout v2 — no key needed, works for current holdings)
       bsV2(`/addresses/${address}/nft/collections?type=ERC-721,ERC-1155`),
     ])
 
