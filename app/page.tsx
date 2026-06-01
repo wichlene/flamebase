@@ -18,6 +18,7 @@ const Messages = dynamic(() => import('../components/Messages'), { ssr: false, l
 const AIChat = dynamic(() => import('../components/AIChat'), { ssr: false, loading: () => <div className="p-8 text-center text-[#5B6271]">🤖 Loading AI…</div> })
 const Reels = dynamic(() => import('../components/Reels'), { ssr: false, loading: () => <div className="p-8 text-center text-[#5B6271]">🎬 Loading Reels…</div> })
 const TokenAnalyzer = dynamic(() => import('../components/TokenAnalyzer'), { ssr: false, loading: () => <div className="p-8 text-center text-[#5B6271]">🔍 Loading…</div> })
+const WalletChecker = dynamic(() => import('../components/WalletChecker'), { ssr: false, loading: () => <div className="p-3 text-center text-[#5B6271] text-xs">Loading…</div> })
 
 const TOOLS_DEPLOYED = TOOLS_ADDRESS.length > 0
 const TOKEN_FACTORY_DEPLOYED = TOKEN_FACTORY_ADDRESS.length > 0
@@ -2545,6 +2546,13 @@ export default function Home() {
                 <span className="text-xs font-bold text-[#0A0B0D]">DAO</span>
               </button>
 
+              {/* Wallet Check */}
+              <button onClick={() => setActiveTool(activeTool === 'wallet' ? null : 'wallet')}
+                className={`flex flex-col items-center gap-1.5 py-4 px-1 rounded-xl border transition-all ${activeTool === 'wallet' ? 'bg-[#E6EEFF] border-[#0052FF]' : 'bg-white border-[#E4E7EB] hover:border-[#0052FF] hover:bg-[#F0F4FF]'}`}>
+                <span className="font-mono text-[#0052FF] font-black text-lg">[🏦]</span>
+                <span className="text-xs font-bold text-[#0A0B0D]">Wallet</span>
+              </button>
+
             </div>
 
             {/* Expanded forms */}
@@ -2599,6 +2607,11 @@ export default function Home() {
                   disabled={daoLoading || !daoTitle} className="w-full bg-[#0052FF] text-white text-xs py-2 rounded-lg font-bold disabled:opacity-40">
                   {daoLoading ? 'Creating…' : 'Create Proposal'}
                 </button>
+              </div>
+            )}
+            {activeTool === 'wallet' && (
+              <div className="mt-2 border border-[#E4E7EB] rounded-xl overflow-hidden bg-white">
+                <WalletChecker connectedAddress={address} />
               </div>
             )}
 
