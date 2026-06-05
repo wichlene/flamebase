@@ -51,7 +51,7 @@ interface ProfileData {
   tips: bigint
 }
 
-type Tab = 'feed' | 'post' | 'activity' | 'messages' | 'profile' | 'ai' | 'reels'
+type Tab = 'feed' | 'post' | 'activity' | 'messages' | 'profile' | 'ai' | 'reels' | 'tools'
 
 function Avatar({ addr, profiles, size = 'md' }: { addr: string; profiles: Record<string, ProfileData>; size?: 'sm' | 'md' | 'lg' }) {
   const p = profiles[addr.toLowerCase()]
@@ -1183,6 +1183,7 @@ export default function Home() {
     { tab: 'messages', icon: '💬', labelKey: 'navMessages' },
     { tab: 'ai', icon: '🤖', labelKey: 'navAI' },
     { tab: 'profile', icon: '👤', labelKey: 'navProfile' },
+    { tab: 'tools', icon: '🛠️', labelKey: 'navTools' },
   ]
 
   return (
@@ -2481,6 +2482,126 @@ export default function Home() {
               © {new Date().getFullYear()} FlameBase. {t('footerRights')} {t('footerSecured')}
             </p>
           </footer>
+          {/* ══ TOOLS ══ — mobile/Farcaster full-screen tools panel */}
+          {activeTab === 'tools' && (
+            <div className="p-4 pb-24 space-y-4">
+              <h1 className="text-xl font-black text-[#0A0B0D]">🛠️ Tools</h1>
+
+              {/* Wallet Checker */}
+              <div className="bg-white border border-[#E4E7EB] rounded-2xl overflow-hidden">
+                <div className="px-4 py-3 border-b border-[#EEF1F5]">
+                  <p className="text-sm font-black text-[#0A0B0D]">🏦 Wallet Analyzer</p>
+                  <p className="text-xs text-[#8A919E]">Real on-chain stats, badges &amp; score</p>
+                </div>
+                <WalletChecker />
+              </div>
+
+              {/* On-chain tool buttons */}
+              <div className="bg-white border border-[#E4E7EB] rounded-2xl p-4 space-y-3">
+                <p className="text-sm font-black text-[#0A0B0D]">⚡ On-Chain Actions</p>
+                <div className="grid grid-cols-3 gap-2">
+                  <button onClick={() => { if (!TOOLS_DEPLOYED) return; toolAction(async () => { await writeContractAsync({ address: TOOLS_ADDRESS, abi: TOOLS_ABI, functionName: 'count', value: fixedFee }) }, setCounterLoading) }}
+                    disabled={!TOOLS_DEPLOYED || counterLoading}
+                    className="flex flex-col items-center gap-1.5 py-4 px-1 rounded-xl bg-[#F8FAFF] border border-[#E4E7EB] hover:border-[#0052FF] hover:bg-[#F0F4FF] disabled:opacity-40 transition-all">
+                    <span className="font-mono text-[#0052FF] font-black text-lg">[##]</span>
+                    <span className="text-xs font-bold">{counterLoading ? '…' : 'Counter'}</span>
+                  </button>
+                  <button onClick={() => { if (!TOOLS_DEPLOYED || canCheckIn === false) return; toolAction(async () => { await writeContractAsync({ address: TOOLS_ADDRESS, abi: TOOLS_ABI, functionName: 'checkIn', value: fixedFee }) }, setStreakLoading) }}
+                    disabled={!TOOLS_DEPLOYED || streakLoading || canCheckIn === false}
+                    className="flex flex-col items-center gap-1.5 py-4 px-1 rounded-xl bg-[#F8FAFF] border border-[#E4E7EB] hover:border-[#0052FF] hover:bg-[#F0F4FF] disabled:opacity-40 transition-all">
+                    <span className="font-mono text-[#0052FF] font-black text-lg">[~]</span>
+                    <span className="text-xs font-bold">{streakLoading ? '…' : canCheckIn === false ? '✓ Done' : 'Streak'}</span>
+                  </button>
+                  <button onClick={() => setActiveTool(activeTool === 'logbook' ? null : 'logbook')}
+                    disabled={!TOOLS_DEPLOYED}
+                    className={`flex flex-col items-center gap-1.5 py-4 px-1 rounded-xl border transition-all disabled:opacity-40 ${activeTool === 'logbook' ? 'bg-[#E6EEFF] border-[#0052FF]' : 'bg-[#F8FAFF] border-[#E4E7EB] hover:border-[#0052FF] hover:bg-[#F0F4FF]'}`}>
+                    <span className="font-mono text-[#0052FF] font-black text-lg">[📖]</span>
+                    <span className="text-xs font-bold">Logbook</span>
+                  </button>
+                  <button onClick={() => setActiveTool(activeTool === 'greeter' ? null : 'greeter')}
+                    disabled={!TOOLS_DEPLOYED}
+                    className={`flex flex-col items-center gap-1.5 py-4 px-1 rounded-xl border transition-all disabled:opacity-40 ${activeTool === 'greeter' ? 'bg-[#E6EEFF] border-[#0052FF]' : 'bg-[#F8FAFF] border-[#E4E7EB] hover:border-[#0052FF] hover:bg-[#F0F4FF]'}`}>
+                    <span className="font-mono text-[#0052FF] font-black text-lg">[👋]</span>
+                    <span className="text-xs font-bold">Greeter</span>
+                  </button>
+                  <button onClick={() => setActiveTool(activeTool === 'token' ? null : 'token')}
+                    disabled={!TOKEN_FACTORY_DEPLOYED}
+                    className={`flex flex-col items-center gap-1.5 py-4 px-1 rounded-xl border transition-all disabled:opacity-40 ${activeTool === 'token' ? 'bg-[#E6EEFF] border-[#0052FF]' : 'bg-[#F8FAFF] border-[#E4E7EB] hover:border-[#0052FF] hover:bg-[#F0F4FF]'}`}>
+                    <span className="font-mono text-[#0052FF] font-black text-lg">[$]</span>
+                    <span className="text-xs font-bold">Token</span>
+                  </button>
+                  <button onClick={() => setActiveTool(activeTool === 'nft' ? null : 'nft')}
+                    disabled={!NFT_FACTORY_DEPLOYED}
+                    className={`flex flex-col items-center gap-1.5 py-4 px-1 rounded-xl border transition-all disabled:opacity-40 ${activeTool === 'nft' ? 'bg-[#E6EEFF] border-[#0052FF]' : 'bg-[#F8FAFF] border-[#E4E7EB] hover:border-[#0052FF] hover:bg-[#F0F4FF]'}`}>
+                    <span className="font-mono text-[#0052FF] font-black text-lg">[*]</span>
+                    <span className="text-xs font-bold">NFT</span>
+                  </button>
+                  <button onClick={() => setActiveTool(activeTool === 'dao' ? null : 'dao')}
+                    disabled={!DAO_DEPLOYED}
+                    className={`flex flex-col items-center gap-1.5 py-4 px-1 rounded-xl border transition-all disabled:opacity-40 ${activeTool === 'dao' ? 'bg-[#E6EEFF] border-[#0052FF]' : 'bg-[#F8FAFF] border-[#E4E7EB] hover:border-[#0052FF] hover:bg-[#F0F4FF]'}`}>
+                    <span className="font-mono text-[#0052FF] font-black text-lg">[△]</span>
+                    <span className="text-xs font-bold">DAO</span>
+                  </button>
+                </div>
+
+                {/* Expanded forms */}
+                {activeTool === 'logbook' && (
+                  <div className="space-y-1 pt-1">
+                    <textarea value={logText} onChange={e => setLogText(e.target.value)} placeholder="Log text (or leave empty)" rows={2} maxLength={280}
+                      className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs resize-none focus:outline-none focus:border-[#0052FF]" />
+                    <button onClick={() => { if (!TOOLS_DEPLOYED) return; toolAction(async () => { const auto = `Log @ ${new Date().toISOString()} by ${address?.slice(0,8)}`; await writeContractAsync({ address: TOOLS_ADDRESS, abi: TOOLS_ABI, functionName: 'log', args: [logText || auto], value: fixedFee }, 'log'); setLogText('') }, setLogLoading) }}
+                      disabled={logLoading} className="w-full bg-[#0052FF] text-white text-xs py-2 rounded-lg font-bold disabled:opacity-40">
+                      {logLoading ? 'Writing…' : 'Log on-chain'}
+                    </button>
+                  </div>
+                )}
+                {activeTool === 'greeter' && (
+                  <div className="space-y-1 pt-1">
+                    <input value={greetText} onChange={e => setGreetText(e.target.value)} placeholder="Your on-chain greeting" maxLength={100}
+                      className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
+                    <button onClick={() => { if (!TOOLS_DEPLOYED || !greetText) return; toolAction(async () => { await writeContractAsync({ address: TOOLS_ADDRESS, abi: TOOLS_ABI, functionName: 'greet', args: [greetText], value: fixedFee }); setGreetText('') }, setGreetLoading) }}
+                      disabled={greetLoading || !greetText} className="w-full bg-[#0052FF] text-white text-xs py-2 rounded-lg font-bold disabled:opacity-40">
+                      {greetLoading ? 'Setting…' : 'Set Greeting'}
+                    </button>
+                  </div>
+                )}
+                {activeTool === 'token' && (
+                  <div className="space-y-1 pt-1">
+                    <input value={tokenName} onChange={e => setTokenName(e.target.value)} placeholder="Token name" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
+                    <input value={tokenSymbol} onChange={e => setTokenSymbol(e.target.value)} placeholder="Symbol" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
+                    <input value={tokenSupply} onChange={e => setTokenSupply(e.target.value)} placeholder="Supply" type="number" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
+                    <button onClick={() => { if (!TOKEN_FACTORY_DEPLOYED || !tokenName || !tokenSymbol || !tokenSupply) return; toolAction(async () => { await writeContractAsync({ address: TOKEN_FACTORY_ADDRESS, abi: TOKEN_FACTORY_ABI, functionName: 'deployToken', args: [tokenName, tokenSymbol, BigInt(tokenSupply)], value: fixedFee }); setTokenName('FlameBase'); setTokenSymbol('FLAME'); setTokenSupply('1000000') }, setTokenLoading) }}
+                      disabled={tokenLoading || !tokenName || !tokenSymbol || !tokenSupply} className="w-full bg-[#0052FF] text-white text-xs py-2 rounded-lg font-bold disabled:opacity-40">
+                      {tokenLoading ? 'Deploying…' : 'Deploy Token'}
+                    </button>
+                  </div>
+                )}
+                {activeTool === 'nft' && (
+                  <div className="space-y-1 pt-1">
+                    <input value={nftName} onChange={e => setNftName(e.target.value)} placeholder="Collection name" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
+                    <input value={nftSymbol} onChange={e => setNftSymbol(e.target.value)} placeholder="Symbol" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
+                    <input value={nftMaxSupply} onChange={e => setNftMaxSupply(e.target.value)} placeholder="Max supply" type="number" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
+                    <p className="text-[10px] text-[#0052FF] font-bold">Mint price: $0.50 fixed</p>
+                    <button onClick={() => { if (!NFT_FACTORY_DEPLOYED || !nftName || !nftSymbol || !nftMaxSupply) return; toolAction(async () => { await writeContractAsync({ address: NFT_FACTORY_ADDRESS, abi: NFT_FACTORY_ABI, functionName: 'deployNFT', args: [nftName, nftSymbol, BigInt(nftMaxSupply), nftMintPriceWei, ''], value: fixedFee }); setNftName('FlameBase NFT'); setNftSymbol('FNFT'); setNftMaxSupply('1000') }, setNftLoading) }}
+                      disabled={nftLoading || !nftName || !nftSymbol || !nftMaxSupply} className="w-full bg-[#0052FF] text-white text-xs py-2 rounded-lg font-bold disabled:opacity-40">
+                      {nftLoading ? 'Deploying…' : 'Deploy NFT'}
+                    </button>
+                  </div>
+                )}
+                {activeTool === 'dao' && (
+                  <div className="space-y-1 pt-1">
+                    <input value={daoTitle} onChange={e => setDaoTitle(e.target.value)} placeholder="Proposal title" maxLength={100} className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
+                    <textarea value={daoDesc} onChange={e => setDaoDesc(e.target.value)} placeholder="Description" rows={2} className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs resize-none focus:outline-none focus:border-[#0052FF]" />
+                    <button onClick={() => { if (!DAO_DEPLOYED || !daoTitle) return; toolAction(async () => { await writeContractAsync({ address: DAO_ADDRESS, abi: DAO_ABI, functionName: 'propose', args: [daoTitle, daoDesc], value: fixedFee }); setDaoTitle(''); setDaoDesc('') }, setDaoLoading) }}
+                      disabled={daoLoading || !daoTitle} className="w-full bg-[#0052FF] text-white text-xs py-2 rounded-lg font-bold disabled:opacity-40">
+                      {daoLoading ? 'Creating…' : 'Create Proposal'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           <footer className="border-t border-[#EEF1F5] py-6 px-4 text-center text-xs text-[#8A919E] mt-8">
             <p>FlameBase · On-chain social on Base</p>
             <p className="mt-1">Contact: <a href="mailto:emrckc52@gmail.com" className="text-[#0052FF] hover:underline">emrckc52@gmail.com</a></p>
