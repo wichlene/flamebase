@@ -12,12 +12,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-python@v5
         with:
-          node-version: '20'
+          python-version: '3.11'
 
       - name: Install dependencies
-        run: npm install oauth-1.0a
+        run: pip install tweepy
 
       - name: Post tweet
         env:
@@ -25,4 +25,4 @@ jobs:
           TW_API_SECRET: ${{ secrets.TW_API_SECRET }}
           TW_ACCESS_TOKEN: ${{ secrets.TW_ACCESS_TOKEN }}
           TW_ACCESS_SECRET: ${{ secrets.TW_ACCESS_SECRET }}
-        run: node .github/scripts/tweet.js
+        run: python .github/scripts/tweet.py
