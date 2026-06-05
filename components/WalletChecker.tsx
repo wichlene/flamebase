@@ -270,6 +270,20 @@ export default function WalletChecker({ onPay, compact }: { onPay?: () => Promis
         </div>
       </div>
 
+      {/* Action Buttons — top so they're always visible */}
+      <div className="flex gap-2">
+        <button
+          onClick={handleShare}
+          disabled={sharing}
+          className="flex-1 bg-[#0052FF] hover:bg-[#1652F0] disabled:opacity-50 text-white font-bold py-2.5 rounded-xl text-sm transition-colors flex items-center justify-center gap-1.5"
+        >
+          {sharing ? '⏳ Preparing…' : '📤 Share / Download Card'}
+        </button>
+        <button onClick={run} className="px-3 py-2.5 border border-[#E4E7EB] rounded-xl text-sm text-[#5B6271] hover:bg-[#F8FAFF] transition-colors">
+          🔄
+        </button>
+      </div>
+
       {/* Key Stats Row */}
       <div className="grid grid-cols-4 gap-1.5">
         {[
@@ -335,8 +349,8 @@ export default function WalletChecker({ onPay, compact }: { onPay?: () => Promis
       {result.nftList?.length > 0 && (
         <div className="bg-white border border-[#E4E7EB] rounded-xl p-3">
           <p className="text-[11px] font-semibold text-[#5B6271] mb-2">🖼️ NFTs ({result.nftCount} items, {result.nftCollections} collections)</p>
-          <div className="space-y-1.5">
-            {result.nftList.slice(0, 5).map((nft, i) => (
+          <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+            {result.nftList.map((nft, i) => (
               <div key={i} className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#0052FF] to-[#7B61FF] flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
@@ -347,7 +361,6 @@ export default function WalletChecker({ onPay, compact }: { onPay?: () => Promis
                 <span className="text-xs font-bold text-[#5B6271] flex-shrink-0">×{nft.count}</span>
               </div>
             ))}
-            {result.nftCollections > 5 && <p className="text-[10px] text-[#8A919E]">+{result.nftCollections - 5} more collections</p>}
           </div>
         </div>
       )}
@@ -399,19 +412,6 @@ export default function WalletChecker({ onPay, compact }: { onPay?: () => Promis
         <p className="text-[9px] text-[#8A919E] mt-2 italic">⚠️ Speculative — no official announcement. Estimated based on OP/ARB/EIGEN precedents.</p>
       </div>
 
-      {/* Action Buttons */}
-      <div className="flex gap-2">
-        <button
-          onClick={handleShare}
-          disabled={sharing}
-          className="flex-1 bg-[#0052FF] hover:bg-[#1652F0] disabled:opacity-50 text-white font-bold py-2.5 rounded-xl text-sm transition-colors flex items-center justify-center gap-1.5"
-        >
-          {sharing ? '⏳ Preparing…' : '📤 Share / Download Card'}
-        </button>
-        <button onClick={run} className="px-3 py-2.5 border border-[#E4E7EB] rounded-xl text-sm text-[#5B6271] hover:bg-[#F8FAFF] transition-colors">
-          🔄
-        </button>
-      </div>
     </div>
   )
 }

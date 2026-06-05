@@ -175,13 +175,11 @@ export async function POST(request: Request) {
       for (const col of nftData.items) {
         const n = parseInt(col.amount ?? col.value ?? '1', 10)
         nftCount += isNaN(n) ? 1 : n
-        if (nftList.length < 6) {
-          nftList.push({
-            name: col.token?.name || 'Unknown NFT',
-            symbol: col.token?.symbol || '',
-            count: isNaN(n) ? 1 : n,
-          })
-        }
+        nftList.push({
+          name: col.token?.name || 'Unknown NFT',
+          symbol: col.token?.symbol || '',
+          count: isNaN(n) ? 1 : n,
+        })
       }
     }
 
@@ -244,7 +242,8 @@ DATA:
 - Age: ${ageDays} days, Current streak: ${currentStreak}d (max: ${longestStreak}d)
 - Sybil flags: ${sybilFlags.length > 0 ? sybilFlags.join(' | ') : 'NONE'}
 
-Return JSON (score 0-100; context: ~500 TX was enough for OP airdrop):
+Return JSON (score 0-100; OP airdrop context: ~500 TX qualified, top wallets got 10k+ tokens at ~$0.25 each):
+Drop estimate ranges (tokens / USD): S=12000-20000/$3000-5000, A=6000-10000/$1500-2500, B=2500-5000/$625-1250, C=800-2000/$200-500, D=200-500/$50-125
 {"sybilRisk":"LOW|MEDIUM|HIGH","userType":"short label","summary":"2-3 sentences in English","score":0,"tier":"D|C|B|A|S","dropTokens":0,"dropUsd":0,"dropRationale":"brief explanation"}`
 
       try {
@@ -272,10 +271,11 @@ Return JSON (score 0-100; context: ~500 TX was enough for OP airdrop):
 
     const finalScore = Math.max(aiScore, formulaScore)
     const finalTier = finalScore >= 80 ? 'S' : finalScore >= 60 ? 'A' : finalScore >= 40 ? 'B' : finalScore >= 20 ? 'C' : 'D'
-    if (!aiDropTokens) {
-      const tm: Record<string, number> = { S: 15000, A: 8000, B: 4000, C: 1500, D: 400 }
-      aiDropTokens = tm[finalTier]; aiDropUsd = Math.round(aiDropTokens * 0.25)
-    }
+    // Tier floor for drop estimate — AI can't give less than tier baseline
+    const tierFloor: Record<string, number> = { S: 12000, A: 6000, B: 2500, C: 800, D: 200 }
+    const floorTokens = tierFloor[finalTier] || 200
+    aiDropTokens = Math.max(aiDropTokens || 0, floorTokens)
+    aiDropUsd = Math.round(aiDropTokens * 0.25)
     const finalAiTier = (aiScore >= formulaScore && aiTier !== 'D') ? aiTier : finalTier
 
     return NextResponse.json({
