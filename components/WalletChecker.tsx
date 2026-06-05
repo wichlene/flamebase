@@ -506,31 +506,6 @@ export default function WalletChecker({ onPay, compact }: { onPay?: () => Promis
         </div>
       )}
 
-      {/* Drop Estimate */}
-      <div className="bg-gradient-to-br from-[#FFF7ED] to-[#FFFBF5] border border-[#FED7AA] rounded-xl p-3">
-        <p className="text-[10px] font-bold text-orange-600 mb-2">🪂 Estimated Base Airdrop</p>
-        {result.estimatedTokens > 0 ? (
-          <>
-            <div className="flex items-baseline gap-1.5 mb-1.5">
-              <span className="text-2xl font-black text-orange-500">~{result.estimatedTokens.toLocaleString()}</span>
-              <span className="text-xs text-[#5B6271] font-semibold">$BASE</span>
-              <span className="text-lg font-black text-[#0A0B0D] ml-1">≈ ${result.estimatedUsd.toLocaleString()} USD</span>
-            </div>
-            {result.dropRationale && <p className="text-[10px] text-[#5B6271] italic mb-2 leading-relaxed">{result.dropRationale}</p>}
-            <div className="flex flex-wrap gap-1 mb-2">
-              {result.txCount >= 100 && <span className="text-[9px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-semibold">✅ {result.txCount.toLocaleString()} TX</span>}
-              {result.nftCount >= 1 && <span className="text-[9px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full font-semibold">✅ NFT Holder</span>}
-              {result.ageDays >= 180 && <span className="text-[9px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-semibold">✅ OG ({result.ageDays}d)</span>}
-              {result.uniqueContracts >= 10 && <span className="text-[9px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full font-semibold">✅ {result.uniqueContracts} contracts</span>}
-              {result.sybilRisk === 'LOW' && <span className="text-[9px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-semibold">✅ Real User</span>}
-              {result.longestStreak >= 7 && <span className="text-[9px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded-full font-semibold">✅ {result.longestStreak}d Streak</span>}
-            </div>
-          </>
-        ) : (
-          <p className="text-xs text-[#5B6271]">Activity too low. Use Base more to qualify.</p>
-        )}
-        <p className="text-[9px] text-[#8A919E] italic">⚠️ Speculative — no official announcement. Based on OP/ARB/EIGEN precedents.</p>
-      </div>
 
     </div>
   )
