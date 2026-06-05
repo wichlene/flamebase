@@ -94,8 +94,7 @@ async function main() {
   }
 
   console.log('Tweeting:\n', text)
-  const rwClient = client.readWrite
-  const result = await rwClient.v2.tweet(text)
+  const result = await client.v2.tweet(text)
   console.log('Tweet posted:', result.data.id)
 }
 
