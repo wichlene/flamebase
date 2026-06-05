@@ -47,7 +47,7 @@ function rrect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h
 }
 
 function ActivityHeatmap({ data }: { data: DayActivity[] }) {
-  const [tip, setTip] = useState<{ x: number; y: number; text: string } | null>(null)
+  const [tip, setTip] = useState<{ x: number; y: number; text: string; flip: boolean } | null>(null)
   if (!data || data.length === 0) return null
   const firstDate = new Date(data[0].date + 'T00:00:00Z')
   const startPad = firstDate.getUTCDay()
@@ -59,8 +59,10 @@ function ActivityHeatmap({ data }: { data: DayActivity[] }) {
   return (
     <div className="relative overflow-x-auto pb-1" onMouseLeave={() => setTip(null)}>
       {tip && (
-        <div className="fixed z-50 pointer-events-none bg-[#0A0B0D] text-white text-[11px] px-2 py-1 rounded-lg shadow-lg whitespace-nowrap"
-          style={{ left: tip.x + 10, top: tip.y - 36 }}>
+        <div
+          className="fixed z-50 pointer-events-none bg-[#0A0B0D] text-white text-[11px] px-2 py-1 rounded-lg shadow-lg whitespace-nowrap"
+          style={{ left: tip.flip ? tip.x - 130 : tip.x + 10, top: tip.y - 36 }}
+        >
           {tip.text}
         </div>
       )}
@@ -75,6 +77,7 @@ function ActivityHeatmap({ data }: { data: DayActivity[] }) {
                 onMouseEnter={(e) => d && setTip({
                   x: e.clientX, y: e.clientY,
                   text: d.count > 0 ? `${d.date} — ${d.count} tx` : `${d.date} — no activity`,
+                  flip: e.clientX > (typeof window !== 'undefined' ? window.innerWidth - 170 : 9999),
                 })}
                 onMouseMove={(e) => setTip(t => t ? { ...t, x: e.clientX, y: e.clientY } : null)}
               />
@@ -247,15 +250,10 @@ export default function WalletChecker({ onPay, compact }: { onPay?: () => Promis
       // Download card so user can attach it
       downloadCard(dataUrl, address)
       const text = [
-        `🔥 My Base wallet score: Tier ${result.tier} — ${result.score}/100`,
+        `🔥 Base wallet score: Tier ${result.tier} — ${result.score}/100`,
         ``,
-        `⚡ ${result.txCount.toLocaleString()} TXs  ·  📅 ${result.activeDays} active days  ·  🔥 ${result.longestStreak}d streak`,
-        `🖼️ ${result.nftCount} NFTs  ·  📆 ${result.activeMonths} active months`,
-        ``,
-        `🪂 Estimated drop: ~${result.estimatedTokens.toLocaleString()} $BASE`,
-        ``,
-        `Check yours 👇 flamebase.xyz`,
-        `#Base #BuildOnBase #Web3 #BaseChain`,
+        `Check yours 👉 flamebase.xyz`,
+        `#Base #BuildOnBase`,
       ].join('\n')
       window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`, '_blank')
     } catch { /* ignore */ }
@@ -270,10 +268,6 @@ export default function WalletChecker({ onPay, compact }: { onPay?: () => Promis
       downloadCard(dataUrl, address)
       const text = [
         `🔥 Base wallet score: Tier ${result.tier} (${result.score}/100)`,
-        ``,
-        `⚡ ${result.txCount.toLocaleString()} TXs · ${result.activeDays} active days · ${result.longestStreak}d streak`,
-        `🖼️ ${result.nftCount} NFTs · ${result.activeMonths} months active`,
-        `🪂 Estimated drop: ~${result.estimatedTokens.toLocaleString()} $BASE ≈ $${result.estimatedUsd.toLocaleString()}`,
         ``,
         `Check yours → flamebase.xyz`,
       ].join('\n')
