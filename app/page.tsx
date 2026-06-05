@@ -2271,19 +2271,7 @@ export default function Home() {
 
                     {/* Base Wallet Analysis */}
                     <div className="bg-white border border-[#E4E7EB] rounded-2xl shadow-sm overflow-hidden mb-4">
-                      <WalletChecker
-                        connectedAddress={address}
-                        onPay={async () => {
-                          await writeContractAsync({
-                            address: TOOLS_DEPLOYED ? TOOLS_ADDRESS : CONTRACT_ADDRESS,
-                            abi: TOOLS_DEPLOYED ? TOOLS_ABI : CONTRACT_ABI,
-                            functionName: TOOLS_DEPLOYED ? 'count' : 'tip',
-                            args: TOOLS_DEPLOYED ? [] : [0n],
-                            value: fixedFee,
-                          }, 'wallet-check')
-                        }}
-                        feeLabel="$0.04"
-                      />
+                      <WalletChecker />
                     </div>
 
                     {/* Most Popular Post — highest-liked post the user has written */}
@@ -2628,7 +2616,7 @@ export default function Home() {
             )}
             {activeTool === 'wallet' && (
               <div className="mt-2 border border-[#E4E7EB] rounded-xl overflow-hidden bg-white">
-                <WalletChecker connectedAddress={address} compact />
+                <WalletChecker compact />
               </div>
             )}
 
