@@ -1,9 +1,9 @@
 name: Auto Tweet
 
 on:
-  schedule:
-    # Every 4 hours (UTC): 00:00, 04:00, 08:00, 12:00, 16:00, 20:00
-    - cron: '0 0,4,8,12,16,20 * * *'
+  # schedule:
+  #   # Every 4 hours (UTC): 00:00, 04:00, 08:00, 12:00, 16:00, 20:00
+  #   - cron: '0 0,4,8,12,16,20 * * *'
   workflow_dispatch: # manual trigger for testing
 
 jobs:
