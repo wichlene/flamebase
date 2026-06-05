@@ -17,7 +17,7 @@ jobs:
           node-version: '20'
 
       - name: Install twitter-api-v2
-        run: npm install twitter-api-v2
+        run: npm install twitter-api-v2@1.17.2
 
       - name: Post tweet
         env:

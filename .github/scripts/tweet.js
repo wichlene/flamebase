@@ -1,5 +1,11 @@
 const { TwitterApi } = require('twitter-api-v2')
 
+// debug — verify secrets are loaded (first 6 chars only)
+console.log('TW_API_KEY:', process.env.TW_API_KEY?.slice(0,6))
+console.log('TW_API_SECRET:', process.env.TW_API_SECRET?.slice(0,6))
+console.log('TW_ACCESS_TOKEN:', process.env.TW_ACCESS_TOKEN?.slice(0,6))
+console.log('TW_ACCESS_SECRET:', process.env.TW_ACCESS_SECRET?.slice(0,6))
+
 const client = new TwitterApi({
   appKey: process.env.TW_API_KEY,
   appSecret: process.env.TW_API_SECRET,
