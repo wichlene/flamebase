@@ -145,7 +145,7 @@ export async function POST(request: Request) {
   try {
     const { address } = await request.json()
     if (!address || !/^0x[0-9a-fA-F]{40}$/.test(address)) {
-      return NextResponse.json({ error: 'Geçersiz adres' }, { status: 400 })
+      return NextResponse.json({ error: 'Invalid address' }, { status: 400 })
     }
 
     const [counters, addrInfo, nftData, stats, firstTs] = await Promise.all([
@@ -189,7 +189,7 @@ export async function POST(request: Request) {
     let ageDays = 0, firstTxDate = '', ageApprox = false
     if (oldestFinal) {
       ageDays = Math.floor((Date.now() - oldestFinal * 1000) / 86400000)
-      firstTxDate = new Date(oldestFinal * 1000).toLocaleDateString('tr-TR')
+      firstTxDate = new Date(oldestFinal * 1000).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
       if (!firstTs && txCount > stats.scanned && stats.scanned > 0) ageApprox = true
     }
 
@@ -212,10 +212,10 @@ export async function POST(request: Request) {
 
     // Sybil
     const sybilFlags: string[] = []
-    if (ageDays > 0 && ageDays < 30 && !ageApprox) sybilFlags.push('Çok yeni cüzdan (<30 gün)')
-    if (txCount > 50 && uniqueContracts < 3)         sybilFlags.push('Çok az contract çeşitliliği')
-    if (nftCount === 0 && txCount > 30)              sybilFlags.push('Hiç NFT yok')
-    if (Number(txPerDay) > 30)                       sybilFlags.push(`Günde ${txPerDay} TX — bot benzeri`)
+    if (ageDays > 0 && ageDays < 30 && !ageApprox) sybilFlags.push('Very new wallet (<30 days)')
+    if (txCount > 50 && uniqueContracts < 3)         sybilFlags.push('Very few unique contract interactions')
+    if (nftCount === 0 && txCount > 30)              sybilFlags.push('No NFTs held')
+    if (Number(txPerDay) > 30)                       sybilFlags.push(`High TX rate: ${txPerDay}/day — bot-like`)
 
     // Formula score (/100)
     let formulaScore = 0
@@ -231,21 +231,21 @@ export async function POST(request: Request) {
     // AI
     let aiSummary = '', aiScore = 0, aiTier = 'D'
     let aiDropTokens = 0, aiDropUsd = 0
-    let sybilRisk = sybilFlags.length >= 3 ? 'YÜKSEK' : sybilFlags.length >= 1 ? 'ORTA' : 'DÜŞÜK'
+    let sybilRisk = sybilFlags.length >= 3 ? 'HIGH' : sybilFlags.length >= 1 ? 'MEDIUM' : 'LOW'
     let userType = '', dropRationale = ''
 
     if (process.env.GROQ_API_KEY && txCount > 0) {
-      const prompt = `Base mainnet cüzdan analizi. SADECE JSON döndür.
+      const prompt = `Analyze this Base mainnet wallet. Return ONLY valid JSON, no extra text.
 
-VERİ:
-- TX: ${txCount}, Token Transfer: ${tokenTransfers}, NFT: ${nftCount} (${nftCollections} koleksiyon)
-- ETH: ${ethBalance}, Gönderilen: ${volumeEth} ETH
-- Farklı CA: ${uniqueContracts}, Aktif Gün: ${activeDays}, Ay: ${activeMonths}
-- Yaş: ${ageDays} gün, Streak: ${currentStreak}g (max: ${longestStreak}g)
-- Sybil: ${sybilFlags.length > 0 ? sybilFlags.join(' | ') : 'YOK'}
+DATA:
+- TX: ${txCount}, Token Transfers: ${tokenTransfers}, NFTs: ${nftCount} (${nftCollections} collections)
+- ETH balance: ${ethBalance}, Volume sent: ${volumeEth} ETH
+- Unique contracts: ${uniqueContracts}, Active days: ${activeDays}, Active months: ${activeMonths}
+- Age: ${ageDays} days, Current streak: ${currentStreak}d (max: ${longestStreak}d)
+- Sybil flags: ${sybilFlags.length > 0 ? sybilFlags.join(' | ') : 'NONE'}
 
-JSON (score 0-100, karşılaştırma: OP drop'u için ~500 TX yeterliydi):
-{"sybilRisk":"DÜŞÜK|ORTA|YÜKSEK","userType":"kısa","summary":"2-3 cümle","score":0,"tier":"D|C|B|A|S","dropTokens":0,"dropUsd":0,"dropRationale":"açıklama"}`
+Return JSON (score 0-100; context: ~500 TX was enough for OP airdrop):
+{"sybilRisk":"LOW|MEDIUM|HIGH","userType":"short label","summary":"2-3 sentences in English","score":0,"tier":"D|C|B|A|S","dropTokens":0,"dropUsd":0,"dropRationale":"brief explanation"}`
 
       try {
         const gr = await fetch(GROQ_URL, {
@@ -263,7 +263,7 @@ JSON (score 0-100, karşılaştırma: OP drop'u için ~500 TX yeterliydi):
           aiTier       = ['S','A','B','C','D'].includes(p.tier) ? p.tier : 'D'
           aiDropTokens = parseInt(p.dropTokens) || 0
           aiDropUsd    = parseInt(p.dropUsd) || 0
-          sybilRisk    = ['DÜŞÜK','ORTA','YÜKSEK'].includes(p.sybilRisk) ? p.sybilRisk : sybilRisk
+          sybilRisk    = ['LOW','MEDIUM','HIGH'].includes(p.sybilRisk) ? p.sybilRisk : sybilRisk
           userType     = p.userType ?? ''
           dropRationale= p.dropRationale ?? ''
         }
@@ -293,6 +293,6 @@ JSON (score 0-100, karşılaştırma: OP drop'u için ~500 TX yeterliydi):
       estimatedTokens: aiDropTokens, estimatedUsd: aiDropUsd,
     })
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'Hata' }, { status: 500 })
+    return NextResponse.json({ error: e?.message || 'Internal error' }, { status: 500 })
   }
 }
