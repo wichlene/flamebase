@@ -1,0 +1,28 @@
+name: Auto Tweet
+
+on:
+  schedule:
+    # Every 4 hours (UTC): 00:00, 04:00, 08:00, 12:00, 16:00, 20:00
+    - cron: '0 0,4,8,12,16,20 * * *'
+  workflow_dispatch: # manual trigger for testing
+
+jobs:
+  tweet:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install twitter-api-v2
+        run: npm install twitter-api-v2
+
+      - name: Post tweet
+        env:
+          TW_API_KEY: ${{ secrets.TW_API_KEY }}
+          TW_API_SECRET: ${{ secrets.TW_API_SECRET }}
+          TW_ACCESS_TOKEN: ${{ secrets.TW_ACCESS_TOKEN }}
+          TW_ACCESS_SECRET: ${{ secrets.TW_ACCESS_SECRET }}
+        run: node .github/scripts/tweet.js
