@@ -3,8 +3,8 @@ import { useState } from 'react'
 import { useWalletClient, useSendTransaction } from 'wagmi'
 import { parseEther } from 'viem'
 
-// Fee goes to the FlameBase contract — ~$0.05 in ETH at current prices
-const ANALYSIS_FEE = parseEther('0.00002')
+// Fee goes to the FlameBase contract — ~$0.01 in ETH at current prices
+const ANALYSIS_FEE = parseEther('0.000004')
 const FEE_RECIPIENT = '0x7Bac408402421005917D63a1a269C902b4c9485c' as const
 
 interface DayActivity { date: string; count: number }
@@ -317,7 +317,7 @@ export default function WalletChecker({ onPay, compact }: { onPay?: () => Promis
             ? <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Confirm in wallet…</>
             : '🤖 Analyze with AI'}
         </button>
-        <p className="text-center text-[10px] text-[#8A919E]">Fee: 0.00002 ETH (≈ $0.05) · sent to FlameBase</p>
+        <p className="text-center text-[10px] text-[#8A919E]">Fee: ≈ $0.01 in ETH · sent to FlameBase</p>
       </div>
     )
   }
