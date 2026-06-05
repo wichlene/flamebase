@@ -1,11 +1,6 @@
 'use client'
 import { useState } from 'react'
-import { useWalletClient, useSendTransaction } from 'wagmi'
-import { parseEther } from 'viem'
-
-// Fee goes to the FlameBase contract — ~$0.01 in ETH at current prices
-const ANALYSIS_FEE = parseEther('0.000004')
-const FEE_RECIPIENT = '0x7Bac408402421005917D63a1a269C902b4c9485c' as const
+import { useWalletClient } from 'wagmi'
 
 interface DayActivity { date: string; count: number }
 interface NftItem { name: string; symbol: string; count: number }
@@ -197,8 +192,6 @@ function generateCard(result: WalletResult, address: string): string {
 
 export default function WalletChecker({ onPay, compact }: { onPay?: () => Promise<void>; compact?: boolean }) {
   const { data: walletClient } = useWalletClient()
-  const { sendTransactionAsync } = useSendTransaction()
-  const [paying, setPaying] = useState(false)
   const [loading, setLoading] = useState(false)
   const [loadStep, setLoadStep] = useState(0)
   const [result, setResult] = useState<WalletResult | null>(null)
@@ -210,16 +203,6 @@ export default function WalletChecker({ onPay, compact }: { onPay?: () => Promis
   const run = async () => {
     if (!address) return
     setError('')
-    // Collect small fee first (just Base gas level — ~$0.05)
-    setPaying(true)
-    try {
-      await sendTransactionAsync({ to: FEE_RECIPIENT, value: ANALYSIS_FEE })
-    } catch (e: any) {
-      setError(e?.shortMessage || e?.message || 'Payment cancelled')
-      setPaying(false); return
-    }
-    setPaying(false)
-
     setLoading(true); setLoadStep(0)
     let si = 0
     const ticker = setInterval(() => { if (si < 3) setLoadStep(++si) }, 3000)
@@ -308,16 +291,10 @@ export default function WalletChecker({ onPay, compact }: { onPay?: () => Promis
           <p className="text-xs text-[#5B6271]">TX history · NFTs · streaks · badges · Base drop estimate</p>
         </div>
         {error && <div className="bg-red-50 border border-red-200 rounded-xl p-2 text-xs text-red-600">❌ {error}</div>}
-        <button
-          onClick={run}
-          disabled={paying}
-          className="w-full bg-[#0052FF] hover:bg-[#1652F0] disabled:opacity-60 text-white font-bold py-3 rounded-xl text-sm transition-colors flex items-center justify-center gap-2"
-        >
-          {paying
-            ? <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Confirm in wallet…</>
-            : '🤖 Analyze with AI'}
+        <button onClick={run} className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white font-bold py-3 rounded-xl text-sm transition-colors">
+          🤖 Analyze with AI
         </button>
-        <p className="text-center text-[10px] text-[#8A919E]">Fee: ≈ $0.01 in ETH · sent to FlameBase</p>
+        <p className="text-center text-[10px] text-[#8A919E]">Free · powered by Base &amp; Groq AI</p>
       </div>
     )
   }
