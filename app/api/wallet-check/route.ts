@@ -1,9 +1,5 @@
 import { NextResponse } from 'next/server'
 
-// Blockscout v2 (base.blockscout.com) is the primary source — it is reliably
-// reachable server-side from Vercel (the NFT endpoint already works), needs no
-// API key, and exposes real counters for Base. Routescan/Etherscan are not
-// reachable / not free for Base, so we no longer depend on them.
 const BS_V2 = 'https://base.blockscout.com/api/v2'
 const BS_COMPAT = 'https://base.blockscout.com/api'
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
@@ -22,8 +18,6 @@ async function bsV2(path: string) {
   }
 }
 
-// Oldest tx timestamp (unix seconds) via Blockscout's Etherscan-compatible
-// endpoint on the same reachable host — one tiny asc request, offset 1.
 async function firstTxTimestamp(address: string): Promise<number> {
   try {
     const qs = new URLSearchParams({
@@ -48,16 +42,18 @@ const num = (v: any) => {
   return isNaN(n) ? 0 : n
 }
 
-// Walk the address transaction list (newest first) up to maxPages to derive
-// volume, contract diversity, active days and the oldest tx seen.
+function toDateKey(ts: number): string {
+  const dt = new Date(ts * 1000)
+  return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`
+}
+
 async function txStats(address: string, maxPages = 16) {
   const lc = address.toLowerCase()
   let volumeWei = 0n
   const contractSet = new Set<string>()
-  const activeDaysSet = new Set<string>()
+  const dailyTxMap = new Map<string, number>()
   let contractCallCount = 0
   let oldestTs = 0
-  let newestTs = 0
   let scanned = 0
   let next = ''
 
@@ -71,7 +67,8 @@ async function txStats(address: string, maxPages = 16) {
       const ts = tx.timestamp ? Math.floor(new Date(tx.timestamp).getTime() / 1000) : 0
       if (ts) {
         if (!oldestTs || ts < oldestTs) oldestTs = ts
-        if (ts > newestTs) newestTs = ts
+        const dk = toDateKey(ts)
+        dailyTxMap.set(dk, (dailyTxMap.get(dk) || 0) + 1)
       }
       const from = tx.from?.hash?.toLowerCase()
       if (from === lc) {
@@ -81,10 +78,6 @@ async function txStats(address: string, maxPages = 16) {
         const to = tx.to?.hash?.toLowerCase()
         if (to) contractSet.add(to)
         if (tx.method || (tx.raw_input && tx.raw_input !== '0x')) contractCallCount++
-        if (ts) {
-          const dt = new Date(ts * 1000)
-          activeDaysSet.add(`${dt.getUTCFullYear()}-${dt.getUTCMonth()}-${dt.getUTCDate()}`)
-        }
       }
     }
 
@@ -93,15 +86,58 @@ async function txStats(address: string, maxPages = 16) {
     next = `?${new URLSearchParams(np as Record<string, string>).toString()}`
   }
 
+  // Streaks
+  const sortedDays = [...dailyTxMap.keys()].sort()
+  let longestStreak = 0, tempStreak = 0
+  let prevDate: Date | null = null
+  for (const day of sortedDays) {
+    const dt = new Date(day + 'T00:00:00Z')
+    if (prevDate) {
+      const diff = Math.round((dt.getTime() - prevDate.getTime()) / 86400000)
+      if (diff === 1) { tempStreak++ } else { longestStreak = Math.max(longestStreak, tempStreak); tempStreak = 1 }
+    } else { tempStreak = 1 }
+    prevDate = dt
+  }
+  longestStreak = Math.max(longestStreak, tempStreak)
+
+  // Current streak backward from today
+  let currentStreak = 0
+  const cd = new Date(); cd.setUTCHours(0, 0, 0, 0)
+  for (let i = 0; i < 365; i++) {
+    const k = toDateKey(Math.floor(cd.getTime() / 1000))
+    if (dailyTxMap.has(k)) { currentStreak++; cd.setUTCDate(cd.getUTCDate() - 1) } else break
+  }
+
+  const activeDays = dailyTxMap.size
+  const activeWeeks = new Set([...dailyTxMap.keys()].map(d => {
+    const dt = new Date(d + 'T00:00:00Z')
+    return Math.floor(dt.getTime() / (7 * 86400000))
+  })).size
+  const activeMonths = new Set([...dailyTxMap.keys()].map(d => d.slice(0, 7))).size
+
+  // Daily activity for heatmap — last 364 days
+  const today = new Date(); today.setUTCHours(0, 0, 0, 0)
+  const startDate = new Date(today); startDate.setUTCDate(startDate.getUTCDate() - 363)
+  const dailyActivity: { date: string; count: number }[] = []
+  const cur = new Date(startDate)
+  while (cur <= today) {
+    const k = toDateKey(Math.floor(cur.getTime() / 1000))
+    dailyActivity.push({ date: k, count: dailyTxMap.get(k) || 0 })
+    cur.setUTCDate(cur.getUTCDate() + 1)
+  }
+
   return {
     volumeEth: parseFloat((Number(volumeWei) / 1e18).toFixed(4)),
     uniqueContracts: contractSet.size,
-    activeDays: activeDaysSet.size,
+    activeDays,
+    activeWeeks,
+    activeMonths,
     contractCallCount,
+    currentStreak,
+    longestStreak,
     oldestTs,
-    newestTs,
     scanned,
-    reachedEnd: scanned > 0 && !next, // best-effort
+    dailyActivity,
   }
 }
 
@@ -112,68 +148,85 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Geçersiz adres' }, { status: 400 })
     }
 
-    // All sourced from Blockscout (reachable, no key).
     const [counters, addrInfo, nftData, stats, firstTs] = await Promise.all([
-      bsV2(`/addresses/${address}/counters`),          // real tx / token-transfer totals
-      bsV2(`/addresses/${address}`),                   // coin balance
+      bsV2(`/addresses/${address}/counters`),
+      bsV2(`/addresses/${address}`),
       bsV2(`/addresses/${address}/nft/collections?type=ERC-721,ERC-1155`),
-      txStats(address),                                // volume / contracts / active days
-      firstTxTimestamp(address),                       // accurate wallet age
+      txStats(address),
+      firstTxTimestamp(address),
     ])
 
-    // Real totals from Blockscout counters
     const txCount = num(counters?.transactions_count)
     const tokenTransfers = num(counters?.token_transfers_count)
 
-    // ETH balance (coin_balance is wei string)
     let ethBalance = 0
     const cb = addrInfo?.coin_balance
     if (typeof cb === 'string' && /^\d+$/.test(cb)) {
       ethBalance = parseFloat((Number(BigInt(cb)) / 1e18).toFixed(4))
     }
 
-    const { volumeEth, uniqueContracts, activeDays, contractCallCount } = stats
-    // Prefer the accurate first-tx timestamp; fall back to oldest scanned.
-    const oldestTs = firstTs || stats.oldestTs
+    const { volumeEth, uniqueContracts, activeDays, contractCallCount, currentStreak, longestStreak, activeWeeks, activeMonths, dailyActivity, oldestTs } = stats
 
-    // NFTs owned
+    // NFTs
     let nftCount = 0, nftCollections = 0
+    const nftList: { name: string; symbol: string; count: number }[] = []
     if (Array.isArray(nftData?.items)) {
       nftCollections = nftData.items.length
       for (const col of nftData.items) {
         const n = parseInt(col.amount ?? col.value ?? '1', 10)
         nftCount += isNaN(n) ? 1 : n
+        if (nftList.length < 6) {
+          nftList.push({
+            name: col.token?.name || 'Unknown NFT',
+            symbol: col.token?.symbol || '',
+            count: isNaN(n) ? 1 : n,
+          })
+        }
       }
     }
 
-    // Age — from the oldest tx we scanned. If we didn't reach the very first
-    // tx (very active wallet), this is a lower bound, so flag it.
+    const oldestFinal = firstTs || oldestTs
     let ageDays = 0, firstTxDate = '', ageApprox = false
-    if (oldestTs) {
-      ageDays = Math.floor((Date.now() - oldestTs * 1000) / 86400000)
-      firstTxDate = new Date(oldestTs * 1000).toLocaleDateString('tr-TR')
-      // Age is exact when it came from the dedicated first-tx lookup.
+    if (oldestFinal) {
+      ageDays = Math.floor((Date.now() - oldestFinal * 1000) / 86400000)
+      firstTxDate = new Date(oldestFinal * 1000).toLocaleDateString('tr-TR')
       if (!firstTs && txCount > stats.scanned && stats.scanned > 0) ageApprox = true
     }
 
     const txPerDay = ageDays > 0 ? (txCount / ageDays).toFixed(1) : '0'
     const hasMore = txCount > stats.scanned
 
-    // Sybil signals
+    // Badges
+    const badges: string[] = []
+    if (ageDays >= 365) badges.push('🏆 OG User')
+    if (ageDays >= 90 && txCount >= 50) badges.push('⚡ Base Regular')
+    if (txCount >= 1000) badges.push('🔥 Power User')
+    else if (txCount >= 500) badges.push('💪 Active User')
+    if (nftCount >= 10) badges.push('🖼️ Collector')
+    else if (nftCount >= 1) badges.push('🎨 NFT Holder')
+    if (tokenTransfers >= 100) badges.push('💱 DeFi Degen')
+    if (longestStreak >= 7) badges.push('⚡ Streak Master')
+    if (ethBalance >= 1) badges.push('🐳 Whale')
+    if (uniqueContracts >= 50) badges.push('🏗️ Builder')
+    if (activeMonths >= 6) badges.push('📅 6mo+ Active')
+
+    // Sybil
     const sybilFlags: string[] = []
-    if (ageDays > 0 && ageDays < 30 && !ageApprox)  sybilFlags.push('Çok yeni cüzdan (<30 gün)')
+    if (ageDays > 0 && ageDays < 30 && !ageApprox) sybilFlags.push('Çok yeni cüzdan (<30 gün)')
     if (txCount > 50 && uniqueContracts < 3)         sybilFlags.push('Çok az contract çeşitliliği')
     if (nftCount === 0 && txCount > 30)              sybilFlags.push('Hiç NFT yok')
     if (Number(txPerDay) > 30)                       sybilFlags.push(`Günde ${txPerDay} TX — bot benzeri`)
 
-    // Rule-based score (always computed — used as a floor for the AI score).
+    // Formula score (/100)
     let formulaScore = 0
-    if (txCount >= 1000) formulaScore += 350; else if (txCount >= 500) formulaScore += 280; else if (txCount >= 100) formulaScore += 200; else if (txCount >= 50) formulaScore += 140; else if (txCount >= 20) formulaScore += 90; else if (txCount >= 1) formulaScore += 30
-    if (nftCount >= 10) formulaScore += 150; else if (nftCount >= 1) formulaScore += 80
-    if (ageDays >= 365) formulaScore += 250; else if (ageDays >= 180) formulaScore += 180; else if (ageDays >= 90) formulaScore += 110; else if (ageDays >= 30) formulaScore += 55
-    if (uniqueContracts >= 20) formulaScore += 100; else if (uniqueContracts >= 10) formulaScore += 65; else if (uniqueContracts >= 3) formulaScore += 30
-    if (tokenTransfers >= 100) formulaScore += 50; else if (tokenTransfers >= 10) formulaScore += 25
-    formulaScore = Math.min(formulaScore, 1000)
+    if (txCount >= 1000) formulaScore += 35; else if (txCount >= 500) formulaScore += 28; else if (txCount >= 100) formulaScore += 20; else if (txCount >= 50) formulaScore += 14; else if (txCount >= 20) formulaScore += 9; else if (txCount >= 1) formulaScore += 3
+    if (nftCount >= 10) formulaScore += 15; else if (nftCount >= 1) formulaScore += 8
+    if (ageDays >= 365) formulaScore += 25; else if (ageDays >= 180) formulaScore += 18; else if (ageDays >= 90) formulaScore += 11; else if (ageDays >= 30) formulaScore += 6
+    if (uniqueContracts >= 20) formulaScore += 10; else if (uniqueContracts >= 10) formulaScore += 7; else if (uniqueContracts >= 3) formulaScore += 3
+    if (tokenTransfers >= 100) formulaScore += 5; else if (tokenTransfers >= 10) formulaScore += 3
+    if (longestStreak >= 7) formulaScore += 5; else if (longestStreak >= 3) formulaScore += 2
+    if (activeMonths >= 6) formulaScore += 5; else if (activeMonths >= 3) formulaScore += 2
+    formulaScore = Math.min(formulaScore, 100)
 
     // AI
     let aiSummary = '', aiScore = 0, aiTier = 'D'
@@ -182,22 +235,16 @@ export async function POST(request: Request) {
     let userType = '', dropRationale = ''
 
     if (process.env.GROQ_API_KEY && txCount > 0) {
-      const prompt = `Base mainnet cüzdan verisini analiz et. SADECE JSON döndür, başka hiçbir şey yazma.
+      const prompt = `Base mainnet cüzdan analizi. SADECE JSON döndür.
 
-GERÇEK VERİ (Blockscout API):
-- Toplam TX: ${txCount}
-- Contract Çağrısı (taranan): ${contractCallCount}
-- ERC-20/Token Transfer: ${tokenTransfers}
-- NFT Bakiye: ${nftCount} (${nftCollections} koleksiyon)
-- ETH Bakiye: ${ethBalance}
-- Gönderilen ETH (taranan): ${volumeEth}
-- Farklı Adres (taranan): ${uniqueContracts}
-- Aktif Gün (taranan): ${activeDays}
-- Cüzdan Yaşı: ${ageDays} gün${ageApprox ? '+ (en az)' : ''}${firstTxDate ? ` (ilk görülen: ${firstTxDate})` : ''}
-- Günlük Ort TX: ${txPerDay}
-- Sybil Uyarılar: ${sybilFlags.length > 0 ? sybilFlags.join(' | ') : 'YOK'}
+VERİ:
+- TX: ${txCount}, Token Transfer: ${tokenTransfers}, NFT: ${nftCount} (${nftCollections} koleksiyon)
+- ETH: ${ethBalance}, Gönderilen: ${volumeEth} ETH
+- Farklı CA: ${uniqueContracts}, Aktif Gün: ${activeDays}, Ay: ${activeMonths}
+- Yaş: ${ageDays} gün, Streak: ${currentStreak}g (max: ${longestStreak}g)
+- Sybil: ${sybilFlags.length > 0 ? sybilFlags.join(' | ') : 'YOK'}
 
-JSON:
+JSON (score 0-100, karşılaştırma: OP drop'u için ~500 TX yeterliydi):
 {"sybilRisk":"DÜŞÜK|ORTA|YÜKSEK","userType":"kısa","summary":"2-3 cümle","score":0,"tier":"D|C|B|A|S","dropTokens":0,"dropUsd":0,"dropRationale":"açıklama"}`
 
       try {
@@ -212,7 +259,7 @@ JSON:
         if (m) {
           const p = JSON.parse(m[0])
           aiSummary    = p.summary ?? ''
-          aiScore      = Math.min(1000, Math.max(0, parseInt(p.score) || 0))
+          aiScore      = Math.min(100, Math.max(0, parseInt(p.score) || 0))
           aiTier       = ['S','A','B','C','D'].includes(p.tier) ? p.tier : 'D'
           aiDropTokens = parseInt(p.dropTokens) || 0
           aiDropUsd    = parseInt(p.dropUsd) || 0
@@ -223,20 +270,26 @@ JSON:
       } catch { /* fallback */ }
     }
 
-    // AI score is a bonus on top of the formula — never goes below it.
-    aiScore = Math.max(aiScore, formulaScore)
-    if (!aiScore) aiScore = formulaScore
-    aiTier = aiScore >= 800 ? 'S' : aiScore >= 600 ? 'A' : aiScore >= 400 ? 'B' : aiScore >= 200 ? 'C' : 'D'
-    const tm: Record<string, number> = { S: 15000, A: 8000, B: 4000, C: 1500, D: 400 }
-    if (!aiDropTokens) { aiDropTokens = tm[aiTier]; aiDropUsd = Math.round(aiDropTokens * 0.25) }
+    const finalScore = Math.max(aiScore, formulaScore)
+    const finalTier = finalScore >= 80 ? 'S' : finalScore >= 60 ? 'A' : finalScore >= 40 ? 'B' : finalScore >= 20 ? 'C' : 'D'
+    if (!aiDropTokens) {
+      const tm: Record<string, number> = { S: 15000, A: 8000, B: 4000, C: 1500, D: 400 }
+      aiDropTokens = tm[finalTier]; aiDropUsd = Math.round(aiDropTokens * 0.25)
+    }
+    const finalAiTier = (aiScore >= formulaScore && aiTier !== 'D') ? aiTier : finalTier
 
     return NextResponse.json({
       txCount, hasMore, contractCallCount, tokenTransfers,
-      nftCount, nftCollections, ethBalance, volumeEth,
-      uniqueContracts, activeDays, ageDays, ageApprox, firstTxDate, txPerDay,
+      nftCount, nftCollections, nftList,
+      ethBalance, volumeEth,
+      uniqueContracts, activeDays, activeWeeks, activeMonths,
+      ageDays, ageApprox, firstTxDate, txPerDay,
+      currentStreak, longestStreak,
+      dailyActivity,
       scanned: stats.scanned,
       sybilFlags, sybilRisk, userType, aiSummary, dropRationale,
-      score: aiScore, tier: aiTier,
+      badges,
+      score: finalScore, tier: finalAiTier,
       estimatedTokens: aiDropTokens, estimatedUsd: aiDropUsd,
     })
   } catch (e: any) {
