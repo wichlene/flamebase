@@ -64,14 +64,15 @@ async function txStats(address: string, maxPages = 16) {
 
     for (const tx of items) {
       scanned++
-      const ts = tx.timestamp ? Math.floor(new Date(tx.timestamp).getTime() / 1000) : 0
-      if (ts) {
-        if (!oldestTs || ts < oldestTs) oldestTs = ts
-        const dk = toDateKey(ts)
-        dailyTxMap.set(dk, (dailyTxMap.get(dk) || 0) + 1)
-      }
       const from = tx.from?.hash?.toLowerCase()
       if (from === lc) {
+        // Only count OUTGOING transactions for activity metrics
+        const ts = tx.timestamp ? Math.floor(new Date(tx.timestamp).getTime() / 1000) : 0
+        if (ts) {
+          if (!oldestTs || ts < oldestTs) oldestTs = ts
+          const dk = toDateKey(ts)
+          dailyTxMap.set(dk, (dailyTxMap.get(dk) || 0) + 1)
+        }
         if (tx.value && tx.value !== '0') {
           try { volumeWei += BigInt(tx.value) } catch { /* */ }
         }
@@ -215,9 +216,10 @@ export async function POST(request: Request) {
     if (nftCount === 0 && txCount > 30)              sybilFlags.push('No NFTs held')
     if (Number(txPerDay) > 30)                       sybilFlags.push(`High TX rate: ${txPerDay}/day — bot-like`)
 
-    // Formula score (/100)
+    // Formula score (/100) — requires at least 1 outgoing TX to qualify
     let formulaScore = 0
-    if (txCount >= 1000) formulaScore += 35; else if (txCount >= 500) formulaScore += 28; else if (txCount >= 100) formulaScore += 20; else if (txCount >= 50) formulaScore += 14; else if (txCount >= 20) formulaScore += 9; else if (txCount >= 1) formulaScore += 3
+    if (txCount === 0) formulaScore = 0 // no activity = no score
+    else if (txCount >= 1000) formulaScore += 35; else if (txCount >= 500) formulaScore += 28; else if (txCount >= 100) formulaScore += 20; else if (txCount >= 50) formulaScore += 14; else if (txCount >= 20) formulaScore += 9; else formulaScore += 3
     if (nftCount >= 10) formulaScore += 15; else if (nftCount >= 1) formulaScore += 8
     if (ageDays >= 365) formulaScore += 25; else if (ageDays >= 180) formulaScore += 18; else if (ageDays >= 90) formulaScore += 11; else if (ageDays >= 30) formulaScore += 6
     if (uniqueContracts >= 20) formulaScore += 10; else if (uniqueContracts >= 10) formulaScore += 7; else if (uniqueContracts >= 3) formulaScore += 3
@@ -269,13 +271,18 @@ Drop estimate ranges (tokens / USD): S=12000-20000/$3000-5000, A=6000-10000/$150
       } catch { /* fallback */ }
     }
 
-    const finalScore = Math.max(aiScore, formulaScore)
+    const finalScore = txCount === 0 ? 0 : Math.max(aiScore, formulaScore)
     const finalTier = finalScore >= 80 ? 'S' : finalScore >= 60 ? 'A' : finalScore >= 40 ? 'B' : finalScore >= 20 ? 'C' : 'D'
-    // Tier floor for drop estimate — AI can't give less than tier baseline
-    const tierFloor: Record<string, number> = { S: 12000, A: 6000, B: 2500, C: 800, D: 200 }
-    const floorTokens = tierFloor[finalTier] || 200
-    aiDropTokens = Math.max(aiDropTokens || 0, floorTokens)
-    aiDropUsd = Math.round(aiDropTokens * 0.25)
+    // No drop estimate for wallets with zero outgoing transactions
+    if (txCount === 0) {
+      aiDropTokens = 0; aiDropUsd = 0
+    } else {
+      // Tier floor — AI can't give less than tier baseline
+      const tierFloor: Record<string, number> = { S: 12000, A: 6000, B: 2500, C: 800, D: 200 }
+      const floorTokens = tierFloor[finalTier] || 200
+      aiDropTokens = Math.max(aiDropTokens || 0, floorTokens)
+      aiDropUsd = Math.round(aiDropTokens * 0.25)
+    }
     const finalAiTier = (aiScore >= formulaScore && aiTier !== 'D') ? aiTier : finalTier
 
     return NextResponse.json({
