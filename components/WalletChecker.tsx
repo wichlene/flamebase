@@ -47,6 +47,7 @@ function rrect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h
 }
 
 function ActivityHeatmap({ data }: { data: DayActivity[] }) {
+  const [tip, setTip] = useState<{ x: number; y: number; text: string } | null>(null)
   if (!data || data.length === 0) return null
   const firstDate = new Date(data[0].date + 'T00:00:00Z')
   const startPad = firstDate.getUTCDay()
@@ -56,16 +57,26 @@ function ActivityHeatmap({ data }: { data: DayActivity[] }) {
   for (let i = 0; i < padded.length; i += 7) cols.push(padded.slice(i, i + 7))
 
   return (
-    <div className="overflow-x-auto pb-1">
-      <div className="flex gap-[3px]" style={{ minWidth: cols.length * 13 }}>
+    <div className="relative overflow-x-auto pb-1" onMouseLeave={() => setTip(null)}>
+      {tip && (
+        <div className="fixed z-50 pointer-events-none bg-[#0A0B0D] text-white text-[11px] px-2 py-1 rounded-lg shadow-lg whitespace-nowrap"
+          style={{ left: tip.x + 10, top: tip.y - 36 }}>
+          {tip.text}
+        </div>
+      )}
+      <div className="flex gap-[3px]" style={{ minWidth: cols.length * 14 }}>
         {cols.map((col, ci) => (
           <div key={ci} className="flex flex-col gap-[3px]">
             {col.map((d, di) => (
               <div
                 key={di}
-                title={d ? `${d.date}: ${d.count} tx` : ''}
-                className="w-[11px] h-[11px] rounded-[2px]"
+                className="w-[12px] h-[12px] rounded-[2px] cursor-default"
                 style={{ background: d ? heatColor(d.count) : 'transparent' }}
+                onMouseEnter={(e) => d && setTip({
+                  x: e.clientX, y: e.clientY,
+                  text: d.count > 0 ? `${d.date} — ${d.count} tx` : `${d.date} — no activity`,
+                })}
+                onMouseMove={(e) => setTip(t => t ? { ...t, x: e.clientX, y: e.clientY } : null)}
               />
             ))}
           </div>
@@ -182,7 +193,7 @@ export default function WalletChecker({ onPay, compact }: { onPay?: () => Promis
   const [loadStep, setLoadStep] = useState(0)
   const [result, setResult] = useState<WalletResult | null>(null)
   const [error, setError] = useState('')
-  const [sharing, setSharing] = useState(false)
+  const [sharing, setSharing] = useState<null | 'download' | 'x' | 'fc'>(null)
 
   const address = walletClient?.account?.address
 
@@ -210,30 +221,65 @@ export default function WalletChecker({ onPay, compact }: { onPay?: () => Promis
     setLoading(false)
   }
 
-  const handleShare = async () => {
+  const downloadCard = (dataUrl: string, addr: string) => {
+    const a = document.createElement('a')
+    a.href = dataUrl
+    a.download = `flamebase-${addr.slice(0, 6)}.png`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+  }
+
+  const handleDownload = async () => {
     if (!result || !address) return
-    setSharing(true)
+    setSharing('download')
+    try {
+      downloadCard(generateCard(result, address), address)
+    } catch { /* ignore */ }
+    setSharing(null)
+  }
+
+  const handleShareX = async () => {
+    if (!result || !address) return
+    setSharing('x')
     try {
       const dataUrl = generateCard(result, address)
-      if (typeof navigator !== 'undefined' && navigator.share) {
-        try {
-          const blob = await (await fetch(dataUrl)).blob()
-          const file = new File([blob], 'flamebase-wallet.png', { type: 'image/png' })
-          if (navigator.canShare({ files: [file] })) {
-            await navigator.share({ files: [file], title: 'FlameBase — Base Wallet Score', text: `My Base score: ${result.score}/100 (Tier ${result.tier}) — check yours at flamebase.xyz` })
-            setSharing(false); return
-          }
-        } catch { /* share cancelled or unsupported */ }
-      }
-      // Download as PNG
-      const a = document.createElement('a')
-      a.href = dataUrl
-      a.download = `flamebase-${address.slice(0, 6)}.png`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
+      // Download card so user can attach it
+      downloadCard(dataUrl, address)
+      const text = [
+        `🔥 My Base wallet score: Tier ${result.tier} — ${result.score}/100`,
+        ``,
+        `⚡ ${result.txCount.toLocaleString()} TXs  ·  📅 ${result.activeDays} active days  ·  🔥 ${result.longestStreak}d streak`,
+        `🖼️ ${result.nftCount} NFTs  ·  📆 ${result.activeMonths} active months`,
+        ``,
+        `🪂 Estimated drop: ~${result.estimatedTokens.toLocaleString()} $BASE`,
+        ``,
+        `Check yours 👇 flamebase.xyz`,
+        `#Base #BuildOnBase #Web3 #BaseChain`,
+      ].join('\n')
+      window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`, '_blank')
     } catch { /* ignore */ }
-    setSharing(false)
+    setSharing(null)
+  }
+
+  const handleShareFarcaster = async () => {
+    if (!result || !address) return
+    setSharing('fc')
+    try {
+      const dataUrl = generateCard(result, address)
+      downloadCard(dataUrl, address)
+      const text = [
+        `🔥 Base wallet score: Tier ${result.tier} (${result.score}/100)`,
+        ``,
+        `⚡ ${result.txCount.toLocaleString()} TXs · ${result.activeDays} active days · ${result.longestStreak}d streak`,
+        `🖼️ ${result.nftCount} NFTs · ${result.activeMonths} months active`,
+        `🪂 Estimated drop: ~${result.estimatedTokens.toLocaleString()} $BASE ≈ $${result.estimatedUsd.toLocaleString()}`,
+        ``,
+        `Check yours → flamebase.xyz`,
+      ].join('\n')
+      window.open(`https://warpcast.com/~/compose?text=${encodeURIComponent(text)}`, '_blank')
+    } catch { /* ignore */ }
+    setSharing(null)
   }
 
   if (!address) return (
@@ -317,21 +363,37 @@ export default function WalletChecker({ onPay, compact }: { onPay?: () => Promis
         </div>
       </div>
 
-      {/* Share / Refresh — always at top */}
-      <div className="flex gap-2">
-        <button
-          onClick={handleShare}
-          disabled={sharing}
-          className="flex-1 bg-[#0052FF] hover:bg-[#1652F0] disabled:opacity-50 text-white font-bold py-2.5 rounded-xl text-sm transition-colors flex items-center justify-center gap-2"
-        >
-          {sharing ? (
-            <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Generating…</>
-          ) : (
-            <>📤 Share / Download Card</>
-          )}
-        </button>
-        <button onClick={run} title="Re-analyze" className="px-3 py-2.5 border border-[#E4E7EB] rounded-xl text-sm text-[#5B6271] hover:bg-[#F8FAFF] transition-colors">
-          🔄
+      {/* Share row — always visible at top */}
+      <div className="space-y-1.5">
+        <p className="text-[10px] text-[#8A919E] text-center">Card auto-downloads → attach it in the compose window</p>
+        <div className="grid grid-cols-3 gap-1.5">
+          <button
+            onClick={handleShareX}
+            disabled={!!sharing}
+            className="bg-[#0A0B0D] hover:bg-[#1A1B1D] disabled:opacity-50 text-white font-bold py-2 rounded-xl text-xs transition-colors flex items-center justify-center gap-1"
+          >
+            {sharing === 'x' ? <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" /> : '𝕏'}
+            Share on X
+          </button>
+          <button
+            onClick={handleShareFarcaster}
+            disabled={!!sharing}
+            className="bg-[#7B61FF] hover:bg-[#6B51EF] disabled:opacity-50 text-white font-bold py-2 rounded-xl text-xs transition-colors flex items-center justify-center gap-1"
+          >
+            {sharing === 'fc' ? <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" /> : '🟣'}
+            Farcaster
+          </button>
+          <button
+            onClick={handleDownload}
+            disabled={!!sharing}
+            className="bg-[#F8FAFF] hover:bg-[#EDF1FF] disabled:opacity-50 border border-[#D6E2FF] text-[#0052FF] font-bold py-2 rounded-xl text-xs transition-colors flex items-center justify-center gap-1"
+          >
+            {sharing === 'download' ? <span className="w-3 h-3 border-2 border-[#0052FF] border-t-transparent rounded-full animate-spin" /> : '📥'}
+            Download
+          </button>
+        </div>
+        <button onClick={run} className="w-full text-[10px] text-[#8A919E] hover:text-[#5B6271] py-1 transition-colors">
+          🔄 Re-analyze
         </button>
       </div>
 
