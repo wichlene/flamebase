@@ -16,8 +16,8 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install twitter-api-v2
-        run: npm install twitter-api-v2@1.17.2
+      - name: Install dependencies
+        run: npm install oauth-1.0a
 
       - name: Post tweet
         env:

@@ -1,17 +1,18 @@
-const { TwitterApi } = require('twitter-api-v2')
+const OAuth = require('oauth-1.0a')
+const crypto = require('crypto')
 
-// debug — verify secrets are loaded (first 6 chars only)
-console.log('TW_API_KEY:', process.env.TW_API_KEY?.slice(0,6))
-console.log('TW_API_SECRET:', process.env.TW_API_SECRET?.slice(0,6))
-console.log('TW_ACCESS_TOKEN:', process.env.TW_ACCESS_TOKEN?.slice(0,6))
-console.log('TW_ACCESS_SECRET:', process.env.TW_ACCESS_SECRET?.slice(0,6))
-
-const client = new TwitterApi({
-  appKey: process.env.TW_API_KEY,
-  appSecret: process.env.TW_API_SECRET,
-  accessToken: process.env.TW_ACCESS_TOKEN,
-  accessSecret: process.env.TW_ACCESS_SECRET,
+const oauth = OAuth({
+  consumer: { key: process.env.TW_API_KEY, secret: process.env.TW_API_SECRET },
+  signature_method: 'HMAC-SHA1',
+  hash_function(base_string, key) {
+    return crypto.createHmac('sha1', key).update(base_string).digest('base64')
+  },
 })
+
+const token = {
+  key: process.env.TW_ACCESS_TOKEN,
+  secret: process.env.TW_ACCESS_SECRET,
+}
 
 // ── Static tweet pool ─────────────────────────────────────────────────────────
 
@@ -100,8 +101,22 @@ async function main() {
   }
 
   console.log('Tweeting:\n', text)
-  const result = await client.v2.tweet(text)
-  console.log('Tweet posted:', result.data.id)
+
+  const url = 'https://api.twitter.com/2/tweets'
+  const authHeader = oauth.toHeader(oauth.authorize({ url, method: 'POST' }, token))
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      ...authHeader,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ text }),
+  })
+
+  const data = await res.json()
+  if (!res.ok) throw new Error(`X API error ${res.status}: ${JSON.stringify(data)}`)
+  console.log('Tweet posted:', data.data.id)
 }
 
 main().catch(err => {
