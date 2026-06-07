@@ -26,6 +26,7 @@ const NFT_FACTORY_DEPLOYED = NFT_FACTORY_ADDRESS.length > 0
 const DAO_DEPLOYED = DAO_ADDRESS.length > 0
 
 const ADMIN_ADDRESS = '0xa77A5D4D37d6F39C20C2441295da9fA60Ab9fD69'
+const FLM_TOKEN_ADDRESS = '0xadead5e8ca2893be6e8239cbbae83049a701cb07'
 
 interface Post {
   id: bigint
@@ -1557,6 +1558,9 @@ export default function Home() {
                         <span className="text-[10px] bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-semibold border border-orange-200">BASE</span>
                       </div>
                       <p className="text-[#5B6271] text-xs mt-0.5">FlameBase community token on Base mainnet</p>
+                      <a href={`https://basescan.org/token/${FLM_TOKEN_ADDRESS}`} target="_blank" rel="noopener noreferrer" className="text-[10px] text-[#8A919E] hover:text-[#0052FF] transition-colors font-mono">
+                        {FLM_TOKEN_ADDRESS.slice(0,6)}...{FLM_TOKEN_ADDRESS.slice(-4)} ↗
+                      </a>
                     </div>
                   </div>
                   <div className="flex gap-2 mt-3">
@@ -2587,6 +2591,8 @@ export default function Home() {
             </div>
             <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-[#8A919E] mb-3">
               <a href={`https://basescan.org/address/${CONTRACT_ADDRESS}`} target="_blank" rel="noopener noreferrer" className="hover:text-[#0052FF] transition-colors">{t('footerContract')}</a>
+              <span>·</span>
+              <a href={`https://basescan.org/token/${FLM_TOKEN_ADDRESS}`} target="_blank" rel="noopener noreferrer" className="hover:text-[#FF6B00] transition-colors">{t('footerFLMToken')}</a>
               <span>·</span>
               <a href="/privacy" className="hover:text-[#0052FF] transition-colors">{t('footerPrivacy')}</a>
               <span>·</span>
