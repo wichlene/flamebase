@@ -1856,7 +1856,7 @@ export default function Home() {
                               <button onClick={() => quotePost(post)}
                                 title="Quote post"
                                 className="flex items-center gap-1 text-[#5B6271] hover:text-[#0052FF] hover:bg-[#E6EEFF] rounded-xl px-3 py-2 text-sm transition-all">
-                                <span className="text-lg">💬</span>
+                                <span className="text-lg">🔁</span>
                               </button>
                               {isConnected && (
                                 <button onClick={() => boostPost(key)} disabled={loadingAction === `boost-${key}` || !isConnected || (boostedPosts[key] || 0) > Date.now()}
