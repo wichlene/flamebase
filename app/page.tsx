@@ -292,6 +292,15 @@ export default function Home() {
     return hash
   }
 
+  const txError = (e: unknown): string => {
+    const msg = e instanceof Error ? e.message : String(e)
+    if (msg.toLowerCase().includes('user rejected') || msg.toLowerCase().includes('denied')) return t('errUserRejected')
+    if (msg.toLowerCase().includes('insufficient') || msg.toLowerCase().includes('funds')) return t('errInsufficientFunds')
+    if (msg.toLowerCase().includes('chain') || msg.toLowerCase().includes('network')) return t('errWrongNetwork')
+    if (msg.toLowerCase().includes('rpc') || msg.toLowerCase().includes('request failed') || msg.toLowerCase().includes('fetch')) return t('errNetworkError')
+    return t('errTxFailed')
+  }
+
   // $0.04 fixed fee in ETH — recalculated when ETH price updates
   const fixedFeeETH = (0.04 / ethPrice).toFixed(10)
   const fixedFee = parseEther(fixedFeeETH)
@@ -740,7 +749,7 @@ export default function Home() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] || null
     if (file && file.size > 50 * 1024 * 1024) {
-      alert('File too large (max 50 MB). Please use a shorter video (~1 min).')
+      showToast('error', t('errFileTooLarge'))
       e.target.value = ''
       return
     }
@@ -754,7 +763,7 @@ export default function Home() {
     try {
       await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'createProfile', args: [newUsername, ''] })
       setTimeout(() => refetchProfile(), 3000)
-    } catch (e) { console.error(e) }
+    } catch (e) { console.error(e); showToast('error', t('errProfileFailed')) }
     setLoading(false)
   }
 
@@ -805,18 +814,7 @@ export default function Home() {
       setPosts(prev => prev.map(p => p.id === postId ? { ...p, likes: p.likes + 1n } : p))
     } catch (e: unknown) {
       console.error(e)
-      const msg = e instanceof Error ? e.message : String(e)
-      if (msg.toLowerCase().includes('user rejected') || msg.toLowerCase().includes('denied')) {
-        showToast('error', 'İşlem iptal edildi')
-      } else if (msg.toLowerCase().includes('insufficient') || msg.toLowerCase().includes('funds')) {
-        showToast('error', 'Yetersiz ETH bakiyesi')
-      } else if (msg.toLowerCase().includes('chain') || msg.toLowerCase().includes('network')) {
-        showToast('error', 'Base ağına geçin — cüzdanınızda Base (8453) ekli olmalı')
-      } else if (msg.toLowerCase().includes('rpc') || msg.toLowerCase().includes('request failed') || msg.toLowerCase().includes('fetch')) {
-        showToast('error', 'Ağ hatası — tekrar deneyin')
-      } else {
-        showToast('error', 'Like başarısız — tekrar deneyin')
-      }
+      showToast('error', txError(e))
     }
     setLoadingAction(null)
   }
@@ -831,7 +829,7 @@ export default function Home() {
       setCommentTexts(prev => ({ ...prev, [key]: '' }))
       setReplyingTo(prev => ({ ...prev, [key]: '' }))
       await loadComments(key)
-    } catch (e) { console.error(e) }
+    } catch (e) { console.error(e); showToast('error', t('errCommentFailed')) }
     setLoadingAction(null)
   }
 
@@ -1297,7 +1295,7 @@ export default function Home() {
                 onClick={connectFarcaster}
                 className="w-full flex items-center justify-center gap-2 bg-[#855DCD] hover:bg-[#7449C2] text-white font-bold text-sm px-3 py-2.5 rounded-xl transition-colors"
               >
-                <span>🟣</span><span>Connect Farcaster</span>
+                <span>🟣</span><span>{t('connectFarcaster')}</span>
               </button>
             ) : (
               <ConnectButton />
@@ -1352,7 +1350,7 @@ export default function Home() {
                   onClick={connectFarcaster}
                   className="flex items-center gap-1 bg-[#855DCD] hover:bg-[#7449C2] text-white font-bold text-xs px-2.5 py-2 rounded-xl transition-colors flex-shrink-0"
                 >
-                  <span>🟣</span><span>Bağlan</span>
+                  <span>🟣</span><span>{t('connectFarcaster')}</span>
                 </button>
               ) : (
                 <ConnectButton accountStatus="avatar" chainStatus="none" showBalance={false} />
@@ -1433,7 +1431,7 @@ export default function Home() {
           {!walletBannerDismissed && typeof window !== 'undefined' && !(window as any).ethereum && (
             <div className="md:hidden mx-3 mt-2 flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-xl px-3 py-2.5 text-xs text-blue-800">
               <span className="flex-shrink-0 mt-0.5">💡</span>
-              <span className="flex-1">Daha sorunsuz işlem için siteyi <strong>MetaMask</strong>, <strong>Bybit</strong> veya <strong>OKX</strong> uygulamasının dahili tarayıcısından aç.</span>
+              <span className="flex-1">{t('walletBrowserTip')}</span>
               <button onClick={() => setWalletBannerDismissed(true)} className="flex-shrink-0 text-blue-400 hover:text-blue-700 font-bold text-sm leading-none ml-1">✕</button>
             </div>
           )}
@@ -1958,16 +1956,16 @@ export default function Home() {
                 {activeTab === 'feed' && !showBookmarks && !searchQuery && posts.length > 0 && (
                   <div className="py-6 flex justify-center">
                     {allPostsLoaded ? (
-                      <p className="text-[#8A919E] text-sm">🎉 Tüm postlar yüklendi</p>
+                      <p className="text-[#8A919E] text-sm">{t('allPostsLoaded')}</p>
                     ) : (
                       <button
                         onClick={() => nextPostIndex !== null && loadPostsBatch(nextPostIndex, true)}
                         disabled={loadingMore || nextPostIndex === null}
                         className="flex items-center gap-2 bg-[#F0F4FF] hover:bg-[#E6EEFF] text-[#0052FF] font-bold text-sm px-6 py-3 rounded-2xl transition-colors disabled:opacity-50">
                         {loadingMore ? (
-                          <><span className="animate-spin">⏳</span> Yükleniyor…</>
+                          <><span className="animate-spin">⏳</span> {t('uploading')}</>
                         ) : (
-                          <>⬇️ Daha fazla yükle</>
+                          <>⬇️ {t('loadMore')}</>
                         )}
                       </button>
                     )}
