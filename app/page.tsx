@@ -2079,47 +2079,51 @@ export default function Home() {
                         </button>
                       </div>
                     )}
-                    <div className="flex items-center gap-3 px-4 py-3 border-t border-[#EEF1F5]">
-                      <label className="cursor-pointer text-[#5B6271] hover:text-[#0052FF] transition-colors">
-                        <span className="text-2xl">📷</span>
-                        <input type="file" accept="image/*,video/*" className="hidden" onChange={handleFileChange} />
-                      </label>
-                      <button
-                        onClick={async () => {
-                          if (!newPost.trim() || improving) return
-                          setImproving(true)
-                          try {
-                            const res = await fetch('/api/ai', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ messages: [{ role: 'user', content: newPost }], type: 'improve' }),
-                            })
-                            const data = await res.json()
-                            if (data.content) setNewPost(data.content)
-                          } catch {}
-                          setImproving(false)
-                        }}
-                        disabled={!newPost.trim() || improving}
-                        title="Improve with AI"
-                        className="flex items-center gap-1.5 bg-gradient-to-r from-[#7B3FE4] to-[#0052FF] text-white px-3 py-1.5 rounded-lg text-xs font-bold disabled:opacity-40 transition-all hover:opacity-90 flex-shrink-0">
-                        {improving ? '…' : '✨ AI'}
-                      </button>
-                      <button type="button" onClick={() => setShowPollCreator(p => !p)}
-                        title="Add poll"
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex-shrink-0 ${showPollCreator ? 'bg-purple-100 text-purple-600' : 'bg-[#F0F2F5] text-[#5B6271] hover:bg-purple-100 hover:text-purple-600'}`}>
-                        📊 Poll
-                      </button>
-                      <button type="button" onClick={() => setTokenGateEnabled(t => !t)}
-                        title="Token gate this post"
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex-shrink-0 ${tokenGateEnabled ? 'bg-yellow-100 text-yellow-700' : 'bg-[#F0F2F5] text-[#5B6271] hover:bg-yellow-100 hover:text-yellow-700'}`}>
-                        🔒 Gate
-                      </button>
-                      <EmojiPicker onSelect={e => setNewPost(prev => prev + e)} />
-                      <span className="text-[#8A919E] text-xs flex-1">{newPost.length}/500</span>
-                      <button onClick={createPost} disabled={loading || !newPost}
-                        className="bg-[#0052FF] hover:bg-[#1652F0] text-white px-8 py-2.5 rounded-xl font-bold disabled:opacity-40 transition-colors shadow-sm">
-                        {loading ? t('posting') : t('post')}
-                      </button>
+                    <div className="border-t border-[#EEF1F5]">
+                      <div className="flex items-center gap-3 px-4 pt-3 pb-2 flex-wrap">
+                        <label className="cursor-pointer text-[#5B6271] hover:text-[#0052FF] transition-colors">
+                          <span className="text-2xl">📷</span>
+                          <input type="file" accept="image/*,video/*" className="hidden" onChange={handleFileChange} />
+                        </label>
+                        <button
+                          onClick={async () => {
+                            if (!newPost.trim() || improving) return
+                            setImproving(true)
+                            try {
+                              const res = await fetch('/api/ai', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ messages: [{ role: 'user', content: newPost }], type: 'improve' }),
+                              })
+                              const data = await res.json()
+                              if (data.content) setNewPost(data.content)
+                            } catch {}
+                            setImproving(false)
+                          }}
+                          disabled={!newPost.trim() || improving}
+                          title="Improve with AI"
+                          className="flex items-center gap-1.5 bg-gradient-to-r from-[#7B3FE4] to-[#0052FF] text-white px-3 py-1.5 rounded-lg text-xs font-bold disabled:opacity-40 transition-all hover:opacity-90 flex-shrink-0">
+                          {improving ? '…' : '✨ AI'}
+                        </button>
+                        <button type="button" onClick={() => setShowPollCreator(p => !p)}
+                          title="Add poll"
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex-shrink-0 ${showPollCreator ? 'bg-purple-100 text-purple-600' : 'bg-[#F0F2F5] text-[#5B6271] hover:bg-purple-100 hover:text-purple-600'}`}>
+                          📊 Poll
+                        </button>
+                        <button type="button" onClick={() => setTokenGateEnabled(t => !t)}
+                          title="Token gate this post"
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex-shrink-0 ${tokenGateEnabled ? 'bg-yellow-100 text-yellow-700' : 'bg-[#F0F2F5] text-[#5B6271] hover:bg-yellow-100 hover:text-yellow-700'}`}>
+                          🔒 Gate
+                        </button>
+                        <EmojiPicker onSelect={e => setNewPost(prev => prev + e)} />
+                        <span className="text-[#8A919E] text-xs ml-auto">{newPost.length}/500</span>
+                      </div>
+                      <div className="px-4 pb-3">
+                        <button onClick={createPost} disabled={loading || !newPost}
+                          className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white py-3 rounded-xl font-bold disabled:opacity-40 transition-colors shadow-sm">
+                          {loading ? t('posting') : t('post')}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
