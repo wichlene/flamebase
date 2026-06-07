@@ -1002,9 +1002,9 @@ export default function Home() {
           const mine = cols.filter(c => c.creator.toLowerCase() === address?.toLowerCase() && c.name === 'FlameBase Logo').pop()
           if (mine) {
             setDeployedLogoNftAddr(mine.addr)
-            showToast('success', `📍 Kontrat: ${mine.addr} — Bunu NEXT_PUBLIC_FLAME_NFT olarak kaydet`)
+            showToast('success', `📍 Contract: ${mine.addr} — Save as NEXT_PUBLIC_FLAME_NFT in Vercel`)
             if (setupData.imageHash) {
-              showToast('success', `🖼️ Image hash: ${setupData.imageHash} — Bunu FLAME_NFT_IMAGE_HASH olarak kaydet`)
+              showToast('success', `🖼️ Image hash: ${setupData.imageHash} — Save as FLAME_NFT_IMAGE_HASH in Vercel`)
             }
           }
         } catch {}
@@ -2419,17 +2419,17 @@ export default function Home() {
                         {/* Logo NFT deploy — always shown so admin can redeploy with fixed metadata */}
                         <div className="bg-gradient-to-br from-orange-500 to-red-500 rounded-xl p-4 mb-3 text-white">
                           <p className="font-black text-sm mb-1">
-                            {FLAME_NFT_ADDRESS ? '🔄 Yeniden Deploy (Resim Düzeltme)' : '🎨 Deploy Logo NFT Collection'}
+                            {FLAME_NFT_ADDRESS ? '🔄 Re-deploy Logo NFT (Fix Image)' : '🎨 Deploy Logo NFT Collection'}
                           </p>
                           <p className="text-white/80 text-xs mb-3">
                             {FLAME_NFT_ADDRESS
-                              ? 'Resim görünmüyorsa yeni deploy yapabilirsin. Yeni adres Vercel\'e kaydedilmeli.'
-                              : 'FlameBase logosunu IPFS\'e yükler + 10.000 maxSupply, $0.50 mint price NFT koleksiyonu deploy eder.'}
+                              ? 'If the image is missing, re-deploy. Save the new address to Vercel as NEXT_PUBLIC_FLAME_NFT.'
+                              : 'Uploads logo to IPFS + deploys 10,000 maxSupply / $0.50 mint price NFT collection on Base.'}
                           </p>
                           {deployedLogoNftAddr && (
                             <div className="bg-white/10 rounded-lg p-2 mb-2 text-xs break-all font-mono space-y-1">
-                              <p>✅ Kontrat: {deployedLogoNftAddr}</p>
-                              <p className="text-white/70">→ NEXT_PUBLIC_FLAME_NFT olarak Vercel&apos;e kaydet</p>
+                              <p>✅ Contract: {deployedLogoNftAddr}</p>
+                              <p className="text-white/70">→ Save as NEXT_PUBLIC_FLAME_NFT in Vercel</p>
                             </div>
                           )}
                           <button
@@ -2437,7 +2437,7 @@ export default function Home() {
                             disabled={deployingLogoNft || !NFT_FACTORY_DEPLOYED}
                             className="w-full bg-white text-orange-600 py-2.5 rounded-lg font-black text-sm hover:bg-white/90 disabled:opacity-50 transition-colors"
                           >
-                            {deployingLogoNft ? 'Deploying… (1-2 dk)' : FLAME_NFT_ADDRESS ? '🔄 Yeniden Deploy Et' : '🎨 Deploy FlameBase Logo NFT'}
+                            {deployingLogoNft ? 'Deploying… (1-2 min)' : FLAME_NFT_ADDRESS ? '🔄 Re-deploy' : '🎨 Deploy FlameBase Logo NFT'}
                           </button>
                         </div>
 
