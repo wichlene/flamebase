@@ -381,6 +381,7 @@ export default function Home() {
   const [deployingLogoNft, setDeployingLogoNft] = useState(false)
   const [mintingLogoNft, setMintingLogoNft] = useState(false)
   const [deployedLogoNftAddr, setDeployedLogoNftAddr] = useState<string>('')
+  const [walletBannerDismissed, setWalletBannerDismissed] = useState(false)
 
   // Friends system (stored in localStorage)
   const [following, setFollowing] = useState<Set<string>>(new Set())
@@ -1425,6 +1426,15 @@ export default function Home() {
                 className="bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors">
                 {t('switchToBase')}
               </button>
+            </div>
+          )}
+
+          {/* Mobile wallet browser tip — only shown if not in a wallet's in-app browser */}
+          {!walletBannerDismissed && typeof window !== 'undefined' && !(window as any).ethereum && (
+            <div className="md:hidden mx-3 mt-2 flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-xl px-3 py-2.5 text-xs text-blue-800">
+              <span className="flex-shrink-0 mt-0.5">💡</span>
+              <span className="flex-1">Daha sorunsuz işlem için siteyi <strong>MetaMask</strong>, <strong>Bybit</strong> veya <strong>OKX</strong> uygulamasının dahili tarayıcısından aç.</span>
+              <button onClick={() => setWalletBannerDismissed(true)} className="flex-shrink-0 text-blue-400 hover:text-blue-700 font-bold text-sm leading-none ml-1">✕</button>
             </div>
           )}
 

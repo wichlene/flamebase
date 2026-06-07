@@ -14,6 +14,8 @@ import {
   rainbowWallet,
   phantomWallet,
   trustWallet,
+  bybitWallet,
+  okxWallet,
   injectedWallet,
 } from '@rainbow-me/rainbowkit/wallets'
 import { WagmiProvider, createConfig, useConnect, useAccount } from 'wagmi'
@@ -32,11 +34,11 @@ const connectors = connectorsForWallets(
   [
     {
       groupName: 'Popüler',
-      wallets: [coinbaseWallet, metaMaskWallet, phantomWallet, walletConnectWallet, rainbowWallet],
+      wallets: [coinbaseWallet, metaMaskWallet, bybitWallet, okxWallet, phantomWallet, walletConnectWallet],
     },
     {
       groupName: 'Diğer',
-      wallets: [trustWallet, injectedWallet],
+      wallets: [trustWallet, rainbowWallet, injectedWallet],
     },
   ],
   {
