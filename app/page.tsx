@@ -79,6 +79,22 @@ function FlameLogo({ size = 32 }: { size?: number }) {
   )
 }
 
+function VerifiedBadge({ size = 'sm' }: { size?: 'sm' | 'lg' }) {
+  const cls = size === 'lg'
+    ? 'w-6 h-6'
+    : 'w-4 h-4'
+  return (
+    <span
+      title="Coinbase Verified Account"
+      className={`inline-flex items-center justify-center ${cls} rounded-full bg-[#0052FF] flex-shrink-0`}
+    >
+      <svg viewBox="0 0 12 12" fill="none" className="w-2.5 h-2.5">
+        <path d="M2 6l3 3 5-5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </span>
+  )
+}
+
 const IPFS_GATEWAYS = [
   'https://gateway.pinata.cloud/ipfs/',
   'https://cloudflare-ipfs.com/ipfs/',
@@ -371,6 +387,7 @@ export default function Home() {
   const [profileBanners, setProfileBanners] = useState<Record<string, string>>({})
   const [uploadingBanner, setUploadingBanner] = useState(false)
   const [premiumUsers, setPremiumUsers] = useState<Set<string>>(new Set())
+  const [verifiedAddresses, setVerifiedAddresses] = useState<Record<string, boolean>>({})
   const [buyingPremium, setBuyingPremium] = useState(false)
   const [postViews, setPostViews] = useState<Record<string, number>>({})
   const seenInSession = useRef<Set<string>>(new Set())
@@ -699,6 +716,22 @@ export default function Home() {
         .catch(() => {})
     })
   }, [posts]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const addrs = [...new Set([
+      ...posts.map(p => p.author.toLowerCase()),
+      ...(address ? [address.toLowerCase()] : []),
+      ...(selectedUser ? [selectedUser.toLowerCase()] : []),
+    ])]
+    addrs.forEach(addr => {
+      if (verifiedAddresses[addr] !== undefined) return
+      setVerifiedAddresses(prev => ({ ...prev, [addr]: false }))
+      fetch(`/api/verified?address=${addr}`)
+        .then(r => r.json())
+        .then(d => { if (d?.verified) setVerifiedAddresses(prev => ({ ...prev, [addr]: true })) })
+        .catch(() => {})
+    })
+  }, [posts, address, selectedUser]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const getUsername = (addr: string) => {
     const ens = ensNames[addr.toLowerCase()]
@@ -1667,6 +1700,7 @@ export default function Home() {
                               >
                                 {getUsername(post.author)}
                               </button>
+                              {verifiedAddresses[post.author.toLowerCase()] && <VerifiedBadge />}
                               {premiumUsers.has(post.author.toLowerCase()) && <span className="text-yellow-500 text-sm" title="Premium">✨</span>}
                               <span className="text-[#8A919E] text-xs">{post.author.slice(0,6)}...{post.author.slice(-4)}</span>
                               <span className="text-[#8A919E] text-xs">·</span>
@@ -2244,8 +2278,11 @@ export default function Home() {
                             </div>
                           )}
                         </div>
-                        <h2 className="text-2xl font-black text-[#0A0B0D]">{myProfile[0]}</h2>
-                        {premiumUsers.has(address!.toLowerCase()) && <span className="text-yellow-500 text-2xl" title="Premium member">✨</span>}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h2 className="text-2xl font-black text-[#0A0B0D]">{myProfile[0]}</h2>
+                          {verifiedAddresses[address!.toLowerCase()] && <VerifiedBadge size="lg" />}
+                          {premiumUsers.has(address!.toLowerCase()) && <span className="text-yellow-500 text-2xl" title="Premium member">✨</span>}
+                        </div>
                         <p className="text-[#5B6271] text-sm mb-1">{address?.slice(0,10)}...{address?.slice(-6)}</p>
                         {walletBalance && (
                           <p className="text-[#0052FF] text-sm font-bold mb-5">
@@ -2822,7 +2859,10 @@ export default function Home() {
               <div className="flex items-center gap-4 mb-4">
                 <Avatar addr={selectedUser} profiles={profiles} size="lg" />
                 <div className="flex-1">
-                  <h3 className="text-xl font-black">{getUsername(selectedUser)}</h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-xl font-black">{getUsername(selectedUser)}</h3>
+                    {verifiedAddresses[selectedUser.toLowerCase()] && <VerifiedBadge />}
+                  </div>
                   <p className="text-[#8A919E] text-sm">{selectedUser.slice(0,8)}...{selectedUser.slice(-6)}</p>
                   <a href={`https://basescan.org/address/${selectedUser}`} target="_blank" className="text-[#0052FF] text-xs hover:underline">View on Basescan ↗</a>
                 </div>
