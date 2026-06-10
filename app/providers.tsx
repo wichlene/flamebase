@@ -17,7 +17,7 @@ import {
   injectedWallet,
 } from '@rainbow-me/rainbowkit/wallets'
 import { WagmiProvider, createConfig, useConnect, useAccount } from 'wagmi'
-import { base } from 'wagmi/chains'
+import { base, mainnet, arbitrum, optimism, polygon } from 'wagmi/chains'
 import { http, fallback } from 'wagmi'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import '@rainbow-me/rainbowkit/styles.css'
@@ -49,7 +49,7 @@ const connectors = connectorsForWallets(
 )
 
 const config = createConfig({
-  chains: [base],
+  chains: [base, mainnet, arbitrum, optimism, polygon],
   connectors: [...connectors, farcasterConnector()],
   transports: {
     [base.id]: fallback([
@@ -57,6 +57,22 @@ const config = createConfig({
       http('https://base.drpc.org'),
       http('https://base-rpc.publicnode.com'),
       http('https://base.llamarpc.com'),
+    ]),
+    [mainnet.id]: fallback([
+      http('https://eth.llamarpc.com'),
+      http('https://rpc.ankr.com/eth'),
+    ]),
+    [arbitrum.id]: fallback([
+      http('https://arb1.arbitrum.io/rpc'),
+      http('https://rpc.ankr.com/arbitrum'),
+    ]),
+    [optimism.id]: fallback([
+      http('https://mainnet.optimism.io'),
+      http('https://rpc.ankr.com/optimism'),
+    ]),
+    [polygon.id]: fallback([
+      http('https://polygon-rpc.com'),
+      http('https://rpc.ankr.com/polygon'),
     ]),
   },
   ssr: true,
