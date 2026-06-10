@@ -109,29 +109,34 @@ function callTool(id, params) {
     const p = args.params || {};
     const qs = new URLSearchParams({ from: WALLET, ...p }).toString();
     const url = `https://flamebase.xyz/api/mcp/prepare/${action}?${qs}`;
+    const LABELS = { createPost: 'Post Oluştur', like: 'Beğen', comment: 'Yorum Yap', tip: 'Bahşiş Ver',
+      checkIn: 'Check-In', deployToken: 'Token Oluştur', propose: 'Teklif Sun', vote: 'Oy Ver' };
+    const description = LABELS[action] || action;
 
     fetchJson(url, (err, data) => {
       if (err || !data.ok) {
         send({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: JSON.stringify({ error: err || data.error }) }] } });
       } else {
-        send({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: JSON.stringify(data.data) }] } });
+        send({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: JSON.stringify({ ...data.data, description }) }] } });
       }
     });
 
   } else if (name === 'send_calls') {
     const reqId = 'req_' + Date.now();
+    const txData = Buffer.from(JSON.stringify(args)).toString('base64url');
+    const approveUrl = `https://flamebase.xyz/approve?tx=${txData}`;
     send({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: JSON.stringify({
       requestId: reqId,
       status: 'pending_approval',
-      message: `Transaction ready. Open https://flamebase.xyz and approve in your wallet. Request ID: ${reqId}`,
-      calls: args.calls,
+      approveUrl,
+      message: `🔗 İşlemi onaylamak için şu linki aç: ${approveUrl}`,
     }) }] } });
 
   } else if (name === 'get_request_status') {
     send({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: JSON.stringify({
       requestId: args.requestId,
-      status: 'submitted',
-      explorer: `https://basescan.org`,
+      status: 'pending_approval',
+      message: 'Henüz onaylanmadı. approveUrl linkini tarayıcıda aç ve cüzdanınla onayla.',
     }) }] } });
 
   } else {
