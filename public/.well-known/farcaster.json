@@ -7,11 +7,11 @@
   "frame": {
     "version": "1",
     "name": "FlameBase",
-    "iconUrl": "https://flamebase.xyz/logo.jpg",
+    "iconUrl": "https://flamebase.xyz/logo.png",
     "homeUrl": "https://flamebase.xyz",
-    "imageUrl": "https://flamebase.xyz/logo.jpg",
+    "imageUrl": "https://flamebase.xyz/logo.png",
     "buttonTitle": "Open FlameBase",
-    "splashImageUrl": "https://flamebase.xyz/logo.jpg",
+    "splashImageUrl": "https://flamebase.xyz/logo.png",
     "splashBackgroundColor": "#000000",
     "webhookUrl": "https://api.neynar.com/f/app/3205759e-735e-4dc4-af8f-40c1d9391775"
   }
