@@ -14,8 +14,6 @@ import {
   rainbowWallet,
   phantomWallet,
   trustWallet,
-  bybitWallet,
-  okxWallet,
   injectedWallet,
 } from '@rainbow-me/rainbowkit/wallets'
 import { WagmiProvider, createConfig, useConnect, useAccount } from 'wagmi'
@@ -34,11 +32,11 @@ const connectors = connectorsForWallets(
   [
     {
       groupName: 'Popüler',
-      wallets: [coinbaseWallet, metaMaskWallet, bybitWallet, okxWallet, phantomWallet, walletConnectWallet],
+      wallets: [coinbaseWallet, metaMaskWallet, phantomWallet, walletConnectWallet, rainbowWallet],
     },
     {
       groupName: 'Diğer',
-      wallets: [trustWallet, rainbowWallet, injectedWallet],
+      wallets: [trustWallet, injectedWallet],
     },
   ],
   {
@@ -46,7 +44,7 @@ const connectors = connectorsForWallets(
     appDescription: 'Onchain social on Base — posts, likes and follows live forever on the blockchain.',
     appUrl: 'https://flamebase.xyz',
     appIcon: 'https://flamebase.xyz/icon.png',
-    projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'placeholder',
+    projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || '876379a64c6da858bdc8230dda19a8db',
   }
 )
 
