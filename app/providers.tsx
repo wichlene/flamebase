@@ -44,7 +44,7 @@ const connectors = connectorsForWallets(
     appDescription: 'Onchain social on Base — posts, likes and follows live forever on the blockchain.',
     appUrl: 'https://flamebase.xyz',
     appIcon: 'https://flamebase.xyz/icon.png',
-    projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'placeholder',
+    projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || '876379a64c6da858bdc8230dda19a8db',
   }
 )
 
