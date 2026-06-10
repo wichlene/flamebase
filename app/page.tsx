@@ -13,6 +13,7 @@ import { T, LANG_LABELS, type Lang } from '../lib/i18n'
 import { TOOLS_ADDRESS, TOKEN_FACTORY_ADDRESS, NFT_FACTORY_ADDRESS, DAO_ADDRESS, TOOLS_ABI, TOKEN_FACTORY_ABI, NFT_FACTORY_ABI, DAO_ABI, FLAME_NFT_ADDRESS, FLAME_NFT_ABI } from '../lib/toolsContracts'
 import { SFX, isSoundEnabled, setSoundEnabled } from '../lib/sounds'
 import { ToastStack, type ToastItem, type ToastKind } from '../components/Toast'
+import SwapTool from '../components/SwapTool'
 
 const Messages = dynamic(() => import('../components/Messages'), { ssr: false, loading: () => <div className="p-8 text-center text-[#5B6271]">💬 Loading…</div> })
 const AIChat = dynamic(() => import('../components/AIChat'), { ssr: false, loading: () => <div className="p-8 text-center text-[#5B6271]">🤖 Loading AI…</div> })
@@ -2623,58 +2624,11 @@ export default function Home() {
                     </button>
                   </div>
                 )}
-                {activeTool === 'swap' && (() => {
-                  const TOKENS: Record<string, string> = {
-                    ETH: 'ETH',
-                    USDC: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
-                    cbBTC: '0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf',
-                    WETH: '0x4200000000000000000000000000000000000006',
-                    DAI: '0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb',
-                  }
-                  const tokenList = Object.keys(TOKENS)
-                  const buildUrl = () => {
-                    const input = TOKENS[swapFrom]
-                    const output = TOKENS[swapTo]
-                    let url = `https://app.uniswap.org/swap?chain=base&inputCurrency=${input}&outputCurrency=${output}`
-                    if (swapAmount) url += `&exactAmount=${swapAmount}&exactField=input`
-                    return url
-                  }
-                  return (
-                    <div className="space-y-2 pt-1">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-[#0A0B0D]">FlameSwap</span>
-                        <span className="text-[10px] text-[#8A919E]">via Uniswap v3 · Base</span>
-                      </div>
-                      <div className="bg-[#F7F9FC] rounded-lg p-2 space-y-1">
-                        <span className="text-[10px] text-[#8A919E]">From</span>
-                        <div className="flex gap-2">
-                          <input type="number" placeholder="0.0" value={swapAmount} onChange={e => setSwapAmount(e.target.value)}
-                            className="flex-1 bg-transparent text-sm font-bold focus:outline-none" />
-                          <select value={swapFrom} onChange={e => setSwapFrom(e.target.value)}
-                            className="bg-white border border-[#E4E7EB] rounded-lg px-2 py-1 text-xs font-bold focus:outline-none focus:border-[#0052FF]">
-                            {tokenList.filter(t => t !== swapTo).map(t => <option key={t}>{t}</option>)}
-                          </select>
-                        </div>
-                      </div>
-                      <button onClick={() => { const tmp = swapFrom; setSwapFrom(swapTo); setSwapTo(tmp) }}
-                        className="w-full flex items-center justify-center text-[#0052FF] hover:text-blue-700 text-lg">⇅</button>
-                      <div className="bg-[#F7F9FC] rounded-lg p-2 space-y-1">
-                        <span className="text-[10px] text-[#8A919E]">To</span>
-                        <div className="flex gap-2">
-                          <span className="flex-1 text-sm font-bold text-[#8A919E]">—</span>
-                          <select value={swapTo} onChange={e => setSwapTo(e.target.value)}
-                            className="bg-white border border-[#E4E7EB] rounded-lg px-2 py-1 text-xs font-bold focus:outline-none focus:border-[#0052FF]">
-                            {tokenList.filter(t => t !== swapFrom).map(t => <option key={t}>{t}</option>)}
-                          </select>
-                        </div>
-                      </div>
-                      <a href={buildUrl()} target="_blank" rel="noreferrer"
-                        className="block w-full bg-[#0052FF] text-white text-xs py-2.5 rounded-lg font-bold text-center hover:bg-blue-700 transition-colors">
-                        Swap on Uniswap ↗
-                      </a>
-                    </div>
-                  )
-                })()}
+                {activeTool === 'swap' && (
+                  <div className="pt-1">
+                    <SwapTool compact />
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -2863,63 +2817,11 @@ export default function Home() {
               </div>
             )}
 
-            {activeTool === 'swap' && (() => {
-              const TOKENS: Record<string, string> = {
-                ETH: 'ETH',
-                USDC: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
-                cbBTC: '0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf',
-                WETH: '0x4200000000000000000000000000000000000006',
-                DAI: '0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb',
-              }
-              const tokenList = Object.keys(TOKENS)
-              const buildUrl = () => {
-                const input = TOKENS[swapFrom]
-                const output = TOKENS[swapTo]
-                let url = `https://app.uniswap.org/swap?chain=base&inputCurrency=${input}&outputCurrency=${output}`
-                if (swapAmount) url += `&exactAmount=${swapAmount}&exactField=input`
-                return url
-              }
-              return (
-                <div className="mt-2 border border-[#E4E7EB] rounded-xl bg-white p-3 space-y-2">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-bold text-[#0A0B0D]">FlameSwap</span>
-                    <span className="text-[10px] text-[#8A919E]">via Uniswap v3 · Base</span>
-                  </div>
-                  <div className="bg-[#F7F9FC] rounded-lg p-2 space-y-1">
-                    <span className="text-[10px] text-[#8A919E]">From</span>
-                    <div className="flex gap-2">
-                      <input
-                        type="number"
-                        placeholder="0.0"
-                        value={swapAmount}
-                        onChange={e => setSwapAmount(e.target.value)}
-                        className="flex-1 bg-transparent text-sm font-bold focus:outline-none"
-                      />
-                      <select value={swapFrom} onChange={e => setSwapFrom(e.target.value)}
-                        className="bg-white border border-[#E4E7EB] rounded-lg px-2 py-1 text-xs font-bold focus:outline-none focus:border-[#0052FF]">
-                        {tokenList.filter(t => t !== swapTo).map(t => <option key={t}>{t}</option>)}
-                      </select>
-                    </div>
-                  </div>
-                  <button onClick={() => { const tmp = swapFrom; setSwapFrom(swapTo); setSwapTo(tmp) }}
-                    className="w-full flex items-center justify-center text-[#0052FF] hover:text-blue-700 text-lg">⇅</button>
-                  <div className="bg-[#F7F9FC] rounded-lg p-2 space-y-1">
-                    <span className="text-[10px] text-[#8A919E]">To</span>
-                    <div className="flex gap-2">
-                      <span className="flex-1 text-sm font-bold text-[#8A919E]">—</span>
-                      <select value={swapTo} onChange={e => setSwapTo(e.target.value)}
-                        className="bg-white border border-[#E4E7EB] rounded-lg px-2 py-1 text-xs font-bold focus:outline-none focus:border-[#0052FF]">
-                        {tokenList.filter(t => t !== swapFrom).map(t => <option key={t}>{t}</option>)}
-                      </select>
-                    </div>
-                  </div>
-                  <a href={buildUrl()} target="_blank" rel="noreferrer"
-                    className="block w-full bg-[#0052FF] text-white text-xs py-2.5 rounded-lg font-bold text-center hover:bg-blue-700 transition-colors">
-                    Swap on Uniswap ↗
-                  </a>
-                </div>
-              )
-            })()}
+            {activeTool === 'swap' && (
+              <div className="mt-2 border border-[#E4E7EB] rounded-xl bg-white">
+                <SwapTool compact />
+              </div>
+            )}
 
           </div>
 
