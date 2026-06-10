@@ -91,16 +91,12 @@ async function callTool(id, params) {
     }) }] } });
 
   } else if (name === 'flamebase_action') {
-    if (!wallet) {
-      send({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: 'Hata: PRIVATE_KEY ayarlanmamış.' }] } });
-      return;
-    }
-
     const action = args.action;
     const p = args.params || {};
+    const fromAddress = wallet ? wallet.address : (p.from || '0x0000000000000000000000000000000000000000');
 
     // 1. Calldata'yı FlameBase API'den al
-    const qs = new URLSearchParams({ from: wallet.address, ...p }).toString();
+    const qs = new URLSearchParams({ from: fromAddress, ...p }).toString();
     const url = `https://flamebase.xyz/api/mcp/prepare/${action}?${qs}`;
 
     const apiData = await fetchJson(url);
@@ -111,10 +107,24 @@ async function callTool(id, params) {
 
     const { to, data, value } = apiData.data;
 
-    // 2. Transaction'ı imzala ve gönder
-    const tx = await wallet.sendTransaction({ to, data, value: BigInt(value), chainId: 8453 });
+    if (!wallet) {
+      // PRIVATE_KEY yok — kullanıcı kendi cüzdanıyla onaylasın
+      const txPayload = Buffer.from(JSON.stringify({
+        chain: 'base', description: action,
+        calls: [{ to, data, value }],
+      })).toString('base64url');
+      const approveUrl = `https://flamebase.xyz/approve?tx=${txPayload}`;
+      send({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: JSON.stringify({
+        success: false,
+        needsApproval: true,
+        approveUrl,
+        message: `🔗 İşlemi kendi cüzdanınla onaylamak için şu linki aç:\n${approveUrl}`,
+      }) }] } });
+      return;
+    }
 
-    // 3. Onay bekle
+    // 2. PRIVATE_KEY varsa otomatik imzala ve gönder
+    const tx = await wallet.sendTransaction({ to, data, value: BigInt(value), chainId: 8453 });
     const receipt = await tx.wait(1);
 
     send({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: JSON.stringify({
