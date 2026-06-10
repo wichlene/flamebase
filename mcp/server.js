@@ -107,8 +107,8 @@ async function callTool(id, params) {
 
     const { to, data, value } = apiData.data;
 
-    if (!wallet) {
-      // PRIVATE_KEY yok — kullanıcı kendi cüzdanıyla onaylasın
+    if (!wallet || process.env.AUTO_SIGN !== 'true') {
+      // Varsayılan: kullanıcı kendi cüzdanıyla onaylar (otomatik imza için AUTO_SIGN=true gerekir)
       const txPayload = Buffer.from(JSON.stringify({
         chain: 'base', description: action,
         calls: [{ to, data, value }],
