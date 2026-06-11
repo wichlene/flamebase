@@ -1226,64 +1226,129 @@ export default function Home() {
 
       {/* Mobile Wallet Connection Sheet */}
       {showWalletSheet && (
-        <div className="fixed inset-0 z-[500] flex flex-col items-center justify-end md:items-center md:justify-center">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setShowWalletSheet(false)} />
-          <div className="relative bg-white w-full md:max-w-sm rounded-t-2xl md:rounded-2xl shadow-2xl p-6 z-10">
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="font-black text-lg text-[#0A0B0D]">Connect Wallet</h3>
-              <button onClick={() => setShowWalletSheet(false)} className="text-[#8A919E] hover:text-[#0A0B0D] text-xl font-bold">✕</button>
+        <div className="fixed inset-0 z-[500] flex flex-col items-end justify-end md:items-center md:justify-center">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowWalletSheet(false)} />
+          <div className="relative bg-white w-full md:max-w-[400px] rounded-t-3xl md:rounded-3xl shadow-2xl z-10">
+            {/* Handle bar (mobile only) */}
+            <div className="flex justify-center pt-3 pb-1 md:hidden">
+              <div className="w-10 h-1 rounded-full bg-[#D1D5DB]" />
             </div>
 
-            {/* Direct wallet browser links — reliable on mobile, no WalletConnect needed */}
-            <p className="text-xs text-[#5B6271] mb-3 font-medium">Open in wallet app browser (recommended)</p>
-            <div className="space-y-2.5 mb-5">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 pt-5 pb-4">
+              <div>
+                <p className="font-black text-xl text-[#0A0B0D]">Connect Wallet</p>
+                <p className="text-xs text-[#9CA3AF] mt-0.5">Select your wallet to continue</p>
+              </div>
+              <button
+                onClick={() => setShowWalletSheet(false)}
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-[#F3F4F6] hover:bg-[#E5E7EB] transition-colors"
+              >
+                <svg viewBox="0 0 24 24" className="w-4 h-4 text-[#6B7280]" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round">
+                  <path d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Wallet list */}
+            <div className="px-4 pb-6 space-y-1.5">
+              {/* MetaMask */}
               <a
                 href="https://metamask.app.link/dapp/flamebase.xyz"
-                className="flex items-center gap-3 w-full bg-[#FFF7ED] hover:bg-[#FEF3C7] border border-[#FCD34D] rounded-xl px-4 py-3 transition-colors"
                 onClick={() => setShowWalletSheet(false)}
+                className="flex items-center gap-4 w-full px-4 py-3.5 rounded-2xl hover:bg-[#F9FAFB] active:bg-[#F3F4F6] transition-colors group"
               >
-                <span className="text-2xl flex-shrink-0">🦊</span>
-                <div className="text-left">
-                  <p className="font-bold text-sm text-[#0A0B0D]">Open in MetaMask</p>
-                  <p className="text-xs text-[#5B6271]">Loads flamebase.xyz in MetaMask browser</p>
+                <div className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 overflow-hidden" style={{background:'linear-gradient(135deg,#F6851B,#E4761B)'}}>
+                  <svg viewBox="0 0 35 33" className="w-7 h-7" fill="none">
+                    <path d="M32.96 1L19.37 10.99l2.55-6.05L32.96 1z" fill="#E17726" stroke="#E17726" strokeWidth=".25"/>
+                    <path d="M2.04 1l13.46 10.08-2.42-6.14L2.04 1z" fill="#E27625" stroke="#E27625" strokeWidth=".25"/>
+                    <path d="M28.23 23.53l-3.6 5.51 7.72 2.12 2.22-7.48-6.34-.15zM.44 23.68l2.2 7.48 7.71-2.12-3.6-5.51-6.31.15z" fill="#E27625" stroke="#E27625" strokeWidth=".25"/>
+                    <path d="M9.94 14.51l-2.15 3.26 7.67.34-.26-8.23-5.26 4.63zM25.06 14.51l-5.3-4.72-.17 8.32 7.66-.34-2.19-3.26z" fill="#E27625" stroke="#E27625" strokeWidth=".25"/>
+                    <path d="M10.35 29.04l4.6-2.23-3.97-3.1-.63 5.33zM20.05 26.81l4.6 2.23-.64-5.33-3.96 3.1z" fill="#E27625" stroke="#E27625" strokeWidth=".25"/>
+                    <path d="M24.65 29.04l-4.6-2.23.37 3.01-.04 1.31 4.27-2.09zM10.35 29.04l4.28 2.09-.04-1.31.37-3.01-4.61 2.23z" fill="#D5BFB2" stroke="#D5BFB2" strokeWidth=".25"/>
+                    <path d="M14.7 21.84l-3.82-1.12 2.69-1.24 1.13 2.36zM20.3 21.84l1.13-2.36 2.7 1.24-3.83 1.12z" fill="#233447" stroke="#233447" strokeWidth=".25"/>
+                    <path d="M10.35 29.04l.65-5.51-4.26.12 3.61 5.39zM24 23.53l.65 5.51 3.62-5.39-4.27-.12zM27.59 17.77l-7.66.34.71 3.73 1.13-2.36 2.7 1.24 3.12-2.95zM11.88 20.72l2.69-1.24 1.13 2.36.71-3.73-7.67-.34 3.14 2.95z" fill="#CC6228" stroke="#CC6228" strokeWidth=".25"/>
+                    <path d="M7.79 17.77l3.22 6.28-.11-3.33-3.11-2.95zM24.1 20.72l-.1 3.33 3.22-6.28-3.12 2.95zM15.42 18.11l-.71 3.73.89 4.62.2-6.08-.38-2.27zM19.58 18.11l-.37 2.26.18 6.09.9-4.62-.71-3.73z" fill="#E27525" stroke="#E27525" strokeWidth=".25"/>
+                    <path d="M20.3 21.84l-.9 4.62.65.45 3.96-3.1.1-3.33-3.81 1.36zM11.88 20.72l.1 3.33 3.97 3.1.65-.45-.9-4.62-3.82-1.36z" fill="#F5841F" stroke="#F5841F" strokeWidth=".25"/>
+                    <path d="M20.38 31.13l.04-1.31-.34-.3h-5.16l-.33.3.04 1.31-4.28-2.09 1.5 1.23 3.04 2.1h5.22l3.05-2.1 1.49-1.23-4.27 2.09z" fill="#C0AD9E" stroke="#C0AD9E" strokeWidth=".25"/>
+                    <path d="M20.05 26.81l-.65-.45h-3.8l-.65.45-.37 3.01.33-.3h5.16l.34.3-.36-3.01z" fill="#161616" stroke="#161616" strokeWidth=".25"/>
+                    <path d="M33.52 11.37l1.15-5.61L32.96 1l-12.91 9.6 4.97 4.2 7.02 2.05 1.55-1.81-.67-.49 1.07-.97-.82-.64 1.07-.83-.72-.54zM0 5.76l1.16 5.61-.74.54 1.07.83-.82.64 1.07.97-.67.49 1.55 1.81 7.02-2.05 4.97-4.2L2.7 1 0 5.76z" fill="#763D16" stroke="#763D16" strokeWidth=".25"/>
+                    <path d="M32.04 16.85l-7.02-2.05 2.12 3.2-3.17 6.18 4.19-.05h6.26l-2.38-7.28zM9.98 14.8L2.96 16.85.58 24.13h6.25l4.18.05-3.16-6.18 2.13-3.2zM19.93 18.11l.44-7.69 2.03-5.49h-9.02l2.03 5.49.44 7.69.17 2.29.01 6.08h3.71l.02-6.08.17-2.29z" fill="#F6851B" stroke="#F6851B" strokeWidth=".25"/>
+                  </svg>
                 </div>
+                <div className="flex-1 text-left">
+                  <p className="font-semibold text-sm text-[#0A0B0D]">MetaMask</p>
+                  <p className="text-xs text-[#9CA3AF]">Open in MetaMask browser</p>
+                </div>
+                <svg viewBox="0 0 24 24" className="w-4 h-4 text-[#D1D5DB] group-hover:text-[#9CA3AF] transition-colors flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
               </a>
+
+              {/* Coinbase Wallet */}
               <a
                 href="https://go.cb-w.com/dapp?cb_url=https%3A%2F%2Fflamebase.xyz"
-                className="flex items-center gap-3 w-full bg-[#EFF6FF] hover:bg-[#DBEAFE] border border-[#93C5FD] rounded-xl px-4 py-3 transition-colors"
                 onClick={() => setShowWalletSheet(false)}
+                className="flex items-center gap-4 w-full px-4 py-3.5 rounded-2xl hover:bg-[#F9FAFB] active:bg-[#F3F4F6] transition-colors group"
               >
-                <span className="text-2xl flex-shrink-0">🔵</span>
-                <div className="text-left">
-                  <p className="font-bold text-sm text-[#0A0B0D]">Open in Coinbase Wallet</p>
-                  <p className="text-xs text-[#5B6271]">Smart Wallet — no app needed</p>
+                <div className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0" style={{background:'#1652F0'}}>
+                  <svg viewBox="0 0 24 24" className="w-6 h-6" fill="white">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 4c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6 2.69-6 6-6zm0 2a4 4 0 100 8 4 4 0 000-8zm0 1.5a2.5 2.5 0 110 5 2.5 2.5 0 010-5z"/>
+                  </svg>
                 </div>
+                <div className="flex-1 text-left">
+                  <p className="font-semibold text-sm text-[#0A0B0D]">Coinbase Wallet</p>
+                  <p className="text-xs text-[#9CA3AF]">Smart Wallet — no app required</p>
+                </div>
+                <svg viewBox="0 0 24 24" className="w-4 h-4 text-[#D1D5DB] group-hover:text-[#9CA3AF] transition-colors flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
               </a>
+
+              {/* Trust Wallet */}
               <a
                 href="https://link.trustwallet.com/open_url?coin_id=60&url=https%3A%2F%2Fflamebase.xyz"
-                className="flex items-center gap-3 w-full bg-[#F0FDF4] hover:bg-[#DCFCE7] border border-[#86EFAC] rounded-xl px-4 py-3 transition-colors"
                 onClick={() => setShowWalletSheet(false)}
+                className="flex items-center gap-4 w-full px-4 py-3.5 rounded-2xl hover:bg-[#F9FAFB] active:bg-[#F3F4F6] transition-colors group"
               >
-                <span className="text-2xl flex-shrink-0">🛡️</span>
-                <div className="text-left">
-                  <p className="font-bold text-sm text-[#0A0B0D]">Open in Trust Wallet</p>
-                  <p className="text-xs text-[#5B6271]">Loads flamebase.xyz in Trust browser</p>
+                <div className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 overflow-hidden" style={{background:'linear-gradient(135deg,#3375BB,#2660A4)'}}>
+                  <svg viewBox="0 0 40 40" className="w-7 h-7" fill="white">
+                    <path d="M20 4L7 9v10c0 8.3 5.5 16 13 18.5C27.5 35 33 27.3 33 19V9L20 4zm0 17.5h-8V13h8v8.5zm0 0v8c-4.5-2-8-7-8-12h8zm0 0h8c0 5-3.5 10-8 12v-12zm0 0V13h8v8.5h-8z"/>
+                  </svg>
                 </div>
+                <div className="flex-1 text-left">
+                  <p className="font-semibold text-sm text-[#0A0B0D]">Trust Wallet</p>
+                  <p className="text-xs text-[#9CA3AF]">Open in Trust Wallet browser</p>
+                </div>
+                <svg viewBox="0 0 24 24" className="w-4 h-4 text-[#D1D5DB] group-hover:text-[#9CA3AF] transition-colors flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
               </a>
-            </div>
 
-            {/* WalletConnect / other wallets */}
-            <div className="border-t border-[#E4E7EB] pt-4">
-              <p className="text-xs text-[#5B6271] mb-2 font-medium">Or connect via QR code</p>
+              {/* Divider */}
+              <div className="flex items-center gap-3 py-1">
+                <div className="flex-1 h-px bg-[#F3F4F6]" />
+                <span className="text-xs text-[#D1D5DB] font-medium">or</span>
+                <div className="flex-1 h-px bg-[#F3F4F6]" />
+              </div>
+
+              {/* WalletConnect */}
               <button
                 onClick={() => { setShowWalletSheet(false); setTimeout(() => openConnectModal?.(), 50) }}
-                className="flex items-center gap-3 w-full bg-[#F7F9FC] hover:bg-[#F0F2F5] border border-[#E4E7EB] rounded-xl px-4 py-3 transition-colors"
+                className="flex items-center gap-4 w-full px-4 py-3.5 rounded-2xl hover:bg-[#F9FAFB] active:bg-[#F3F4F6] transition-colors group"
               >
-                <span className="text-2xl flex-shrink-0">📷</span>
-                <div className="text-left">
-                  <p className="font-bold text-sm text-[#0A0B0D]">WalletConnect / Other</p>
-                  <p className="text-xs text-[#5B6271]">Scan QR with any compatible wallet</p>
+                <div className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0" style={{background:'#3B99FC'}}>
+                  <svg viewBox="0 0 40 40" className="w-7 h-7" fill="white">
+                    <path d="M10.6 14.8c5.2-5.1 13.7-5.1 18.9 0l.6.6c.3.2.3.6 0 .9l-2.1 2c-.1.2-.4.2-.5 0l-.9-.8c-3.6-3.6-9.5-3.6-13.1 0l-.9.9c-.1.2-.4.2-.5 0l-2.1-2c-.2-.2-.2-.6 0-.8l.6-.8zm23.3 4.3l1.9 1.9c.3.2.3.6 0 .9L26 31.6c-.2.3-.6.3-.8 0l-6.3-6.3c-.1-.1-.2-.1-.3 0l-6.3 6.3c-.2.3-.6.3-.9 0L2 21.9c-.2-.2-.2-.6 0-.9l1.8-1.9c.3-.2.6-.2.9 0l6.3 6.3c.1.1.2.1.3 0L17.6 19c.2-.3.6-.3.9 0l6.3 6.4c.1.1.2.1.3 0l6.4-6.3c.1-.3.5-.3.7 0z"/>
+                  </svg>
                 </div>
+                <div className="flex-1 text-left">
+                  <p className="font-semibold text-sm text-[#0A0B0D]">WalletConnect</p>
+                  <p className="text-xs text-[#9CA3AF]">Scan QR with any compatible wallet</p>
+                </div>
+                <svg viewBox="0 0 24 24" className="w-4 h-4 text-[#D1D5DB] group-hover:text-[#9CA3AF] transition-colors flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
               </button>
             </div>
           </div>
