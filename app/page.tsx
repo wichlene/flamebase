@@ -13,7 +13,6 @@ import { T, LANG_LABELS, type Lang } from '../lib/i18n'
 import { TOOLS_ADDRESS, TOKEN_FACTORY_ADDRESS, NFT_FACTORY_ADDRESS, DAO_ADDRESS, TOOLS_ABI, TOKEN_FACTORY_ABI, NFT_FACTORY_ABI, DAO_ABI, FLAME_NFT_ADDRESS, FLAME_NFT_ABI } from '../lib/toolsContracts'
 import { SFX, isSoundEnabled, setSoundEnabled } from '../lib/sounds'
 import { ToastStack, type ToastItem, type ToastKind } from '../components/Toast'
-import SwapTool from '../components/SwapTool'
 
 const Messages = dynamic(() => import('../components/Messages'), { ssr: false, loading: () => <div className="p-8 text-center text-[#5B6271]">💬 Loading…</div> })
 const AIChat = dynamic(() => import('../components/AIChat'), { ssr: false, loading: () => <div className="p-8 text-center text-[#5B6271]">🤖 Loading AI…</div> })
@@ -368,9 +367,6 @@ export default function Home() {
   const [daoDesc, setDaoDesc] = useState('')
   const [daoLoading, setDaoLoading] = useState(false)
   const [proposalLoading, setProposalLoading] = useState<string | null>(null)
-  const [swapFrom, setSwapFrom] = useState('ETH')
-  const [swapTo, setSwapTo] = useState('USDC')
-  const [swapAmount, setSwapAmount] = useState('')
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
 
   // Unread message count from Messages component
@@ -2564,11 +2560,6 @@ export default function Home() {
                     <span className="font-mono text-[#0052FF] font-black text-lg">[△]</span>
                     <span className="text-xs font-bold">DAO</span>
                   </button>
-                  <button onClick={() => setActiveTool(activeTool === 'swap' ? null : 'swap')}
-                    className={`flex flex-col items-center gap-1.5 py-4 px-1 rounded-xl border transition-all ${activeTool === 'swap' ? 'bg-[#E6EEFF] border-[#0052FF]' : 'bg-[#F8FAFF] border-[#E4E7EB] hover:border-[#0052FF] hover:bg-[#F0F4FF]'}`}>
-                    <span className="font-mono text-[#0052FF] font-black text-lg">[⇄]</span>
-                    <span className="text-xs font-bold">Swap</span>
-                  </button>
                 </div>
 
                 {activeTool === 'logbook' && (
@@ -2622,11 +2613,6 @@ export default function Home() {
                       disabled={daoLoading || !daoTitle} className="w-full bg-[#0052FF] text-white text-xs py-2 rounded-lg font-bold disabled:opacity-40">
                       {daoLoading ? 'Creating…' : 'Create Proposal'}
                     </button>
-                  </div>
-                )}
-                {activeTool === 'swap' && (
-                  <div className="pt-1">
-                    <SwapTool compact />
                   </div>
                 )}
               </div>
@@ -2748,12 +2734,6 @@ export default function Home() {
                 <span className="text-xs font-bold text-[#0A0B0D]">Wallet</span>
               </button>
 
-              {/* FlameSwap */}
-              <button onClick={() => setActiveTool(activeTool === 'swap' ? null : 'swap')}
-                className={`flex flex-col items-center gap-1.5 py-4 px-1 rounded-xl border transition-all ${activeTool === 'swap' ? 'bg-[#E6EEFF] border-[#0052FF]' : 'bg-white border-[#E4E7EB] hover:border-[#0052FF] hover:bg-[#F0F4FF]'}`}>
-                <span className="font-mono text-[#0052FF] font-black text-lg">[⇄]</span>
-                <span className="text-xs font-bold text-[#0A0B0D]">Swap</span>
-              </button>
 
             </div>
 
@@ -2817,11 +2797,6 @@ export default function Home() {
               </div>
             )}
 
-            {activeTool === 'swap' && (
-              <div className="mt-2 border border-[#E4E7EB] rounded-xl bg-white">
-                <SwapTool compact />
-              </div>
-            )}
 
           </div>
 
