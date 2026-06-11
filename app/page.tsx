@@ -1,6 +1,6 @@
 'use client'
 
-import { ConnectButton } from '@rainbow-me/rainbowkit'
+import { ConnectButton, useConnectModal } from '@rainbow-me/rainbowkit'
 import { useAccount, useWriteContract, useReadContract, usePublicClient, useBalance, useSwitchChain, useChainId, useDisconnect, useConnect } from 'wagmi'
 import { sdk as fcSdk } from '@farcaster/miniapp-sdk'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
@@ -210,7 +210,9 @@ export default function Home() {
   const { connect, connectors: wagmiConnectors } = useConnect()
   const chainId = useChainId()
   const { switchChain, switchChainAsync } = useSwitchChain()
+  const { openConnectModal } = useConnectModal()
   const [isInFarcaster, setIsInFarcaster] = useState(false)
+  const [showWalletSheet, setShowWalletSheet] = useState(false)
 
   useEffect(() => {
     fcSdk.isInMiniApp().then(setIsInFarcaster).catch(() => setIsInFarcaster(false))
@@ -1222,6 +1224,72 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-white text-[#0A0B0D] flex flex-col">
 
+      {/* Mobile Wallet Connection Sheet */}
+      {showWalletSheet && (
+        <div className="fixed inset-0 z-[500] flex flex-col items-center justify-end md:items-center md:justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setShowWalletSheet(false)} />
+          <div className="relative bg-white w-full md:max-w-sm rounded-t-2xl md:rounded-2xl shadow-2xl p-6 z-10">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="font-black text-lg text-[#0A0B0D]">Connect Wallet</h3>
+              <button onClick={() => setShowWalletSheet(false)} className="text-[#8A919E] hover:text-[#0A0B0D] text-xl font-bold">✕</button>
+            </div>
+
+            {/* Direct wallet browser links — reliable on mobile, no WalletConnect needed */}
+            <p className="text-xs text-[#5B6271] mb-3 font-medium">Open in wallet app browser (recommended)</p>
+            <div className="space-y-2.5 mb-5">
+              <a
+                href="https://metamask.app.link/dapp/flamebase.xyz"
+                className="flex items-center gap-3 w-full bg-[#FFF7ED] hover:bg-[#FEF3C7] border border-[#FCD34D] rounded-xl px-4 py-3 transition-colors"
+                onClick={() => setShowWalletSheet(false)}
+              >
+                <span className="text-2xl flex-shrink-0">🦊</span>
+                <div className="text-left">
+                  <p className="font-bold text-sm text-[#0A0B0D]">Open in MetaMask</p>
+                  <p className="text-xs text-[#5B6271]">Loads flamebase.xyz in MetaMask browser</p>
+                </div>
+              </a>
+              <a
+                href="https://go.cb-w.com/dapp?cb_url=https%3A%2F%2Fflamebase.xyz"
+                className="flex items-center gap-3 w-full bg-[#EFF6FF] hover:bg-[#DBEAFE] border border-[#93C5FD] rounded-xl px-4 py-3 transition-colors"
+                onClick={() => setShowWalletSheet(false)}
+              >
+                <span className="text-2xl flex-shrink-0">🔵</span>
+                <div className="text-left">
+                  <p className="font-bold text-sm text-[#0A0B0D]">Open in Coinbase Wallet</p>
+                  <p className="text-xs text-[#5B6271]">Smart Wallet — no app needed</p>
+                </div>
+              </a>
+              <a
+                href="https://link.trustwallet.com/open_url?coin_id=60&url=https%3A%2F%2Fflamebase.xyz"
+                className="flex items-center gap-3 w-full bg-[#F0FDF4] hover:bg-[#DCFCE7] border border-[#86EFAC] rounded-xl px-4 py-3 transition-colors"
+                onClick={() => setShowWalletSheet(false)}
+              >
+                <span className="text-2xl flex-shrink-0">🛡️</span>
+                <div className="text-left">
+                  <p className="font-bold text-sm text-[#0A0B0D]">Open in Trust Wallet</p>
+                  <p className="text-xs text-[#5B6271]">Loads flamebase.xyz in Trust browser</p>
+                </div>
+              </a>
+            </div>
+
+            {/* WalletConnect / other wallets */}
+            <div className="border-t border-[#E4E7EB] pt-4">
+              <p className="text-xs text-[#5B6271] mb-2 font-medium">Or connect via QR code</p>
+              <button
+                onClick={() => { setShowWalletSheet(false); setTimeout(() => openConnectModal?.(), 50) }}
+                className="flex items-center gap-3 w-full bg-[#F7F9FC] hover:bg-[#F0F2F5] border border-[#E4E7EB] rounded-xl px-4 py-3 transition-colors"
+              >
+                <span className="text-2xl flex-shrink-0">📷</span>
+                <div className="text-left">
+                  <p className="font-bold text-sm text-[#0A0B0D]">WalletConnect / Other</p>
+                  <p className="text-xs text-[#5B6271]">Scan QR with any compatible wallet</p>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Transaction Terminal Modal */}
       {showTerminal && (
         <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
@@ -1331,15 +1399,7 @@ export default function Home() {
                 <span>🟣</span><span>{t('connectFarcaster')}</span>
               </button>
             ) : (
-              <div className="flex flex-col gap-2">
-                <ConnectButton />
-                <a
-                  href="https://metamask.app.link/dapp/flamebase.xyz"
-                  className="flex items-center justify-center gap-1.5 bg-[#F6851B] hover:bg-[#E2761B] text-white font-bold text-xs px-3 py-2 rounded-xl transition-colors"
-                >
-                  🦊 MetaMask ile Aç
-                </a>
-              </div>
+              <ConnectButton />
             )}
             {/* Language selector + theme toggle */}
             <div className="mt-2 flex gap-2">
@@ -1394,15 +1454,12 @@ export default function Home() {
                   <span>🟣</span><span>{t('connectFarcaster')}</span>
                 </button>
               ) : (
-                <div className="flex items-center gap-1.5">
-                  <ConnectButton accountStatus="avatar" chainStatus="none" showBalance={false} />
-                  <a
-                    href="https://metamask.app.link/dapp/flamebase.xyz"
-                    className="flex items-center gap-1 bg-[#F6851B] hover:bg-[#E2761B] text-white font-bold text-[10px] px-2 py-1.5 rounded-xl transition-colors flex-shrink-0 md:hidden"
-                  >
-                    🦊 MetaMask
-                  </a>
-                </div>
+                <button
+                  onClick={() => setShowWalletSheet(true)}
+                  className="bg-[#0052FF] hover:bg-[#1652F0] text-white font-bold text-xs px-3 py-2 rounded-xl transition-colors flex-shrink-0"
+                >
+                  Connect
+                </button>
               )}
               <button onClick={() => setShowTerminal(true)}
                 className="bg-[#0A0B0D] text-green-400 font-mono text-[11px] px-2 py-1 rounded-lg hover:bg-[#1f2125] flex-shrink-0">
