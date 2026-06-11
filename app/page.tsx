@@ -1331,15 +1331,7 @@ export default function Home() {
                 <span>🟣</span><span>{t('connectFarcaster')}</span>
               </button>
             ) : (
-              <div className="flex flex-col gap-2">
-                <ConnectButton />
-                <a
-                  href="https://metamask.app.link/dapp/flamebase.xyz"
-                  className="flex items-center justify-center gap-1.5 bg-[#F6851B] hover:bg-[#E2761B] text-white font-bold text-xs px-3 py-2 rounded-xl transition-colors"
-                >
-                  🦊 MetaMask ile Aç
-                </a>
-              </div>
+              <ConnectButton />
             )}
             {/* Language selector + theme toggle */}
             <div className="mt-2 flex gap-2">
@@ -1394,15 +1386,7 @@ export default function Home() {
                   <span>🟣</span><span>{t('connectFarcaster')}</span>
                 </button>
               ) : (
-                <div className="flex items-center gap-1.5">
-                  <ConnectButton accountStatus="avatar" chainStatus="none" showBalance={false} />
-                  <a
-                    href="https://metamask.app.link/dapp/flamebase.xyz"
-                    className="flex items-center gap-1 bg-[#F6851B] hover:bg-[#E2761B] text-white font-bold text-[10px] px-2 py-1.5 rounded-xl transition-colors flex-shrink-0 md:hidden"
-                  >
-                    🦊 MetaMask
-                  </a>
-                </div>
+                <ConnectButton accountStatus="avatar" chainStatus="none" showBalance={false} />
               )}
               <button onClick={() => setShowTerminal(true)}
                 className="bg-[#0A0B0D] text-green-400 font-mono text-[11px] px-2 py-1 rounded-lg hover:bg-[#1f2125] flex-shrink-0">
