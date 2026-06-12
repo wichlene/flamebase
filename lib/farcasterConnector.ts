@@ -35,6 +35,19 @@ export function farcasterConnector() {
       return sdk.wallet.getEthereumProvider()
     },
 
+    async switchChain({ chainId }) {
+      const provider = await sdk.wallet.getEthereumProvider()
+      if (!provider) throw new Error('Farcaster wallet not available')
+      const chain = config.chains.find(c => c.id === chainId)
+      if (!chain) throw new Error(`Chain ${chainId} not configured`)
+      await provider.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: `0x${chainId.toString(16)}` }],
+      })
+      config.emitter.emit('change', { chainId })
+      return chain
+    },
+
     async isAuthorized() {
       try {
         const provider = await sdk.wallet.getEthereumProvider()

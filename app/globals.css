@@ -80,9 +80,36 @@ html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #3A3D44; }
 [data-theme="dark"] .hover\:bg-\[\#FFF0EB\]:hover { background-color: #3A2A20 !important; }
 [data-theme="dark"] .hover\:bg-white\/5:hover { background-color: rgba(255,255,255,0.05) !important; }
 
+/* Tailwind palette surfaces used in banners / status boxes */
+[data-theme="dark"] .bg-blue-50 { background-color: #14213D !important; }
+[data-theme="dark"] .bg-green-50 { background-color: #122B1A !important; }
+[data-theme="dark"] .bg-amber-50 { background-color: #2E2410 !important; }
+[data-theme="dark"] .bg-orange-50 { background-color: #2E1E10 !important; }
+[data-theme="dark"] .bg-\[\#FFF8E6\] { background-color: #2E2410 !important; }
+[data-theme="dark"] .bg-\[\#FEE2E2\] { background-color: #3A1E1E !important; }
+[data-theme="dark"] .bg-\[\#F9FAFB\] { background-color: #1E2025 !important; }
+[data-theme="dark"] .bg-\[\#F3F4F6\] { background-color: #25282E !important; }
+[data-theme="dark"] .hover\:bg-\[\#F9FAFB\]:hover { background-color: #25282E !important; }
+[data-theme="dark"] .hover\:bg-\[\#E5E7EB\]:hover { background-color: #2A2D34 !important; }
+[data-theme="dark"] .active\:bg-\[\#F3F4F6\]:active { background-color: #2A2D34 !important; }
+[data-theme="dark"] .bg-gradient-to-r.from-orange-50 { background-image: none !important; background-color: #2E1E10 !important; }
+
+/* Banner text on dark surfaces */
+[data-theme="dark"] .text-blue-800 { color: #93B4FF !important; }
+[data-theme="dark"] .text-green-700 { color: #6EE7A0 !important; }
+[data-theme="dark"] .text-amber-800 { color: #FCD34D !important; }
+[data-theme="dark"] .text-\[\#856404\] { color: #E8C46A !important; }
+
 /* Borders */
 [data-theme="dark"] .border-\[\#E4E7EB\] { border-color: #2A2D34 !important; }
 [data-theme="dark"] .border-\[\#EEF1F5\] { border-color: #25282E !important; }
+[data-theme="dark"] .border-blue-200 { border-color: #2A3A60 !important; }
+[data-theme="dark"] .border-green-200 { border-color: #1E4A2A !important; }
+[data-theme="dark"] .border-amber-200 { border-color: #5A451A !important; }
+[data-theme="dark"] .border-orange-200 { border-color: #5A3A1A !important; }
+[data-theme="dark"] .border-orange-300 { border-color: #6A4A20 !important; }
+[data-theme="dark"] .border-\[\#FFD97D\] { border-color: #5A451A !important; }
+[data-theme="dark"] .border-\[\#D6E2FF\] { border-color: #2A3A60 !important; }
 
 /* Text */
 [data-theme="dark"] .text-\[\#0A0B0D\] { color: #E4E7EB !important; }
