@@ -2,6 +2,7 @@ export const TOOLS_ADDRESS = (process.env.NEXT_PUBLIC_TOOLS_CONTRACT || '') as `
 export const TOKEN_FACTORY_ADDRESS = (process.env.NEXT_PUBLIC_TOKEN_FACTORY || '') as `0x${string}`
 export const NFT_FACTORY_ADDRESS = (process.env.NEXT_PUBLIC_NFT_FACTORY || '') as `0x${string}`
 export const DAO_ADDRESS = (process.env.NEXT_PUBLIC_DAO_CONTRACT || '') as `0x${string}`
+export const FOLLOW_ADDRESS = (process.env.NEXT_PUBLIC_FOLLOW_CONTRACT || '') as `0x${string}`
 
 export const TOOLS_ABI = [
   { name: 'globalCounter', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
@@ -51,4 +52,13 @@ export const DAO_ABI = [
   { name: 'getProposal', type: 'function', stateMutability: 'view', inputs: [{ name: '_id', type: 'uint256' }], outputs: [{ components: [{ name: 'id', type: 'uint256' }, { name: 'proposer', type: 'address' }, { name: 'title', type: 'string' }, { name: 'description', type: 'string' }, { name: 'votesFor', type: 'uint256' }, { name: 'votesAgainst', type: 'uint256' }, { name: 'deadline', type: 'uint256' }], type: 'tuple' }] },
   { name: 'isActive', type: 'function', stateMutability: 'view', inputs: [{ name: '_id', type: 'uint256' }], outputs: [{ type: 'bool' }] },
   { name: 'hasVoted', type: 'function', stateMutability: 'view', inputs: [{ name: '', type: 'uint256' }, { name: '', type: 'address' }], outputs: [{ type: 'bool' }] },
+] as const
+
+export const FOLLOW_ABI = [
+  { name: 'follow', type: 'function', stateMutability: 'payable', inputs: [{ name: 'target', type: 'address' }], outputs: [] },
+  { name: 'unfollow', type: 'function', stateMutability: 'payable', inputs: [{ name: 'target', type: 'address' }], outputs: [] },
+  { name: 'isFollowing', type: 'function', stateMutability: 'view', inputs: [{ name: '', type: 'address' }, { name: '', type: 'address' }], outputs: [{ type: 'bool' }] },
+  { name: 'getFollowing', type: 'function', stateMutability: 'view', inputs: [{ name: 'user', type: 'address' }], outputs: [{ type: 'address[]' }] },
+  { name: 'followingCount', type: 'function', stateMutability: 'view', inputs: [{ name: 'user', type: 'address' }], outputs: [{ type: 'uint256' }] },
+  { name: 'followerCount', type: 'function', stateMutability: 'view', inputs: [{ name: '', type: 'address' }], outputs: [{ type: 'uint256' }] },
 ] as const
