@@ -21,12 +21,9 @@ import { base } from 'wagmi/chains'
 import { http, fallback } from 'wagmi'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import '@rainbow-me/rainbowkit/styles.css'
-import { Attribution } from 'ox/erc8021'
 import { farcasterConnector } from '../lib/farcasterConnector'
 
-export const BUILDER_CODE_DATA_SUFFIX = Attribution.toDataSuffix({
-  codes: ['bc_m8fvx957'],
-})
+export { BUILDER_CODE_DATA_SUFFIX } from '../lib/builderCode'
 
 const connectors = connectorsForWallets(
   [
