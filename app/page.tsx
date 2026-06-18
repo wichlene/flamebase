@@ -44,6 +44,25 @@ interface Comment {
   timestamp: bigint
 }
 
+interface Proposal {
+  id: bigint
+  proposer: string
+  title: string
+  description: string
+  votesFor: bigint
+  votesAgainst: bigint
+  deadline: bigint
+}
+
+function streakBadge(days: number): { emoji: string; label: string } {
+  if (days >= 30) return { emoji: '👑', label: 'Legend' }
+  if (days >= 14) return { emoji: '⚡', label: 'Inferno' }
+  if (days >= 7) return { emoji: '🔥🔥🔥', label: 'Blaze' }
+  if (days >= 3) return { emoji: '🔥🔥', label: 'Flame' }
+  if (days >= 1) return { emoji: '🔥', label: 'Spark' }
+  return { emoji: '', label: 'No streak yet' }
+}
+
 interface ProfileData {
   username: string
   avatarHash: string
@@ -403,6 +422,8 @@ export default function Home() {
   const [daoDesc, setDaoDesc] = useState('')
   const [daoLoading, setDaoLoading] = useState(false)
   const [proposalLoading, setProposalLoading] = useState<string | null>(null)
+  const [proposals, setProposals] = useState<Proposal[]>([])
+  const [userVotes, setUserVotes] = useState<Record<string, boolean>>({})
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
 
   // Unread message count from Messages component
@@ -562,6 +583,94 @@ export default function Home() {
     functionName: 'proposalCount',
     query: { enabled: DAO_DEPLOYED },
   })
+
+  // Load all DAO proposals (newest first) whenever the count changes.
+  const refetchProposals = useCallback(async () => {
+    if (!publicClient || !DAO_DEPLOYED || !proposalCount) { setProposals([]); return }
+    const count = Number(proposalCount)
+    if (count === 0) { setProposals([]); return }
+    try {
+      const ids = Array.from({ length: count }, (_, i) => count - 1 - i)
+      const results = await Promise.all(
+        ids.map(id => publicClient.readContract({ address: DAO_ADDRESS, abi: DAO_ABI, functionName: 'getProposal', args: [BigInt(id)] }))
+      )
+      setProposals(results as unknown as Proposal[])
+    } catch (e) { console.error('Failed to load proposals', e) }
+  }, [publicClient, proposalCount])
+
+  useEffect(() => { refetchProposals() }, [refetchProposals])
+
+  // Check which proposals the connected wallet has already voted on.
+  useEffect(() => {
+    if (!publicClient || !address || proposals.length === 0) { setUserVotes({}); return }
+    let cancelled = false
+    ;(async () => {
+      const entries = await Promise.all(proposals.map(async p => {
+        const voted = await publicClient.readContract({ address: DAO_ADDRESS, abi: DAO_ABI, functionName: 'hasVoted', args: [p.id, address] })
+        return [p.id.toString(), voted as boolean] as const
+      }))
+      if (!cancelled) setUserVotes(Object.fromEntries(entries))
+    })()
+    return () => { cancelled = true }
+  }, [publicClient, address, proposals])
+
+  const voteOnProposal = async (id: bigint, support: boolean) => {
+    setProposalLoading(`${id}-${support}`)
+    try {
+      await writeContractAsync({ address: DAO_ADDRESS, abi: DAO_ABI, functionName: 'vote', args: [id, support], value: fixedFee }, 'vote')
+      setUserVotes(prev => ({ ...prev, [id.toString()]: true }))
+      setProposals(prev => prev.map(p => p.id === id
+        ? { ...p, votesFor: support ? p.votesFor + 1n : p.votesFor, votesAgainst: !support ? p.votesAgainst + 1n : p.votesAgainst }
+        : p))
+      showToast('success', 'Vote cast on-chain 🗳️')
+    } catch (e) {
+      console.error(e)
+      showToast('error', txError(e))
+    }
+    setProposalLoading(null)
+  }
+
+  const renderProposalsList = () => (
+    <div className="mt-3 space-y-2 max-h-80 overflow-y-auto">
+      {proposals.length === 0 && (
+        <p className="text-[10px] text-[#8A919E] text-center py-2">No proposals yet</p>
+      )}
+      {proposals.map(p => {
+        const voted = userVotes[p.id.toString()]
+        const ended = Number(p.deadline) * 1000 < Date.now()
+        const totalVotes = p.votesFor + p.votesAgainst
+        const forPct = totalVotes > 0n ? Number((p.votesFor * 100n) / totalVotes) : 0
+        return (
+          <div key={p.id.toString()} className="bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg p-2.5">
+            <p className="text-xs font-bold text-[#0A0B0D] truncate">{p.title}</p>
+            {p.description && <p className="text-[10px] text-[#5B6271] mt-0.5 line-clamp-2">{p.description}</p>}
+            <div className="flex items-center gap-1.5 mt-1.5">
+              <div className="flex-1 h-1.5 bg-[#E4E7EB] rounded-full overflow-hidden">
+                <div className="h-full bg-[#0052FF]" style={{ width: `${forPct}%` }} />
+              </div>
+              <span className="text-[10px] text-[#8A919E] font-semibold whitespace-nowrap">{p.votesFor.toString()} / {p.votesAgainst.toString()}</span>
+            </div>
+            {ended ? (
+              <p className="text-[10px] text-[#8A919E] font-semibold mt-1.5">Voting ended</p>
+            ) : voted ? (
+              <p className="text-[10px] text-green-600 font-semibold mt-1.5">✓ You voted</p>
+            ) : (
+              <div className="flex gap-1.5 mt-1.5">
+                <button onClick={() => voteOnProposal(p.id, true)} disabled={!isConnected || proposalLoading === `${p.id}-true`}
+                  className="flex-1 bg-green-50 text-green-600 hover:bg-green-100 text-[10px] font-bold py-1.5 rounded-md disabled:opacity-40">
+                  {proposalLoading === `${p.id}-true` ? '…' : '👍 Yes'}
+                </button>
+                <button onClick={() => voteOnProposal(p.id, false)} disabled={!isConnected || proposalLoading === `${p.id}-false`}
+                  className="flex-1 bg-red-50 text-red-600 hover:bg-red-100 text-[10px] font-bold py-1.5 rounded-md disabled:opacity-40">
+                  {proposalLoading === `${p.id}-false` ? '…' : '👎 No'}
+                </button>
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
 
   // Resolve which Logo NFT address to use: env var, or locally deployed (admin only, current session)
   const logoNftAddr = (FLAME_NFT_ADDRESS || deployedLogoNftAddr) as `0x${string}`
@@ -1181,6 +1290,52 @@ export default function Home() {
       localStorage.setItem('flamebase_boosted', JSON.stringify(next))
       showToast('success', '🚀 Boosted! Post will appear at the top for 24h')
     } catch { showToast('error', 'Boost failed') }
+    setLoadingAction(null)
+  }
+
+  // Mint a post as a 1-of-1 NFT via the existing NFT Factory: deploy a
+  // single-edition collection whose metadata describes this post, then
+  // immediately mint token #0 into the caller's wallet.
+  const mintPostAsNft = async (post: Post) => {
+    if (!NFT_FACTORY_DEPLOYED || !publicClient || !address) return
+    const postId = post.id.toString()
+    setLoadingAction(`mintnft-${postId}`)
+    try {
+      const image = post.ipfsHash && !post.ipfsHash.startsWith('vid_')
+        ? `ipfs://${post.ipfsHash}`
+        : 'https://flamebase.xyz/logo.png'
+      const params = new URLSearchParams({
+        postId,
+        author: post.author,
+        content: (post.content || '').slice(0, 280),
+        image,
+      })
+      const baseURI = `https://flamebase.xyz/api/nft-metadata/post?${params.toString()}&t=`
+      const name = `FlameBase Post #${postId}`
+      await writeContractAsync({
+        address: NFT_FACTORY_ADDRESS, abi: NFT_FACTORY_ABI, functionName: 'deployNFT',
+        args: [name, 'FBPOST', 1n, 0n, baseURI],
+        value: fixedFee,
+      }, 'mintPostNft')
+      showToast('success', 'Deploying your post NFT…')
+      setTimeout(async () => {
+        try {
+          const cols = await publicClient.readContract({
+            address: NFT_FACTORY_ADDRESS, abi: NFT_FACTORY_ABI, functionName: 'getCollections',
+          }) as unknown as Array<{ addr: `0x${string}`; name: string; creator: string }>
+          const mine = cols.filter(c => c.creator.toLowerCase() === address.toLowerCase() && c.name === name).pop()
+          if (!mine) { showToast('error', 'Deployed, but could not auto-mint — check Basescan'); return }
+          await writeContractAsync({ address: mine.addr, abi: FLAME_NFT_ABI, functionName: 'mint', value: 0n }, 'mintPostNftFinal')
+          showToast('success', `🎉 Post minted as NFT! ${mine.addr.slice(0, 8)}…${mine.addr.slice(-4)}`)
+        } catch (e) {
+          console.error(e)
+          showToast('error', 'Collection deployed, but mint step failed — try minting it on Basescan')
+        }
+      }, 5000)
+    } catch (e) {
+      console.error(e)
+      showToast('error', txError(e))
+    }
     setLoadingAction(null)
   }
 
@@ -2169,6 +2324,13 @@ export default function Home() {
                                   <span className="text-lg">🚀</span>
                                 </button>
                               )}
+                              {isConnected && NFT_FACTORY_DEPLOYED && (
+                                <button onClick={() => mintPostAsNft(post)} disabled={loadingAction === `mintnft-${key}`}
+                                  title="Mint this post as an NFT"
+                                  className="flex items-center gap-1 text-[#5B6271] hover:text-purple-600 hover:bg-purple-50 rounded-xl px-3 py-2 text-sm transition-all disabled:opacity-40">
+                                  <span className="text-lg">{loadingAction === `mintnft-${key}` ? '⏳' : '🖼️'}</span>
+                                </button>
+                              )}
 
                               <div className="flex items-center gap-1 ml-auto">
                                 {[0.5, 1, 5].map(amt => (
@@ -2596,6 +2758,22 @@ export default function Home() {
                       </div>
                     </div>
 
+                    {/* Check-in streak badge */}
+                    {TOOLS_DEPLOYED && Number(userStreakDays || 0) > 0 && (
+                      <div className="bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200 rounded-2xl p-4 mb-4 flex items-center justify-between">
+                        <div>
+                          <p className="text-xs font-bold text-orange-600 uppercase tracking-wider">Check-in Streak</p>
+                          <p className="text-2xl font-black text-[#0A0B0D] mt-0.5">
+                            {streakBadge(Number(userStreakDays)).emoji} {streakBadge(Number(userStreakDays)).label}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-3xl font-black text-orange-600">{Number(userStreakDays)}</p>
+                          <p className="text-[#8A919E] text-xs font-semibold">days · best {Number(userMaxStreak || 0)}</p>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Base Wallet Analysis */}
                     <div className="bg-white border border-[#E4E7EB] rounded-2xl shadow-sm overflow-hidden mb-4">
                       <WalletChecker />
@@ -2878,6 +3056,7 @@ export default function Home() {
                       disabled={daoLoading || !daoTitle} className="w-full bg-[#0052FF] text-white text-xs py-2 rounded-lg font-bold disabled:opacity-40">
                       {daoLoading ? 'Creating…' : 'Create Proposal'}
                     </button>
+                    {renderProposalsList()}
                   </div>
                 )}
               </div>
@@ -2956,7 +3135,14 @@ export default function Home() {
 
           {/* Tool Buttons — 3-column grid */}
           <div className="px-3 pt-4 pb-2">
-            <p className="text-xs font-black text-[#8A919E] uppercase tracking-wider px-1 mb-3">🔧 Tools</p>
+            <div className="flex items-center justify-between px-1 mb-3">
+              <p className="text-xs font-black text-[#8A919E] uppercase tracking-wider">🔧 Tools</p>
+              {TOOLS_DEPLOYED && Number(userStreakDays || 0) > 0 && (
+                <span className="text-[10px] font-bold text-orange-600 bg-orange-50 border border-orange-200 rounded-full px-2 py-0.5">
+                  {streakBadge(Number(userStreakDays)).emoji} {Number(userStreakDays)}d
+                </span>
+              )}
+            </div>
             <div className="grid grid-cols-3 gap-2">
 
               {/* Counter */}
@@ -3077,6 +3263,7 @@ export default function Home() {
                   disabled={daoLoading || !daoTitle} className="w-full bg-[#0052FF] text-white text-xs py-2 rounded-lg font-bold disabled:opacity-40">
                   {daoLoading ? 'Creating…' : 'Create Proposal'}
                 </button>
+                {renderProposalsList()}
               </div>
             )}
             {activeTool === 'wallet' && (
