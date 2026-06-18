@@ -4,7 +4,7 @@ import { ConnectButton, useConnectModal } from '@rainbow-me/rainbowkit'
 import { useAccount, useWriteContract, useReadContract, usePublicClient, useBalance, useSwitchChain, useChainId, useDisconnect, useConnect } from 'wagmi'
 import { sdk as fcSdk } from '@farcaster/miniapp-sdk'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { parseEther, formatEther } from 'viem'
+import { parseEther, formatEther, erc20Abi } from 'viem'
 import { base } from 'wagmi/chains'
 import dynamic from 'next/dynamic'
 import { CONTRACT_ADDRESS, CONTRACT_ABI } from '../lib/contract'
@@ -174,7 +174,7 @@ function EmojiPicker({ onSelect }: { onSelect: (emoji: string) => void }) {
   )
 }
 
-function ConnectPrompt({ message, label = 'Connect Wallet' }: { message: string; label?: string }) {
+function ConnectPrompt({ message, label = 'Connect Wallet', onConnect }: { message: string; label?: string; onConnect?: () => void }) {
   return (
     <div className="bg-white border border-[#E4E7EB] rounded-2xl p-8 text-center shadow-sm">
       <div className="w-14 h-14 mx-auto rounded-2xl bg-[#E6EEFF] flex items-center justify-center mb-4">
@@ -182,7 +182,16 @@ function ConnectPrompt({ message, label = 'Connect Wallet' }: { message: string;
       </div>
       <p className="text-[#0A0B0D] font-bold mb-1 text-lg">{label}</p>
       <p className="text-[#5B6271] text-sm mb-6">{message}</p>
-      <div className="flex justify-center"><ConnectButton /></div>
+      <div className="flex justify-center">
+        {onConnect ? (
+          <button onClick={onConnect}
+            className="bg-[#0052FF] hover:bg-[#1652F0] text-white font-bold text-sm px-6 py-3 rounded-xl transition-colors">
+            {label}
+          </button>
+        ) : (
+          <ConnectButton />
+        )}
+      </div>
     </div>
   )
 }
@@ -213,6 +222,31 @@ export default function Home() {
   const { openConnectModal } = useConnectModal()
   const [isInFarcaster, setIsInFarcaster] = useState(false)
   const [showWalletSheet, setShowWalletSheet] = useState(false)
+
+  // On mobile browsers without an injected wallet, show the direct-link
+  // sheet; everywhere else (desktop, wallet in-app browsers) the RainbowKit
+  // modal works fine.
+  const openWallet = useCallback(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768 && !(window as unknown as { ethereum?: unknown }).ethereum) {
+      setShowWalletSheet(true)
+    } else {
+      openConnectModal?.()
+    }
+  }, [openConnectModal])
+
+  // PWA install prompt (Chrome fires beforeinstallprompt when installable)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [installPrompt, setInstallPrompt] = useState<any>(null)
+  const [installDismissed, setInstallDismissed] = useState(false)
+  useEffect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const handler = (e: any) => { e.preventDefault(); setInstallPrompt(e) }
+    window.addEventListener('beforeinstallprompt', handler)
+    return () => window.removeEventListener('beforeinstallprompt', handler)
+  }, [])
+
+  // Token-gated posts: postId -> whether the connected wallet holds enough tokens
+  const [gateUnlocked, setGateUnlocked] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     fcSdk.isInMiniApp().then(setIsInFarcaster).catch(() => setIsInFarcaster(false))
@@ -751,6 +785,62 @@ export default function Home() {
     const p = profiles[addr.toLowerCase()]
     return p?.exists ? p.username : `${addr.slice(0, 6)}...${addr.slice(-4)}`
   }
+
+  // Check ERC-20 balances for token-gated posts so the gate actually works.
+  useEffect(() => {
+    if (!publicClient || !address) return
+    posts.forEach(post => {
+      const m = post.content?.match(/^\[GATE:(0x[a-fA-F0-9]{40}):(\d+)\]/)
+      if (!m) return
+      const key = post.id.toString()
+      if (gateUnlocked[key] !== undefined) return
+      const tokenAddr = m[1] as `0x${string}`
+      ;(async () => {
+        try {
+          const [bal, dec] = await Promise.all([
+            publicClient.readContract({ address: tokenAddr, abi: erc20Abi, functionName: 'balanceOf', args: [address] }),
+            publicClient.readContract({ address: tokenAddr, abi: erc20Abi, functionName: 'decimals' }),
+          ])
+          const min = BigInt(m[2]) * 10n ** BigInt(dec)
+          setGateUnlocked(prev => ({ ...prev, [key]: (bal as bigint) >= min }))
+        } catch {
+          setGateUnlocked(prev => ({ ...prev, [key]: false }))
+        }
+      })()
+    })
+  }, [posts, address, publicClient]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reset gate results when the wallet changes
+  useEffect(() => { setGateUnlocked({}) }, [address])
+
+  // Infinite scroll: auto-load the next batch when the sentinel nears the viewport
+  const loadMoreRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    const el = loadMoreRef.current
+    if (!el) return
+    const obs = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting && nextPostIndex !== null && !loadingMore) {
+        loadPostsBatch(nextPostIndex, true)
+      }
+    }, { rootMargin: '600px' })
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [nextPostIndex, loadingMore, loadPostsBatch, activeTab])
+
+  // Leaderboard: aggregate flames + tips per author from loaded posts
+  const leaderboard = useMemo(() => {
+    const acc: Record<string, { likes: number; tips: bigint }> = {}
+    posts.forEach(p => {
+      const a = p.author.toLowerCase()
+      if (!acc[a]) acc[a] = { likes: 0, tips: 0n }
+      acc[a].likes += Number(p.likes)
+      acc[a].tips += p.tips
+    })
+    return Object.entries(acc)
+      .map(([addr, s]) => ({ addr, ...s }))
+      .sort((x, y) => (y.likes - x.likes) || (y.tips > x.tips ? 1 : y.tips < x.tips ? -1 : 0))
+      .slice(0, 5)
+  }, [posts])
 
   const loadComments = async (postId: string) => {
     if (!publicClient) return
@@ -1520,14 +1610,14 @@ export default function Home() {
                 </button>
               ) : (
                 <button
-                  onClick={() => setShowWalletSheet(true)}
+                  onClick={openWallet}
                   className="bg-[#0052FF] hover:bg-[#1652F0] text-white font-bold text-xs px-3 py-2 rounded-xl transition-colors flex-shrink-0"
                 >
                   Connect
                 </button>
               )}
               <button onClick={() => setShowTerminal(true)}
-                className="bg-[#0A0B0D] text-green-400 font-mono text-[11px] px-2 py-1 rounded-lg hover:bg-[#1f2125] flex-shrink-0">
+                className="h-8 flex items-center bg-[#0A0B0D] text-green-400 font-mono text-[11px] px-2 rounded-lg hover:bg-[#1f2125] flex-shrink-0">
                 ${txLog.length > 0 ? `(${txLog.length})` : ''}
               </button>
               <button
@@ -1595,6 +1685,24 @@ export default function Home() {
                 className="bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors">
                 {t('switchToBase')}
               </button>
+            </div>
+          )}
+
+          {/* PWA install banner */}
+          {installPrompt && !installDismissed && (
+            <div className="md:hidden mx-3 mt-2 flex items-center gap-2 bg-[#F0F4FF] border border-[#D6E2FF] rounded-xl px-3 py-2.5 text-xs text-[#0052FF]">
+              <span className="flex-shrink-0">📲</span>
+              <span className="flex-1 font-semibold">Install FlameBase as an app</span>
+              <button
+                onClick={async () => {
+                  try { installPrompt.prompt(); await installPrompt.userChoice } catch {}
+                  setInstallPrompt(null)
+                }}
+                className="flex-shrink-0 bg-[#0052FF] text-white font-bold px-3 py-1.5 rounded-lg"
+              >
+                Install
+              </button>
+              <button onClick={() => setInstallDismissed(true)} className="flex-shrink-0 text-[#0052FF]/50 hover:text-[#0052FF] font-bold text-sm leading-none">✕</button>
             </div>
           )}
 
@@ -1723,7 +1831,10 @@ export default function Home() {
                       <p className="font-bold text-[#0A0B0D] text-sm">{t('welcomeTitle')}</p>
                       <p className="text-[#5B6271] text-xs">{t('welcomeSub')}</p>
                     </div>
-                    <ConnectButton accountStatus="avatar" chainStatus="none" showBalance={false} />
+                    <button onClick={isInFarcaster ? connectFarcaster : openWallet}
+                      className="bg-[#0052FF] hover:bg-[#1652F0] text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-colors flex-shrink-0">
+                      {t('connectWallet')}
+                    </button>
                   </div>
                 )}
 
@@ -1918,15 +2029,28 @@ export default function Home() {
                                 const tokenAddr = gateMatch[1]
                                 const minBal = BigInt(gateMatch[2])
                                 const hiddenContent = gateMatch[3].trim()
+                                const isAuthor = address?.toLowerCase() === post.author.toLowerCase()
+                                const access = gateUnlocked[key]
+                                const unlocked = isAuthor || access === true
                                 return (
                                   <div className="mb-3">
-                                    <div className="bg-[#FFF8E6] border border-[#FFD97D] rounded-2xl p-4">
-                                      <p className="font-bold text-[#856404] text-sm mb-1">🔒 Token Gated Post</p>
-                                      <p className="text-[#856404] text-xs">Requires {minBal.toString()} of {tokenAddr.slice(0,8)}…{tokenAddr.slice(-4)}</p>
-                                      {isConnected && address && <p className="text-[#856404] text-xs mt-1 opacity-60">(Token balance check coming soon)</p>}
+                                    <div className={`border rounded-2xl p-4 ${unlocked ? 'bg-green-50 border-green-200' : 'bg-[#FFF8E6] border-[#FFD97D]'}`}>
+                                      <p className={`font-bold text-sm mb-1 ${unlocked ? 'text-green-700' : 'text-[#856404]'}`}>
+                                        {unlocked ? '🔓 Token Gated — access granted' : '🔒 Token Gated Post'}
+                                      </p>
+                                      <p className={`text-xs ${unlocked ? 'text-green-700' : 'text-[#856404]'}`}>
+                                        Requires {minBal.toString()} of{' '}
+                                        <a href={`https://basescan.org/token/${tokenAddr}`} target="_blank" rel="noopener noreferrer" className="underline">
+                                          {tokenAddr.slice(0,8)}…{tokenAddr.slice(-4)}
+                                        </a>
+                                      </p>
+                                      {!unlocked && isConnected && access === undefined && <p className="text-[#856404] text-xs mt-1 opacity-60">Checking your balance…</p>}
+                                      {!unlocked && isConnected && access === false && <p className="text-[#856404] text-xs mt-1 opacity-60">Your wallet doesn&apos;t hold enough of this token.</p>}
                                       {!isConnected && <p className="text-[#856404] text-xs mt-1 opacity-60">Connect wallet to check access</p>}
                                     </div>
-                                    <p className="text-[#0A0B0D] text-[15px] leading-relaxed mt-2 whitespace-pre-wrap">{hiddenContent}</p>
+                                    {unlocked && hiddenContent && (
+                                      <p className="text-[#0A0B0D] text-[15px] leading-relaxed mt-2 whitespace-pre-wrap">{hiddenContent}</p>
+                                    )}
                                   </div>
                                 )
                               }
@@ -2121,7 +2245,10 @@ export default function Home() {
                               <div className="pt-3 px-2">
                                 <div className="flex items-center justify-between bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-4 py-3">
                                   <p className="text-[#5B6271] text-sm">{t('connectToComment')}</p>
-                                  <ConnectButton accountStatus="avatar" chainStatus="none" showBalance={false} />
+                                  <button onClick={isInFarcaster ? connectFarcaster : openWallet}
+                                    className="bg-[#0052FF] hover:bg-[#1652F0] text-white font-bold text-xs px-3 py-2 rounded-xl transition-colors flex-shrink-0">
+                                    {t('connectWallet')}
+                                  </button>
                                 </div>
                               </div>
                             )}
@@ -2132,9 +2259,9 @@ export default function Home() {
                   )
                 })}
 
-                {/* Load more / all loaded */}
+                {/* Load more / all loaded — sentinel auto-loads on scroll */}
                 {activeTab === 'feed' && !showBookmarks && !searchQuery && posts.length > 0 && (
-                  <div className="py-6 flex justify-center">
+                  <div ref={loadMoreRef} className="py-6 flex justify-center">
                     {allPostsLoaded ? (
                       <p className="text-[#8A919E] text-sm">{t('allPostsLoaded')}</p>
                     ) : (
@@ -2160,7 +2287,7 @@ export default function Home() {
               <div className="p-4 md:p-6">
                 <h1 className="text-xl font-black mb-5 hidden md:block text-[#0A0B0D]">{t('newPostTitle')}</h1>
                 {!isConnected ? (
-                  <ConnectPrompt message={t('connectToPost')} label={t('connectWallet')} />
+                  <ConnectPrompt message={t('connectToPost')} label={t('connectWallet')} onConnect={isInFarcaster ? connectFarcaster : openWallet} />
                 ) : !hasProfile ? (
                   <div className="bg-white border border-[#E4E7EB] rounded-2xl p-6 shadow-sm">
                     <div className="text-center mb-5">
@@ -2385,7 +2512,7 @@ export default function Home() {
                 <h1 className="text-xl font-black hidden md:block text-[#0A0B0D]">{t('profileTitle')}</h1>
 
                 {!isConnected ? (
-                  <ConnectPrompt message={t('connectToProfile')} label={t('connectWallet')} />
+                  <ConnectPrompt message={t('connectToProfile')} label={t('connectWallet')} onConnect={isInFarcaster ? connectFarcaster : openWallet} />
                 ) : !hasProfile ? (
                   <div className="bg-white border border-[#E4E7EB] rounded-2xl p-6 shadow-sm">
                     <div className="text-center mb-5">
@@ -2803,6 +2930,29 @@ export default function Home() {
 
         {/* ── Right Sidebar ── */}
         <aside className="hidden xl:flex flex-col fixed right-0 top-0 h-full w-96 bg-white border-l border-[#E4E7EB] z-40 overflow-y-auto">
+
+          {/* Leaderboard — top creators by flames from loaded posts */}
+          {leaderboard.length > 0 && (
+            <div className="px-3 pt-4 pb-1">
+              <p className="text-xs font-black text-[#8A919E] uppercase tracking-wider px-1 mb-2">🏆 Top Creators</p>
+              <div className="bg-[#FAFBFD] border border-[#EEF1F5] rounded-2xl overflow-hidden">
+                {leaderboard.map((u, i) => (
+                  <button key={u.addr} onClick={() => setSelectedUser(u.addr)}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-[#F0F4FF] transition-colors border-b border-[#EEF1F5] last:border-b-0">
+                    <span className={`text-sm font-black w-5 text-center flex-shrink-0 ${i === 0 ? 'text-[#F59E0B]' : i === 1 ? 'text-[#9CA3AF]' : i === 2 ? 'text-[#B45309]' : 'text-[#C5CBD3]'}`}>
+                      {i + 1}
+                    </span>
+                    <Avatar addr={u.addr} profiles={profiles} size="sm" />
+                    <span className="flex-1 text-left text-sm font-bold text-[#0A0B0D] truncate">{getUsername(u.addr)}</span>
+                    <span className="text-xs font-bold text-[#FF6B35] flex-shrink-0">🔥 {u.likes}</span>
+                    {u.tips > 0n && (
+                      <span className="text-xs font-semibold text-[#0052FF] flex-shrink-0">💸 {parseFloat(formatEther(u.tips)).toFixed(3)}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Tool Buttons — 3-column grid */}
           <div className="px-3 pt-4 pb-2">

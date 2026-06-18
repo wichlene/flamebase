@@ -71,22 +71,30 @@ function FarcasterAutoConnect() {
   useEffect(() => {
     if (isConnected) return
 
+    // The host (Farcaster / Base App) may inject the wallet provider a moment
+    // after the page loads — retry a few times before giving up.
+    let attempts = 0
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let cancelled = false
+
     async function tryAutoConnect() {
+      if (cancelled) return
       try {
         const inFrame = await sdk.isInMiniApp()
         if (!inFrame) return
 
         const provider = await sdk.wallet.getEthereumProvider()
-        if (!provider) return
+        if (!provider) throw new Error('provider not ready')
 
         const fc = wagmiConnectors.find(c => c.id === 'farcaster')
         if (fc) connect({ connector: fc, chainId: base.id })
       } catch {
-        // not in Farcaster or provider unavailable
+        if (++attempts < 5) timer = setTimeout(tryAutoConnect, 1000)
       }
     }
 
     tryAutoConnect()
+    return () => { cancelled = true; if (timer) clearTimeout(timer) }
   }, [isConnected, connect, wagmiConnectors])
 
   return null
@@ -96,6 +104,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false
     sdk.actions.ready().catch(() => {})
+
+    // PWA: register service worker so the app is installable from Chrome.
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {})
+    }
 
     // Read Farcaster safe-area insets and expose them as CSS vars so the
     // app can dodge the host's chrome (notch, status bar, gesture area).
