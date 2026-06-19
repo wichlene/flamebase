@@ -10,7 +10,7 @@ import dynamic from 'next/dynamic'
 import { CONTRACT_ADDRESS, CONTRACT_ABI } from '../lib/contract'
 import { BUILDER_CODE_DATA_SUFFIX } from '../lib/builderCode'
 import { T, LANG_LABELS, type Lang } from '../lib/i18n'
-import { TOOLS_ADDRESS, TOKEN_FACTORY_ADDRESS, NFT_FACTORY_ADDRESS, DAO_ADDRESS, TOOLS_ABI, TOKEN_FACTORY_ABI, NFT_FACTORY_ABI, DAO_ABI, FLAME_NFT_ADDRESS, FLAME_NFT_ABI } from '../lib/toolsContracts'
+import { TOOLS_ADDRESS, TOKEN_FACTORY_ADDRESS, NFT_FACTORY_ADDRESS, DAO_ADDRESS, FOLLOW_ADDRESS, TOOLS_ABI, TOKEN_FACTORY_ABI, NFT_FACTORY_ABI, DAO_ABI, FOLLOW_ABI, FLAME_NFT_ADDRESS, FLAME_NFT_ABI } from '../lib/toolsContracts'
 import { SFX, isSoundEnabled, setSoundEnabled } from '../lib/sounds'
 import { ToastStack, type ToastItem, type ToastKind } from '../components/Toast'
 
@@ -24,6 +24,7 @@ const TOOLS_DEPLOYED = TOOLS_ADDRESS.length > 0
 const TOKEN_FACTORY_DEPLOYED = TOKEN_FACTORY_ADDRESS.length > 0
 const NFT_FACTORY_DEPLOYED = NFT_FACTORY_ADDRESS.length > 0
 const DAO_DEPLOYED = DAO_ADDRESS.length > 0
+const FOLLOW_DEPLOYED = FOLLOW_ADDRESS.length > 0
 
 const ADMIN_ADDRESS = '0xa77A5D4D37d6F39C20C2441295da9fA60Ab9fD69'
 const FLM_TOKEN_ADDRESS = '0xadead5e8ca2893be6e8239cbbae83049a701cb07'
@@ -466,29 +467,79 @@ export default function Home() {
   const [deployedLogoNftAddr, setDeployedLogoNftAddr] = useState<string>('')
   const [walletBannerDismissed, setWalletBannerDismissed] = useState(false)
 
-  // Friends system (stored in localStorage)
+  // Follow graph. When the FlameFollow contract is deployed the source of
+  // truth is on-chain (getFollowing); localStorage acts only as an optimistic
+  // cache so the UI feels instant. Before the contract is deployed it falls
+  // back to localStorage-only so the feature still works.
   const [following, setFollowing] = useState<Set<string>>(new Set())
 
-  useEffect(() => {
+  const persistFollowing = useCallback((set: Set<string>) => {
     if (!address) return
+    try { localStorage.setItem(`flamebase_following_${address.toLowerCase()}`, JSON.stringify([...set])) } catch {}
+  }, [address])
+
+  // Hydrate from localStorage immediately, then reconcile against chain.
+  useEffect(() => {
+    if (!address) { setFollowing(new Set()); return }
     try {
       const raw = localStorage.getItem(`flamebase_following_${address.toLowerCase()}`)
       if (raw) setFollowing(new Set(JSON.parse(raw)))
     } catch {}
-  }, [address])
+    if (!FOLLOW_DEPLOYED || !publicClient) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const list = await publicClient.readContract({
+          address: FOLLOW_ADDRESS, abi: FOLLOW_ABI, functionName: 'getFollowing', args: [address],
+        }) as readonly string[]
+        if (cancelled) return
+        const onchain = new Set(list.map(a => a.toLowerCase()))
+        setFollowing(onchain)
+        persistFollowing(onchain)
+      } catch (e) { console.error('Failed to load follow graph', e) }
+    })()
+    return () => { cancelled = true }
+  }, [address, publicClient, persistFollowing])
 
-  const followUser = (target: string) => {
+  const followUser = async (target: string) => {
+    if (!address) return
     const t = target.toLowerCase()
+    if (following.has(t)) return
+    // Optimistic update.
     const next = new Set(following); next.add(t)
-    setFollowing(next)
-    localStorage.setItem(`flamebase_following_${address!.toLowerCase()}`, JSON.stringify([...next]))
+    setFollowing(next); persistFollowing(next)
+    if (!FOLLOW_DEPLOYED) return
+    setLoadingAction(`follow-${t}`)
+    try {
+      await writeContractAsync({ address: FOLLOW_ADDRESS, abi: FOLLOW_ABI, functionName: 'follow', args: [target as `0x${string}`], value: fixedFee }, 'follow')
+      showToast('success', 'Followed on-chain 🤝')
+    } catch (e) {
+      console.error(e)
+      const revert = new Set(next); revert.delete(t)
+      setFollowing(revert); persistFollowing(revert)
+      showToast('error', txError(e))
+    }
+    setLoadingAction(null)
   }
 
-  const unfollowUser = (target: string) => {
+  const unfollowUser = async (target: string) => {
+    if (!address) return
     const t = target.toLowerCase()
+    if (!following.has(t)) return
     const next = new Set(following); next.delete(t)
-    setFollowing(next)
-    localStorage.setItem(`flamebase_following_${address!.toLowerCase()}`, JSON.stringify([...next]))
+    setFollowing(next); persistFollowing(next)
+    if (!FOLLOW_DEPLOYED) return
+    setLoadingAction(`follow-${t}`)
+    try {
+      await writeContractAsync({ address: FOLLOW_ADDRESS, abi: FOLLOW_ABI, functionName: 'unfollow', args: [target as `0x${string}`], value: fixedFee }, 'unfollow')
+      showToast('success', 'Unfollowed on-chain')
+    } catch (e) {
+      console.error(e)
+      const revert = new Set(next); revert.add(t)
+      setFollowing(revert); persistFollowing(revert)
+      showToast('error', txError(e))
+    }
+    setLoadingAction(null)
   }
 
   const { data: myProfile, refetch: refetchProfile } = useReadContract({
@@ -1979,60 +2030,30 @@ export default function Home() {
                   </div>
                 )}
 
-                {!isConnected && (
-                  <div className="mx-4 mt-4 p-4 rounded-2xl bg-[#F0F4FF] border border-[#D6E2FF] flex items-center gap-3">
+                {/* What is FlameBase — value hook (leads with social value, not token) */}
+                <div className="mx-4 mt-3 p-4 rounded-2xl bg-gradient-to-r from-[#F0F4FF] to-[#EAF0FF] border border-[#D6E2FF]">
+                  <div className="flex items-start gap-3">
                     <FlameLogo size={36} />
                     <div className="flex-1 min-w-0">
-                      <p className="font-bold text-[#0A0B0D] text-sm">{t('welcomeTitle')}</p>
-                      <p className="text-[#5B6271] text-xs">{t('welcomeSub')}</p>
-                    </div>
-                    <button onClick={isInFarcaster ? connectFarcaster : openWallet}
-                      className="bg-[#0052FF] hover:bg-[#1652F0] text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-colors flex-shrink-0">
-                      {t('connectWallet')}
-                    </button>
-                  </div>
-                )}
-
-                {/* $FLM Token Banner */}
-                <div className="mx-4 mt-3 p-4 rounded-2xl bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200">
-                  <div className="flex items-center gap-3">
-                    <img src="/logo.png" alt="FLM" className="w-10 h-10 rounded-full object-cover flex-shrink-0 border-2 border-orange-300" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-bold text-[#0A0B0D] text-sm">$FLM Token is Live 🔥</span>
-                        <span className="text-[10px] bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-semibold border border-orange-200">BASE</span>
+                      <p className="font-bold text-[#0A0B0D] text-sm">{t('hookTitle')}</p>
+                      <p className="text-[#5B6271] text-xs mt-0.5 leading-relaxed">{t('hookSub')}</p>
+                      <div className="flex items-center gap-3 mt-2.5">
+                        <button
+                          onClick={() => { if (isConnected) { setActiveTab('post') } else if (isInFarcaster) { connectFarcaster() } else { openWallet() } }}
+                          className="bg-[#0052FF] hover:bg-[#1652F0] text-white font-bold text-xs px-3.5 py-2 rounded-xl transition-colors flex-shrink-0"
+                        >
+                          {isConnected ? t('hookCtaPost') : t('connectWallet')}
+                        </button>
+                        <a
+                          href={`https://app.uniswap.org/explore/tokens/base/${FLM_TOKEN_ADDRESS}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[11px] text-[#8A919E] hover:text-[#0052FF] transition-colors font-semibold"
+                        >
+                          $FLM ↗
+                        </a>
                       </div>
-                      <p className="text-[#5B6271] text-xs mt-0.5">FlameBase community token on Base mainnet</p>
-                      <a href={`https://basescan.org/token/${FLM_TOKEN_ADDRESS}`} target="_blank" rel="noopener noreferrer" className="text-[10px] text-[#8A919E] hover:text-[#0052FF] transition-colors font-mono">
-                        {FLM_TOKEN_ADDRESS.slice(0,6)}...{FLM_TOKEN_ADDRESS.slice(-4)} ↗
-                      </a>
                     </div>
-                  </div>
-                  <div className="flex gap-2 mt-3">
-                    <a
-                      href="https://app.uniswap.org/explore/tokens/base/0xadead5e8ca2893be6e8239cbbae83049a701cb07"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex-1 bg-[#FF6B00] hover:bg-[#E55A00] text-white text-xs font-bold px-3 py-2 rounded-xl text-center transition-colors shadow-sm"
-                    >
-                      Buy $FLM on Uniswap
-                    </a>
-                    <a
-                      href="https://www.geckoterminal.com/base/tokens/0xadead5e8ca2893be6e8239cbbae83049a701cb07"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="bg-white hover:bg-[#F0F4FF] text-[#0052FF] text-xs font-bold px-3 py-2 rounded-xl text-center transition-colors border border-[#D6E2FF]"
-                    >
-                      📊 Gecko
-                    </a>
-                    <a
-                      href="https://dexscreener.com/base/0xadead5e8ca2893be6e8239cbbae83049a701cb07"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="bg-white hover:bg-[#F0F4FF] text-[#0052FF] text-xs font-bold px-3 py-2 rounded-xl text-center transition-colors border border-[#D6E2FF]"
-                    >
-                      📈 Dex
-                    </a>
                   </div>
                 </div>
 
@@ -2826,9 +2847,9 @@ export default function Home() {
                                   <p className="text-xs text-[#8A919E] truncate">{addr.slice(0,8)}…</p>
                                 </div>
                               </button>
-                              <button onClick={() => unfollowUser(addr)}
-                                className="text-xs text-red-400 hover:text-red-600 font-bold px-2 py-1 rounded-lg hover:bg-red-50 transition-colors flex-shrink-0">
-                                Remove
+                              <button onClick={() => unfollowUser(addr)} disabled={loadingAction === `follow-${addr.toLowerCase()}`}
+                                className="text-xs text-red-400 hover:text-red-600 font-bold px-2 py-1 rounded-lg hover:bg-red-50 transition-colors flex-shrink-0 disabled:opacity-50">
+                                {loadingAction === `follow-${addr.toLowerCase()}` ? '…' : 'Remove'}
                               </button>
                             </div>
                           ))}
@@ -3362,14 +3383,14 @@ export default function Home() {
                 {isConnected && address && selectedUser.toLowerCase() !== address.toLowerCase() && (
                   <div className="flex flex-col gap-1.5">
                     {following.has(selectedUser.toLowerCase()) ? (
-                      <button onClick={() => unfollowUser(selectedUser)}
-                        className="px-4 py-1.5 rounded-xl border-2 border-[#0052FF] text-[#0052FF] text-xs font-black hover:bg-red-50 hover:border-red-500 hover:text-red-500 transition-colors">
-                        Friends ✓
+                      <button onClick={() => unfollowUser(selectedUser)} disabled={loadingAction === `follow-${selectedUser.toLowerCase()}`}
+                        className="px-4 py-1.5 rounded-xl border-2 border-[#0052FF] text-[#0052FF] text-xs font-black hover:bg-red-50 hover:border-red-500 hover:text-red-500 transition-colors disabled:opacity-50">
+                        {loadingAction === `follow-${selectedUser.toLowerCase()}` ? '…' : 'Friends ✓'}
                       </button>
                     ) : (
-                      <button onClick={() => followUser(selectedUser)}
-                        className="px-4 py-1.5 rounded-xl bg-[#0052FF] text-white text-xs font-black hover:bg-[#1652F0] transition-colors">
-                        + Add Friend
+                      <button onClick={() => followUser(selectedUser)} disabled={loadingAction === `follow-${selectedUser.toLowerCase()}`}
+                        className="px-4 py-1.5 rounded-xl bg-[#0052FF] text-white text-xs font-black hover:bg-[#1652F0] transition-colors disabled:opacity-50">
+                        {loadingAction === `follow-${selectedUser.toLowerCase()}` ? '…' : '+ Add Friend'}
                       </button>
                     )}
                     <button onClick={() => { setPendingDmTarget(selectedUser); setActiveTab('messages'); setSelectedUser(null) }}
