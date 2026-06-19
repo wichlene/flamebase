@@ -1733,6 +1733,18 @@ export default function Home() {
                 )}
               </button>
             ))}
+
+            {/* $FLM token — under Tools */}
+            <a
+              href={`https://app.uniswap.org/explore/tokens/base/${FLM_TOKEN_ADDRESS}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-2 w-full flex items-center gap-3 px-4 py-2.5 rounded-xl font-semibold text-left text-sm text-[#5B6271] hover:bg-[#F7F9FC] hover:text-[#0A0B0D] transition-all"
+            >
+              <img src="/logo.png" alt="FLM" className="w-5 h-5 rounded-full object-cover flex-shrink-0" />
+              <span className="flex-1">$FLM Token</span>
+              <span className="text-[10px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full font-bold border border-orange-200">BASE</span>
+            </a>
           </nav>
 
           <div className="border-t border-[#EEF1F5] pt-4 mt-4 space-y-3">
@@ -2037,21 +2049,13 @@ export default function Home() {
                     <div className="flex-1 min-w-0">
                       <p className="font-bold text-[#0A0B0D] text-sm">{t('hookTitle')}</p>
                       <p className="text-[#5B6271] text-xs mt-0.5 leading-relaxed">{t('hookSub')}</p>
-                      <div className="flex items-center gap-3 mt-2.5">
+                      <div className="mt-2.5">
                         <button
                           onClick={() => { if (isConnected) { setActiveTab('post') } else if (isInFarcaster) { connectFarcaster() } else { openWallet() } }}
                           className="bg-[#0052FF] hover:bg-[#1652F0] text-white font-bold text-xs px-3.5 py-2 rounded-xl transition-colors flex-shrink-0"
                         >
                           {isConnected ? t('hookCtaPost') : t('connectWallet')}
                         </button>
-                        <a
-                          href={`https://app.uniswap.org/explore/tokens/base/${FLM_TOKEN_ADDRESS}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-[11px] text-[#8A919E] hover:text-[#0052FF] transition-colors font-semibold"
-                        >
-                          $FLM ↗
-                        </a>
                       </div>
                     </div>
                   </div>
