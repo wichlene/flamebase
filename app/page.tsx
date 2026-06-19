@@ -2030,60 +2030,30 @@ export default function Home() {
                   </div>
                 )}
 
-                {!isConnected && (
-                  <div className="mx-4 mt-4 p-4 rounded-2xl bg-[#F0F4FF] border border-[#D6E2FF] flex items-center gap-3">
+                {/* What is FlameBase — value hook (leads with social value, not token) */}
+                <div className="mx-4 mt-3 p-4 rounded-2xl bg-gradient-to-r from-[#F0F4FF] to-[#EAF0FF] border border-[#D6E2FF]">
+                  <div className="flex items-start gap-3">
                     <FlameLogo size={36} />
                     <div className="flex-1 min-w-0">
-                      <p className="font-bold text-[#0A0B0D] text-sm">{t('welcomeTitle')}</p>
-                      <p className="text-[#5B6271] text-xs">{t('welcomeSub')}</p>
-                    </div>
-                    <button onClick={isInFarcaster ? connectFarcaster : openWallet}
-                      className="bg-[#0052FF] hover:bg-[#1652F0] text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-colors flex-shrink-0">
-                      {t('connectWallet')}
-                    </button>
-                  </div>
-                )}
-
-                {/* $FLM Token Banner */}
-                <div className="mx-4 mt-3 p-4 rounded-2xl bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200">
-                  <div className="flex items-center gap-3">
-                    <img src="/logo.png" alt="FLM" className="w-10 h-10 rounded-full object-cover flex-shrink-0 border-2 border-orange-300" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-bold text-[#0A0B0D] text-sm">$FLM Token is Live 🔥</span>
-                        <span className="text-[10px] bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-semibold border border-orange-200">BASE</span>
+                      <p className="font-bold text-[#0A0B0D] text-sm">{t('hookTitle')}</p>
+                      <p className="text-[#5B6271] text-xs mt-0.5 leading-relaxed">{t('hookSub')}</p>
+                      <div className="flex items-center gap-3 mt-2.5">
+                        <button
+                          onClick={() => { if (isConnected) { setActiveTab('post') } else if (isInFarcaster) { connectFarcaster() } else { openWallet() } }}
+                          className="bg-[#0052FF] hover:bg-[#1652F0] text-white font-bold text-xs px-3.5 py-2 rounded-xl transition-colors flex-shrink-0"
+                        >
+                          {isConnected ? t('hookCtaPost') : t('connectWallet')}
+                        </button>
+                        <a
+                          href={`https://app.uniswap.org/explore/tokens/base/${FLM_TOKEN_ADDRESS}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[11px] text-[#8A919E] hover:text-[#0052FF] transition-colors font-semibold"
+                        >
+                          $FLM ↗
+                        </a>
                       </div>
-                      <p className="text-[#5B6271] text-xs mt-0.5">FlameBase community token on Base mainnet</p>
-                      <a href={`https://basescan.org/token/${FLM_TOKEN_ADDRESS}`} target="_blank" rel="noopener noreferrer" className="text-[10px] text-[#8A919E] hover:text-[#0052FF] transition-colors font-mono">
-                        {FLM_TOKEN_ADDRESS.slice(0,6)}...{FLM_TOKEN_ADDRESS.slice(-4)} ↗
-                      </a>
                     </div>
-                  </div>
-                  <div className="flex gap-2 mt-3">
-                    <a
-                      href="https://app.uniswap.org/explore/tokens/base/0xadead5e8ca2893be6e8239cbbae83049a701cb07"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex-1 bg-[#FF6B00] hover:bg-[#E55A00] text-white text-xs font-bold px-3 py-2 rounded-xl text-center transition-colors shadow-sm"
-                    >
-                      Buy $FLM on Uniswap
-                    </a>
-                    <a
-                      href="https://www.geckoterminal.com/base/tokens/0xadead5e8ca2893be6e8239cbbae83049a701cb07"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="bg-white hover:bg-[#F0F4FF] text-[#0052FF] text-xs font-bold px-3 py-2 rounded-xl text-center transition-colors border border-[#D6E2FF]"
-                    >
-                      📊 Gecko
-                    </a>
-                    <a
-                      href="https://dexscreener.com/base/0xadead5e8ca2893be6e8239cbbae83049a701cb07"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="bg-white hover:bg-[#F0F4FF] text-[#0052FF] text-xs font-bold px-3 py-2 rounded-xl text-center transition-colors border border-[#D6E2FF]"
-                    >
-                      📈 Dex
-                    </a>
                   </div>
                 </div>
 
