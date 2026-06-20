@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { addMessage, isAddr } from '@/lib/messageStore'
+import { addMessage, isAddr, isDurable } from '@/lib/messageStore'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,7 +14,7 @@ export async function POST(req: Request) {
   if (!text) return NextResponse.json({ error: 'empty message' }, { status: 400 })
   try {
     const message = await addMessage(from, to, text)
-    return NextResponse.json({ message })
+    return NextResponse.json({ message, durable: isDurable })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'failed' }, { status: 500 })
   }
