@@ -7,6 +7,33 @@ import { SpeedInsights } from '@vercel/speed-insights/next'
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 
+// Base App / Farcaster Mini App embed. Without this in the page <head>, a
+// client like Base App opens the URL as a plain website instead of launching
+// it as a Mini App (in-app frame + splash). `fc:miniapp` is the current spec
+// key; `fc:frame` is kept for backwards compatibility with older clients.
+const miniappEmbed = {
+  version: '1',
+  imageUrl: 'https://flamebase.xyz/logo.png',
+  button: {
+    title: 'Open FlameBase',
+    action: {
+      type: 'launch_miniapp',
+      name: 'FlameBase',
+      url: 'https://flamebase.xyz',
+      splashImageUrl: 'https://flamebase.xyz/logo.png',
+      splashBackgroundColor: '#0052FF',
+    },
+  },
+}
+
+const frameEmbed = {
+  ...miniappEmbed,
+  button: {
+    ...miniappEmbed.button,
+    action: { ...miniappEmbed.button.action, type: 'launch_frame' },
+  },
+}
+
 export const metadata: Metadata = {
   metadataBase: new URL('https://flamebase.xyz'),
   title: {
@@ -74,6 +101,8 @@ export const metadata: Metadata = {
   other: {
     'base:app_id': '6a0e223b6e6e49b3da234251',
     'talentapp:project_verification': '87d0e4708a710492b8242db188d91ceacc7c85596e146ce0ad229ed4e5b5bece83ed4290fb8e1d9c578b0cb0d747ce1ec91b6f529ff30817464bbed43ff656c6',
+    'fc:miniapp': JSON.stringify(miniappEmbed),
+    'fc:frame': JSON.stringify(frameEmbed),
   },
 }
 
