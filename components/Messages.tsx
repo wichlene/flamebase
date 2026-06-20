@@ -3,9 +3,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAccount, useSignMessage } from 'wagmi'
 import { hexToBytes } from 'viem'
+import Avatar from './Avatar'
 
 // Global client — survives tab switches, only one signature per browser session
 let _xmtpClient: any = null
+
+// inboxId → wallet address, resolved via client.preferences.getInboxStates().
+// Cached at module scope so we don't re-resolve the same peer on every refresh.
+const _peerAddressCache: Record<string, string> = {}
 
 type Conv = {
   id: string
@@ -147,26 +152,66 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
     connectingRef.current = false
   }
 
+  // Resolve XMTP inboxIds to real Ethereum addresses (the inboxId itself is an
+  // internal XMTP hash, not the peer's wallet address — it must never be shown
+  // to the user or used for a profiles[] lookup directly).
+  const resolvePeerAddresses = async (inboxIds: string[]) => {
+    const unresolved = [...new Set(inboxIds.filter(id => id && !_peerAddressCache[id]))]
+    if (!unresolved.length || !_xmtpClient) return
+    try {
+      const states = await _xmtpClient.preferences.getInboxStates(unresolved)
+      for (const state of states) {
+        const ethId = state.accountIdentifiers?.find((i: any) => i.identifierKind === 0)
+        if (ethId) _peerAddressCache[state.inboxId] = ethId.identifier.toLowerCase()
+      }
+    } catch (e) {
+      console.error('Failed to resolve peer addresses', e)
+    }
+  }
+
   const refreshConversations = async () => {
     if (!_xmtpClient) return
     const dms = await _xmtpClient.conversations.listDms()
-    const out: Conv[] = []
+    const rows: { id: string; peerInboxId: string; lastMessage: string; lastSentAt: number }[] = []
     for (const dm of dms) {
       try {
         const last = await dm.lastMessage().catch(() => null)
         const peerInboxId = await dm.peerInboxId().catch(() => '')
-        out.push({
+        rows.push({
           id: dm.id,
           peerInboxId,
-          peerAddress: peerInboxId,
           lastMessage: last && typeof last.content === 'string' ? last.content : '',
           lastSentAt: last ? Number(last.sentAtNs / 1_000_000n) : 0,
         })
       } catch {}
     }
-    out.sort((a, b) => b.lastSentAt - a.lastSentAt)
+    await resolvePeerAddresses(rows.map(r => r.peerInboxId))
+    const out: Conv[] = rows
+      .map(r => ({ ...r, peerAddress: _peerAddressCache[r.peerInboxId] || '' }))
+      .sort((a, b) => b.lastSentAt - a.lastSentAt)
     setConversations(out)
     reportUnread(out)
+  }
+
+  // Username if known, otherwise a truncated address, otherwise a truncated
+  // inboxId as a last resort (e.g. address still resolving).
+  const getPeerLabel = (c: { peerAddress: string; peerInboxId: string }) => {
+    if (c.peerAddress) {
+      const uname = profiles[c.peerAddress]?.username
+      if (uname) return uname
+      return `${c.peerAddress.slice(0, 6)}…${c.peerAddress.slice(-4)}`
+    }
+    return c.peerInboxId ? `${c.peerInboxId.slice(0, 8)}…${c.peerInboxId.slice(-4)}` : 'Unknown'
+  }
+
+  const timeAgo = (ms: number) => {
+    if (!ms) return ''
+    const d = (Date.now() - ms) / 1000
+    if (d < 60) return 'now'
+    if (d < 3600) return `${Math.floor(d / 60)}m`
+    if (d < 86400) return `${Math.floor(d / 3600)}h`
+    if (d < 604800) return `${Math.floor(d / 86400)}d`
+    return new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
   }
 
   const openConversation = async (id: string) => {
@@ -291,7 +336,7 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
 
   const seenMap = getSeenMap()
   const activeConv = conversations.find(c => c.id === activeId)
-  const activePeerLabel = activeConv ? `${activeConv.peerAddress.slice(0, 8)}…${activeConv.peerAddress.slice(-4)}` : ''
+  const activePeerLabel = activeConv ? getPeerLabel(activeConv) : ''
 
   return (
     <div className="messages-shell flex overflow-hidden">
@@ -306,17 +351,22 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
             <p className="p-4 text-xs text-[#8A919E] text-center">No conversations yet</p>
           ) : conversations.filter(c => !hiddenConvs.has(c.id)).map(c => {
             const isUnread = c.lastSentAt > 0 && c.lastSentAt > (seenMap[c.id] ?? 0)
+            const label = getPeerLabel(c)
             return (
               <div key={c.id} className={`group flex items-center border-b border-[#F7F9FC] hover:bg-[#F7F9FC] transition-colors ${activeId === c.id ? 'bg-[#E6EEFF]' : ''}`}>
-                <button onClick={() => openConversation(c.id)} className="flex-1 text-left p-3">
-                  <div className="flex items-center gap-2">
-                    {isUnread && <span className="w-2 h-2 rounded-full bg-[#0052FF] flex-shrink-0" />}
-                    <div className="min-w-0 flex-1">
+                <button onClick={() => openConversation(c.id)} className="flex-1 text-left p-3 flex items-center gap-3 min-w-0">
+                  {c.peerAddress
+                    ? <Avatar addr={c.peerAddress} profiles={profiles} size="md" />
+                    : <div className="w-10 h-10 rounded-full bg-[#E4E7EB] flex-shrink-0 animate-pulse" />}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      {isUnread && <span className="w-2 h-2 rounded-full bg-[#0052FF] flex-shrink-0" />}
                       <p className={`text-sm truncate ${isUnread ? 'font-black' : 'font-bold'} text-[#0A0B0D]`}>
-                        {c.peerAddress.slice(0, 8)}…{c.peerAddress.slice(-4)}
+                        {label}
                       </p>
-                      {c.lastMessage && <p className={`text-xs truncate mt-0.5 ${isUnread ? 'text-[#0A0B0D] font-semibold' : 'text-[#5B6271]'}`}>{c.lastMessage}</p>}
+                      {c.lastSentAt > 0 && <span className="text-[11px] text-[#8A919E] flex-shrink-0 ml-auto">{timeAgo(c.lastSentAt)}</span>}
                     </div>
+                    {c.lastMessage && <p className={`text-xs truncate mt-0.5 ${isUnread ? 'text-[#0A0B0D] font-semibold' : 'text-[#5B6271]'}`}>{c.lastMessage}</p>}
                   </div>
                 </button>
                 <button
@@ -346,6 +396,9 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
                 className="md:hidden w-8 h-8 flex items-center justify-center rounded-full hover:bg-[#F0F2F5] text-[#0A0B0D] flex-shrink-0 text-lg" aria-label="Back">
                 ←
               </button>
+              {activeConv?.peerAddress
+                ? <Avatar addr={activeConv.peerAddress} profiles={profiles} size="sm" />
+                : <div className="w-8 h-8 rounded-full bg-[#E4E7EB] flex-shrink-0 animate-pulse" />}
               <p className="font-bold text-sm text-[#0A0B0D] truncate">{activePeerLabel}</p>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-2 min-h-0">
