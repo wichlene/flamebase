@@ -47,7 +47,11 @@ body {
 
 /* Messages inbox/thread — fits exactly between the fixed mobile header and
    bottom nav (same dvh-based math as Reels) so the composer never scrolls
-   off-screen; on desktop there's no fixed header/nav, so just clear the page header. */
+   off-screen; on desktop there's no fixed header/nav, so just clear the page header.
+   This assumes nothing else shares vertical space in the flow above it on
+   mobile — see the activeTab !== 'messages' guards around the wrong-network/
+   PWA/wallet-tip banners in app/page.tsx, which would otherwise push this
+   shell's bottom edge down underneath the fixed bottom nav. */
 .messages-shell {
   height: calc(100dvh - var(--mobile-header-h, calc(60px + var(--inset-top, 0px))) - var(--bottom-nav-h, calc(56px + var(--inset-bottom, 0px))));
 }
