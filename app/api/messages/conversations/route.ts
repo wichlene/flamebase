@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getConversations, isAddr } from '@/lib/messageStore'
+import { getConversations, isAddr, isDurable } from '@/lib/messageStore'
 
 export const dynamic = 'force-dynamic'
 
@@ -9,7 +9,7 @@ export async function GET(req: Request) {
   if (!isAddr(address)) return NextResponse.json({ error: 'valid address required' }, { status: 400 })
   try {
     const conversations = await getConversations(address)
-    return NextResponse.json({ conversations })
+    return NextResponse.json({ conversations, durable: isDurable })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'failed' }, { status: 500 })
   }

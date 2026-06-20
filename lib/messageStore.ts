@@ -14,6 +14,10 @@ const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_
 const REDIS_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || ''
 const useRedis = Boolean(REDIS_URL && REDIS_TOKEN)
 
+// Exposed so API routes can tell the client storage isn't durable yet
+// (the in-memory fallback is per-instance and won't reach other users).
+export const isDurable = useRedis
+
 async function redis(cmd: (string | number)[]): Promise<any> {
   const res = await fetch(REDIS_URL, {
     method: 'POST',
