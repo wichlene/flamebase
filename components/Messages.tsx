@@ -282,16 +282,18 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
   }
 
   const seenMap = getSeenMap()
+  const activeConv = conversations.find(c => c.id === activeId)
+  const activePeerLabel = activeConv ? `${activeConv.peerAddress.slice(0, 8)}…${activeConv.peerAddress.slice(-4)}` : ''
 
   return (
-    <div className="flex h-[calc(100vh-120px)]">
-      {/* Sidebar */}
-      <div className="w-72 border-r border-[#EEF1F5] flex flex-col">
-        <div className="p-3 border-b border-[#EEF1F5] flex items-center justify-between">
+    <div className="messages-shell flex overflow-hidden">
+      {/* Sidebar — full width on mobile until a thread is opened, fixed column on desktop */}
+      <div className={`${activeId ? 'hidden md:flex' : 'flex'} w-full md:w-72 md:border-r border-[#EEF1F5] flex-col min-h-0`}>
+        <div className="p-3 border-b border-[#EEF1F5] flex items-center justify-between flex-shrink-0">
           <h3 className="font-black text-[#0A0B0D]">Messages</h3>
           <button onClick={() => setShowNew(true)} className="bg-[#0052FF] hover:bg-[#1652F0] text-white px-3 py-1.5 rounded-lg text-xs font-bold">+ New</button>
         </div>
-        <div className="overflow-y-auto flex-1">
+        <div className="overflow-y-auto flex-1 min-h-0">
           {conversations.filter(c => !hiddenConvs.has(c.id)).length === 0 ? (
             <p className="p-4 text-xs text-[#8A919E] text-center">No conversations yet</p>
           ) : conversations.filter(c => !hiddenConvs.has(c.id)).map(c => {
@@ -325,13 +327,20 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
         </div>
       </div>
 
-      {/* Chat area */}
-      <div className="flex-1 flex flex-col">
+      {/* Chat area — takes over the full screen on mobile once a thread is opened */}
+      <div className={`${activeId ? 'flex' : 'hidden md:flex'} flex-1 flex-col min-h-0`}>
         {!activeId ? (
           <div className="flex-1 flex items-center justify-center text-[#8A919E] text-sm">Select a conversation</div>
         ) : (
           <>
-            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+            <div className="flex items-center gap-2 border-b border-[#EEF1F5] p-3 flex-shrink-0">
+              <button onClick={() => { setActiveId(null); setMessages([]) }}
+                className="md:hidden w-8 h-8 flex items-center justify-center rounded-full hover:bg-[#F0F2F5] text-[#0A0B0D] flex-shrink-0 text-lg" aria-label="Back">
+                ←
+              </button>
+              <p className="font-bold text-sm text-[#0A0B0D] truncate">{activePeerLabel}</p>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-2 min-h-0">
               {messages.map(m => {
                 const mine = _xmtpClient?.inboxId && m.senderInboxId === _xmtpClient.inboxId
                 return (
@@ -344,13 +353,13 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
               })}
               <div ref={endRef} />
             </div>
-            <div className="border-t border-[#EEF1F5] p-3 flex gap-2">
+            <div className="border-t border-[#EEF1F5] p-3 flex gap-2 flex-shrink-0 pb-safe">
               <input value={draft} onChange={e => setDraft(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
                 placeholder="Type a message…"
                 className="flex-1 bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-[#0052FF]" />
               <button onClick={send} disabled={sending || !draft.trim()}
-                className="bg-[#0052FF] hover:bg-[#1652F0] text-white px-5 py-2 rounded-xl font-bold text-sm disabled:opacity-40 transition-colors">
+                className="bg-[#0052FF] hover:bg-[#1652F0] text-white px-5 py-2 rounded-xl font-bold text-sm disabled:opacity-40 transition-colors flex-shrink-0">
                 Send
               </button>
             </div>

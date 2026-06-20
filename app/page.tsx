@@ -3,7 +3,7 @@
 import { ConnectButton, useConnectModal } from '@rainbow-me/rainbowkit'
 import { useAccount, useWriteContract, useReadContract, usePublicClient, useBalance, useSwitchChain, useChainId, useDisconnect, useConnect } from 'wagmi'
 import { sdk as fcSdk } from '@farcaster/miniapp-sdk'
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react'
 import { parseEther, formatEther, erc20Abi } from 'viem'
 import { base } from 'wagmi/chains'
 import dynamic from 'next/dynamic'
@@ -1517,6 +1517,22 @@ export default function Home() {
     { tab: 'tools', icon: '🛠️', labelKey: 'navTools' },
   ]
 
+  // Measure the real rendered height of the mobile bottom nav instead of
+  // guessing — emoji glyphs in the icon row overshoot their CSS line-height,
+  // so a hardcoded constant drifts from the actual layout across devices/fonts.
+  const bottomNavRef = useRef<HTMLElement | null>(null)
+  useLayoutEffect(() => {
+    const el = bottomNavRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const setVar = () => {
+      document.documentElement.style.setProperty('--bottom-nav-h', `${el.getBoundingClientRect().height}px`)
+    }
+    setVar()
+    const obs = new ResizeObserver(setVar)
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [])
+
   return (
     <div className="min-h-screen bg-white text-[#0A0B0D] flex flex-col">
 
@@ -2671,8 +2687,8 @@ export default function Home() {
 
             {/* ══ MESSAGES ══ */}
             {activeTab === 'messages' && (
-              <div>
-                <h1 className="text-xl font-black px-4 md:px-6 pt-4 md:pt-6 text-[#0A0B0D]">{t('navMessages')}</h1>
+              <div className="-mt-[calc(60px+var(--inset-top,0px))] md:mt-0 -mb-24 md:mb-0">
+                <h1 className="hidden md:block text-xl font-black px-4 md:px-6 pt-4 md:pt-6 text-[#0A0B0D]">{t('navMessages')}</h1>
                 <Messages profiles={profiles} fixedFee={fixedFee} pendingTarget={pendingDmTarget} onPendingHandled={() => setPendingDmTarget(null)} onUnreadCount={setUnreadMessages} />
               </div>
             )}
@@ -3331,7 +3347,7 @@ export default function Home() {
       </div>
 
       {/* ── Mobile bottom nav ── */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t border-[#E4E7EB] z-50 shadow-[0_-4px_20px_-4px_rgba(0,0,0,0.05)] pb-safe">
+      <nav ref={bottomNavRef} className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t border-[#E4E7EB] z-50 shadow-[0_-4px_20px_-4px_rgba(0,0,0,0.05)] pb-safe">
         <div className="flex">
           {navItems.map(({ tab, icon, labelKey }) => (
             <button key={tab} onClick={() => {

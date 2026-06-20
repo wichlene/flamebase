@@ -33,7 +33,24 @@ body {
 /* Safe area utilities — now combine OS env() with Farcaster insets. */
 .pb-safe { padding-bottom: var(--inset-bottom); }
 .pt-safe { padding-top: var(--inset-top); }
-.mb-nav  { margin-bottom: calc(56px + var(--inset-bottom)); }
+
+/* --bottom-nav-h is measured at runtime from the real <nav> element (see
+   app/page.tsx) — emoji glyphs in the icon row push the rendered height
+   well past any single hardcoded guess, and that guess drifts by device/
+   font. The calc(56px + inset) fallback only applies before JS measures
+   (or if JS never runs); it already includes the safe-area inset since
+   the measured --bottom-nav-h does too (nav has pb-safe applied). */
+.mb-nav  { margin-bottom: var(--bottom-nav-h, calc(56px + var(--inset-bottom))); }
+
+/* Messages inbox/thread — fits exactly between the fixed mobile header and
+   bottom nav (same dvh-based math as Reels) so the composer never scrolls
+   off-screen; on desktop there's no fixed header/nav, so just clear the page header. */
+.messages-shell {
+  height: calc(100dvh - calc(60px + var(--inset-top, 0px)) - var(--bottom-nav-h, calc(56px + var(--inset-bottom, 0px))));
+}
+@media (min-width: 768px) {
+  .messages-shell { height: calc(100vh - 120px); }
+}
 
 ::selection {
   background: #0052FF;
