@@ -1517,20 +1517,28 @@ export default function Home() {
     { tab: 'tools', icon: '🛠️', labelKey: 'navTools' },
   ]
 
-  // Measure the real rendered height of the mobile bottom nav instead of
-  // guessing — emoji glyphs in the icon row overshoot their CSS line-height,
-  // so a hardcoded constant drifts from the actual layout across devices/fonts.
+  // Measure the real rendered height of the fixed mobile header and bottom
+  // nav instead of guessing — emoji glyphs and wallet-address text overshoot
+  // their CSS line-height, so a hardcoded constant drifts from the actual
+  // layout across devices/fonts (confirmed: header renders taller than the
+  // assumed 60px, which hid the Messages thread header behind it).
+  const mobileHeaderRef = useRef<HTMLElement | null>(null)
   const bottomNavRef = useRef<HTMLElement | null>(null)
   useLayoutEffect(() => {
-    const el = bottomNavRef.current
-    if (!el || typeof ResizeObserver === 'undefined') return
-    const setVar = () => {
-      document.documentElement.style.setProperty('--bottom-nav-h', `${el.getBoundingClientRect().height}px`)
-    }
-    setVar()
-    const obs = new ResizeObserver(setVar)
-    obs.observe(el)
-    return () => obs.disconnect()
+    if (typeof ResizeObserver === 'undefined') return
+    const observers: ResizeObserver[] = []
+    ;([['--mobile-header-h', mobileHeaderRef], ['--bottom-nav-h', bottomNavRef]] as const).forEach(([varName, ref]) => {
+      const el = ref.current
+      if (!el) return
+      const setVar = () => {
+        document.documentElement.style.setProperty(varName, `${el.getBoundingClientRect().height}px`)
+      }
+      setVar()
+      const obs = new ResizeObserver(setVar)
+      obs.observe(el)
+      observers.push(obs)
+    })
+    return () => observers.forEach(o => o.disconnect())
   }, [])
 
   return (
@@ -1817,6 +1825,7 @@ export default function Home() {
 
           {/* Mobile header */}
           <header
+            ref={mobileHeaderRef}
             className="md:hidden fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur border-b border-[#E4E7EB] px-4 pb-3 flex items-center justify-between gap-2"
             style={{ paddingTop: 'max(0.75rem, var(--inset-top, 0px))' }}
           >
@@ -1949,7 +1958,7 @@ export default function Home() {
             </div>
           )}
 
-          <div className="pt-[calc(60px+var(--inset-top,0px))] md:pt-0 pb-24 md:pb-10 max-w-2xl mx-auto">
+          <div className="pt-[var(--mobile-header-h,calc(60px+var(--inset-top,0px)))] md:pt-0 pb-24 md:pb-10 max-w-2xl mx-auto">
 
             {/* ══ FEED ══ */}
             {activeTab === 'feed' && (
@@ -2687,7 +2696,7 @@ export default function Home() {
 
             {/* ══ MESSAGES ══ */}
             {activeTab === 'messages' && (
-              <div className="-mt-[calc(60px+var(--inset-top,0px))] md:mt-0 -mb-24 md:mb-0">
+              <div className="-mb-24 md:mb-0">
                 <h1 className="hidden md:block text-xl font-black px-4 md:px-6 pt-4 md:pt-6 text-[#0A0B0D]">{t('navMessages')}</h1>
                 <Messages profiles={profiles} fixedFee={fixedFee} pendingTarget={pendingDmTarget} onPendingHandled={() => setPendingDmTarget(null)} onUnreadCount={setUnreadMessages} />
               </div>

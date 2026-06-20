@@ -34,19 +34,22 @@ body {
 .pb-safe { padding-bottom: var(--inset-bottom); }
 .pt-safe { padding-top: var(--inset-top); }
 
-/* --bottom-nav-h is measured at runtime from the real <nav> element (see
-   app/page.tsx) — emoji glyphs in the icon row push the rendered height
-   well past any single hardcoded guess, and that guess drifts by device/
-   font. The calc(56px + inset) fallback only applies before JS measures
-   (or if JS never runs); it already includes the safe-area inset since
-   the measured --bottom-nav-h does too (nav has pb-safe applied). */
+/* --mobile-header-h and --bottom-nav-h are measured at runtime from the
+   real <header>/<nav> elements (see app/page.tsx) — emoji glyphs and
+   wallet-address text overshoot their CSS line-height, so a hardcoded
+   guess drifts from the actual rendered height by device/font. This isn't
+   cosmetic: on a real device the header rendered taller than the assumed
+   60px, which hid the Messages thread header (back button + peer address)
+   underneath it. The calc(...) fallbacks only apply before JS measures
+   (or if JS never runs); --bottom-nav-h's fallback already includes the
+   safe-area inset since the measured value does too (nav has pb-safe). */
 .mb-nav  { margin-bottom: var(--bottom-nav-h, calc(56px + var(--inset-bottom))); }
 
 /* Messages inbox/thread — fits exactly between the fixed mobile header and
    bottom nav (same dvh-based math as Reels) so the composer never scrolls
    off-screen; on desktop there's no fixed header/nav, so just clear the page header. */
 .messages-shell {
-  height: calc(100dvh - calc(60px + var(--inset-top, 0px)) - var(--bottom-nav-h, calc(56px + var(--inset-bottom, 0px))));
+  height: calc(100dvh - var(--mobile-header-h, calc(60px + var(--inset-top, 0px))) - var(--bottom-nav-h, calc(56px + var(--inset-bottom, 0px))));
 }
 @media (min-width: 768px) {
   .messages-shell { height: calc(100vh - 120px); }
