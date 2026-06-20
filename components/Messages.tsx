@@ -205,7 +205,15 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
     } catch {}
   }
 
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages.length])
+  // Scroll the message list's own scrollTop rather than endRef.scrollIntoView():
+  // scrollIntoView walks up every scrollable ancestor, including the page itself
+  // (the page is taller than the viewport because of the site footer below the
+  // tab content), so it was dragging the whole page down and hiding the thread
+  // header behind the fixed mobile header.
+  useEffect(() => {
+    const container = endRef.current?.parentElement
+    container?.scrollTo({ top: container.scrollHeight, behavior: 'smooth' })
+  }, [messages.length])
 
   const send = async () => {
     const dm = activeConvRef.current
