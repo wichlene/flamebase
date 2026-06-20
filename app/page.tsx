@@ -1896,45 +1896,55 @@ export default function Home() {
             </div>
           )}
 
-          {/* Wrong network banner */}
-          {isWrongNetwork && (
-            <div className="bg-amber-50 border-b border-amber-200 px-4 py-3 flex items-center justify-between">
-              <p className="text-amber-800 text-sm font-semibold">⚠️ {t('wrongNetwork')}</p>
-              <button onClick={() => switchChain({ chainId: base.id })}
-                className="bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors">
-                {t('switchToBase')}
-              </button>
-            </div>
+          <div className="pt-[var(--mobile-header-h,calc(60px+var(--inset-top,0px)))] md:pt-0">
+
+          {/* Banners are suppressed on the Messages tab: its mobile layout
+              (.messages-shell) is sized to fit exactly between the fixed
+              header and bottom nav, and any banner rendered above it here
+              would push its bottom edge down underneath the bottom nav. */}
+          {activeTab !== 'messages' && (
+            <>
+              {/* Wrong network banner */}
+              {isWrongNetwork && (
+                <div className="bg-amber-50 border-b border-amber-200 px-4 py-3 flex items-center justify-between">
+                  <p className="text-amber-800 text-sm font-semibold">⚠️ {t('wrongNetwork')}</p>
+                  <button onClick={() => switchChain({ chainId: base.id })}
+                    className="bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors">
+                    {t('switchToBase')}
+                  </button>
+                </div>
+              )}
+
+              {/* PWA install banner */}
+              {installPrompt && !installDismissed && (
+                <div className="md:hidden mx-3 mt-2 flex items-center gap-2 bg-[#F0F4FF] border border-[#D6E2FF] rounded-xl px-3 py-2.5 text-xs text-[#0052FF]">
+                  <span className="flex-shrink-0">📲</span>
+                  <span className="flex-1 font-semibold">Install FlameBase as an app</span>
+                  <button
+                    onClick={async () => {
+                      try { installPrompt.prompt(); await installPrompt.userChoice } catch {}
+                      setInstallPrompt(null)
+                    }}
+                    className="flex-shrink-0 bg-[#0052FF] text-white font-bold px-3 py-1.5 rounded-lg"
+                  >
+                    Install
+                  </button>
+                  <button onClick={() => setInstallDismissed(true)} className="flex-shrink-0 text-[#0052FF]/50 hover:text-[#0052FF] font-bold text-sm leading-none">✕</button>
+                </div>
+              )}
+
+              {/* Mobile wallet browser tip — only shown if not in a wallet's in-app browser */}
+              {!walletBannerDismissed && typeof window !== 'undefined' && !(window as any).ethereum && (
+                <div className="md:hidden mx-3 mt-2 flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-xl px-3 py-2.5 text-xs text-blue-800">
+                  <span className="flex-shrink-0 mt-0.5">💡</span>
+                  <span className="flex-1">{t('walletBrowserTip')}</span>
+                  <button onClick={() => setWalletBannerDismissed(true)} className="flex-shrink-0 text-blue-400 hover:text-blue-700 font-bold text-sm leading-none ml-1">✕</button>
+                </div>
+              )}
+            </>
           )}
 
-          {/* PWA install banner */}
-          {installPrompt && !installDismissed && (
-            <div className="md:hidden mx-3 mt-2 flex items-center gap-2 bg-[#F0F4FF] border border-[#D6E2FF] rounded-xl px-3 py-2.5 text-xs text-[#0052FF]">
-              <span className="flex-shrink-0">📲</span>
-              <span className="flex-1 font-semibold">Install FlameBase as an app</span>
-              <button
-                onClick={async () => {
-                  try { installPrompt.prompt(); await installPrompt.userChoice } catch {}
-                  setInstallPrompt(null)
-                }}
-                className="flex-shrink-0 bg-[#0052FF] text-white font-bold px-3 py-1.5 rounded-lg"
-              >
-                Install
-              </button>
-              <button onClick={() => setInstallDismissed(true)} className="flex-shrink-0 text-[#0052FF]/50 hover:text-[#0052FF] font-bold text-sm leading-none">✕</button>
-            </div>
-          )}
-
-          {/* Mobile wallet browser tip — only shown if not in a wallet's in-app browser */}
-          {!walletBannerDismissed && typeof window !== 'undefined' && !(window as any).ethereum && (
-            <div className="md:hidden mx-3 mt-2 flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-xl px-3 py-2.5 text-xs text-blue-800">
-              <span className="flex-shrink-0 mt-0.5">💡</span>
-              <span className="flex-1">{t('walletBrowserTip')}</span>
-              <button onClick={() => setWalletBannerDismissed(true)} className="flex-shrink-0 text-blue-400 hover:text-blue-700 font-bold text-sm leading-none ml-1">✕</button>
-            </div>
-          )}
-
-          <div className="pt-[var(--mobile-header-h,calc(60px+var(--inset-top,0px)))] md:pt-0 pb-24 md:pb-10 max-w-2xl mx-auto">
+          <div className="pb-24 md:pb-10 max-w-2xl mx-auto">
 
             {/* ══ FEED ══ */}
             {activeTab === 'feed' && (
@@ -3088,6 +3098,7 @@ export default function Home() {
               </div>
             </div>
           )}
+          </div>
           </div>
 
           {/* Footer */}

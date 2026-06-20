@@ -61,6 +61,7 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
   const [messages, setMessages] = useState<Msg[]>([])
   const [draft, setDraft] = useState('')
   const [search, setSearch] = useState('')
+  const [listSearch, setListSearch] = useState('')
   const [showNew, setShowNew] = useState(false)
   const [sending, setSending] = useState(false)
   const endRef = useRef<HTMLDivElement>(null)
@@ -230,25 +231,42 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
   const seenMap = getSeenMap()
   const activePeer = activeId ? peerOf(activeId) : ''
   const activePeerLabel = activeId ? labelFor(activePeer) : ''
-  const visibleConvs = conversations.filter(c => !hiddenConvs.has(c.convId))
+  const visibleConvs = conversations
+    .filter(c => !hiddenConvs.has(c.convId))
+    .filter(c => {
+      if (!listSearch) return true
+      const q = listSearch.toLowerCase()
+      return labelFor(c.peer).toLowerCase().includes(q) || c.peer.toLowerCase().includes(q)
+    })
 
   return (
     <div className="messages-shell flex overflow-hidden">
       {/* Sidebar — full width on mobile until a thread is opened, fixed column on desktop */}
       <div className={`${activeId ? 'hidden md:flex' : 'flex'} w-full md:w-72 md:border-r border-[#EEF1F5] flex-col min-h-0`}>
-        <div className="p-3 border-b border-[#EEF1F5] flex items-center justify-between flex-shrink-0">
-          <h3 className="font-black text-[#0A0B0D]">Messages</h3>
-          <button onClick={() => setShowNew(true)} className="bg-[#0052FF] hover:bg-[#1652F0] text-white px-3 py-1.5 rounded-lg text-xs font-bold">+ New</button>
+        <div className="px-4 pt-3 pb-2 flex items-center justify-between flex-shrink-0">
+          <h3 className="font-black text-lg text-[#0A0B0D]">Messages</h3>
+          <button onClick={() => setShowNew(true)} aria-label="New message"
+            className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[#F0F2F5] text-[#0A0B0D] transition-colors flex-shrink-0">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+              <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+            </svg>
+          </button>
         </div>
-        <div className="overflow-y-auto flex-1 min-h-0">
+        <div className="px-3 pb-2 flex-shrink-0">
+          <input value={listSearch} onChange={e => setListSearch(e.target.value)}
+            placeholder="Search messages"
+            className="w-full bg-[#F0F2F5] rounded-full px-4 py-2 text-sm placeholder:text-[#8A919E] focus:outline-none" />
+        </div>
+        <div className="overflow-y-auto flex-1 min-h-0 px-2">
           {visibleConvs.length === 0 ? (
-            <p className="p-4 text-xs text-[#8A919E] text-center">No conversations yet</p>
+            <p className="p-4 text-xs text-[#8A919E] text-center">{listSearch ? 'No matches' : 'No conversations yet'}</p>
           ) : visibleConvs.map(c => {
             const isUnread = c.lastSentAt > 0 && c.lastSentAt > (seenMap[c.convId] ?? 0)
             const label = labelFor(c.peer)
             return (
-              <div key={c.convId} className={`group flex items-center border-b border-[#F7F9FC] hover:bg-[#F7F9FC] transition-colors ${activeId === c.convId ? 'bg-[#E6EEFF]' : ''}`}>
-                <button onClick={() => openConversation(c.convId)} className="flex-1 text-left p-3 flex items-center gap-3 min-w-0">
+              <div key={c.convId} className={`group flex items-center rounded-2xl transition-colors ${activeId === c.convId ? 'bg-[#F0F2F5]' : 'hover:bg-[#F7F9FC]'}`}>
+                <button onClick={() => openConversation(c.convId)} className="flex-1 text-left px-2 py-2.5 flex items-center gap-3 min-w-0">
                   <Avatar addr={c.peer} profiles={profiles} size="md" />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
@@ -289,9 +307,14 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
                 ←
               </button>
               <Avatar addr={activePeer} profiles={profiles} size="sm" />
-              <p className="font-bold text-sm text-[#0A0B0D] truncate">{activePeerLabel}</p>
+              <div className="min-w-0">
+                <p className="font-bold text-sm text-[#0A0B0D] truncate leading-tight">{activePeerLabel}</p>
+                {profiles[activePeer]?.username && (
+                  <p className="text-[11px] text-[#8A919E] truncate leading-tight">{activePeer.slice(0, 6)}…{activePeer.slice(-4)}</p>
+                )}
+              </div>
             </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-2 min-h-0">
+            <div className="flex-1 overflow-y-auto p-4 space-y-1.5 min-h-0">
               {messages.length === 0 && (
                 <p className="text-center text-xs text-[#8A919E] mt-4">No messages yet. Say hi 👋</p>
               )}
@@ -299,7 +322,8 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
                 const mine = m.from.toLowerCase() === me
                 return (
                   <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[70%] px-3 py-2 rounded-2xl text-sm ${mine ? 'bg-[#0052FF] text-white' : 'bg-[#F0F2F5] text-[#0A0B0D]'}`}>
+                    <div title={new Date(m.ts).toLocaleString()}
+                      className={`max-w-[70%] px-3.5 py-2 rounded-[20px] text-sm break-words ${mine ? 'bg-[#0052FF] text-white' : 'bg-[#F0F2F5] text-[#0A0B0D]'}`}>
                       {m.text}
                     </div>
                   </div>
@@ -307,14 +331,16 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
               })}
               <div ref={endRef} />
             </div>
-            <div className="border-t border-[#EEF1F5] p-3 flex gap-2 flex-shrink-0 pb-safe">
-              <input value={draft} onChange={e => setDraft(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
-                placeholder="Type a message…"
-                className="flex-1 bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-[#0052FF]" />
-              <button onClick={send} disabled={sending || !draft.trim()}
-                className="bg-[#0052FF] hover:bg-[#1652F0] text-white px-5 py-2 rounded-xl font-bold text-sm disabled:opacity-40 transition-colors flex-shrink-0">
-                Send
+            <div className="p-3 flex items-center gap-2 flex-shrink-0 pb-safe">
+              <div className="flex-1 flex items-center bg-[#F0F2F5] rounded-full px-4 focus-within:ring-1 focus-within:ring-[#0052FF]">
+                <input value={draft} onChange={e => setDraft(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
+                  placeholder="Message…"
+                  className="flex-1 bg-transparent py-2.5 text-sm focus:outline-none min-w-0" />
+              </div>
+              <button onClick={send} disabled={sending || !draft.trim()} aria-label="Send"
+                className="w-10 h-10 flex items-center justify-center rounded-full text-[#0052FF] disabled:text-[#C7CCD4] hover:bg-[#F0F2F5] disabled:hover:bg-transparent transition-colors flex-shrink-0">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" /></svg>
               </button>
             </div>
           </>
