@@ -2,22 +2,39 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useAccount, useWalletClient } from 'wagmi'
-import { askPremium } from '../lib/premiumAI'
+import { askPremium, type AgentReply } from '../lib/premiumAI'
+import { executeAction, describeAction, validateAction, type AgentAction } from '../lib/agentExec'
 
-type Message = { role: 'user' | 'assistant'; content: string; txHash?: string }
+type ActionState = 'pending' | 'running' | 'done' | 'cancelled' | 'error'
+type Message = {
+  role: 'user' | 'assistant'
+  content: string
+  paymentTx?: string // premium $0.01 fee settlement tx
+  action?: AgentAction
+  actionState?: ActionState
+  actionTx?: string // executed action tx
+  actionError?: string
+}
 
 const SUGGESTIONS = [
+  'Send 0.001 ETH to 0x…',
   'What is Base blockchain?',
   'How do I earn ETH on FlameBase?',
   'What are the post fees?',
-  'Explain XMTP messaging',
 ]
+
+function friendlyError(e: unknown): string {
+  const msg = e instanceof Error ? e.message : ''
+  if (/reject|denied|cancel|user rejected/i.test(msg)) return '❌ Cancelled in wallet.'
+  if (/insufficient|balance|exceeds/i.test(msg)) return '💸 Not enough balance for this on Base.'
+  return 'Something went wrong. Try again.'
+}
 
 export default function AIChat() {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
-      content: "Hey! I'm FlameBase AI 🤖 Powered by Llama 3 via Groq (free). Ask me anything about Web3, Base, or how to use this platform!",
+      content: "Hey! I'm FlameBase Agent 🤖 I can answer questions AND do on-chain actions on Base — like sending ETH or USDC. Just tell me what to do!",
     },
   ])
   const [input, setInput] = useState('')
@@ -29,50 +46,82 @@ export default function AIChat() {
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages.length])
+  }, [messages])
+
+  const push = (m: Message) => setMessages(prev => [...prev, m])
+  const updateAt = (i: number, patch: Partial<Message>) =>
+    setMessages(prev => prev.map((m, idx) => (idx === i ? { ...m, ...patch } : m)))
+
+  const handleReply = (reply: AgentReply, paymentTx?: string) => {
+    if (reply.type === 'error') {
+      push({ role: 'assistant', content: reply.content || 'Sorry, something went wrong.', paymentTx })
+    } else if (reply.type === 'action') {
+      const action: AgentAction = { tool: reply.tool, args: reply.args }
+      const err = validateAction(action)
+      if (err) {
+        push({ role: 'assistant', content: `${reply.note ? reply.note + '\n\n' : ''}⚠️ ${err}`, paymentTx })
+      } else {
+        push({
+          role: 'assistant',
+          content: reply.note || `I'll do this for you:`,
+          action,
+          actionState: 'pending',
+          paymentTx,
+        })
+      }
+    } else {
+      push({ role: 'assistant', content: reply.content || 'Sorry, something went wrong.', paymentTx })
+    }
+  }
 
   const send = async (text?: string) => {
     const content = (text ?? input).trim()
     if (!content || loading) return
 
-    // Premium requires a connected wallet to sign the payment.
     if (premium && (!isConnected || !walletClient)) {
-      setMessages(prev => [...prev, { role: 'assistant', content: '🔌 Connect your wallet first to use Premium AI (pays $0.01 USDC on Base).' }])
+      push({ role: 'assistant', content: '🔌 Connect your wallet first to use Premium AI (pays $0.01 USDC on Base).' })
       return
     }
 
-    const userMsg: Message = { role: 'user', content }
-    const next = [...messages, userMsg]
+    const next = [...messages, { role: 'user' as const, content }]
     setMessages(next)
     setInput('')
     setLoading(true)
     try {
+      const history = next.map(({ role, content }) => ({ role, content }))
       if (premium) {
-        const r = await askPremium(walletClient!, next.map(({ role, content }) => ({ role, content })))
-        if (r.content) {
-          setMessages(prev => [...prev, { role: 'assistant', content: r.content!, txHash: r.txHash }])
-        } else {
-          setMessages(prev => [...prev, { role: 'assistant', content: r.status === 402 ? '⚠️ Payment was required but did not complete.' : 'Sorry, something went wrong.' }])
-        }
+        const r = await askPremium(walletClient!, history)
+        if (r.reply) handleReply(r.reply, r.paymentTx)
+        else push({ role: 'assistant', content: r.status === 402 ? '⚠️ Payment required but did not complete.' : 'Sorry, something went wrong.' })
       } else {
-        const res = await fetch('/api/ai', {
+        const res = await fetch('/api/agent', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages: next, type: 'chat' }),
+          body: JSON.stringify({ messages: history }),
         })
-        const data = await res.json()
-        setMessages(prev => [...prev, { role: 'assistant', content: data.content || 'Sorry, something went wrong.' }])
+        const reply = (await res.json()) as AgentReply
+        handleReply(reply)
       }
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : ''
-      const friendly = /reject|denied|cancel/i.test(msg)
-        ? '❌ Payment cancelled.'
-        : /insufficient|balance|transfer amount exceeds/i.test(msg)
-          ? '💸 Not enough USDC on Base in your wallet (need $0.01).'
-          : 'Connection error. Try again.'
-      setMessages(prev => [...prev, { role: 'assistant', content: friendly }])
+      push({ role: 'assistant', content: friendlyError(e) })
     }
     setLoading(false)
+  }
+
+  const confirmAction = async (i: number) => {
+    const m = messages[i]
+    if (!m.action) return
+    if (!isConnected || !walletClient) {
+      updateAt(i, { actionError: 'Connect your wallet first.' })
+      return
+    }
+    updateAt(i, { actionState: 'running', actionError: undefined })
+    try {
+      const hash = await executeAction(m.action, walletClient)
+      updateAt(i, { actionState: 'done', actionTx: hash })
+    } catch (e) {
+      updateAt(i, { actionState: 'error', actionError: friendlyError(e) })
+    }
   }
 
   return (
@@ -83,8 +132,8 @@ export default function AIChat() {
           🤖
         </div>
         <div className="flex-1">
-          <h2 className="font-black text-[#0A0B0D]">FlameBase AI</h2>
-          <p className="text-xs text-[#5B6271]">{premium ? 'Premium · deeper answers · $0.01' : 'Llama 3 · Groq · Free'}</p>
+          <h2 className="font-black text-[#0A0B0D]">FlameBase Agent</h2>
+          <p className="text-xs text-[#5B6271]">{premium ? 'Premium · deeper + on-chain actions · $0.01' : 'Free · chat + on-chain actions'}</p>
         </div>
         {/* FREE ⟷ PREMIUM toggle */}
         <div className="flex items-center bg-[#F0F2F5] rounded-full p-1 text-sm font-bold shadow-sm">
@@ -114,11 +163,44 @@ export default function AIChat() {
                 : 'bg-[#F0F2F5] text-[#0A0B0D] rounded-bl-sm'
             }`}>
               {m.content}
-              {m.txHash && (
-                <a href={`https://basescan.org/tx/${m.txHash}`} target="_blank" rel="noopener noreferrer"
-                  className="block mt-2 text-[11px] font-semibold text-[#0052FF] hover:underline">
+
+              {/* Premium fee receipt */}
+              {m.paymentTx && (
+                <a href={`https://basescan.org/tx/${m.paymentTx}`} target="_blank" rel="noopener noreferrer"
+                  className="block mt-2 text-[11px] font-semibold text-[#7B3FE4] hover:underline">
                   ✨ Paid $0.01 · view tx ↗
                 </a>
+              )}
+
+              {/* Action card */}
+              {m.action && (
+                <div className="mt-3 bg-white border border-[#E4E7EB] rounded-xl p-3">
+                  <p className="text-xs font-bold text-[#0A0B0D] mb-2">⚡ {describeAction(m.action)}</p>
+                  {(!m.actionState || m.actionState === 'pending') && (
+                    <div className="flex gap-2">
+                      <button onClick={() => confirmAction(i)}
+                        className="flex-1 bg-[#0052FF] hover:bg-[#1652F0] text-white text-xs font-bold py-2 rounded-lg transition-colors">
+                        Confirm & Send
+                      </button>
+                      <button onClick={() => updateAt(i, { actionState: 'cancelled' })}
+                        className="px-3 bg-[#F0F2F5] hover:bg-[#E4E7EB] text-[#5B6271] text-xs font-bold py-2 rounded-lg transition-colors">
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+                  {m.actionState === 'running' && <p className="text-xs text-[#8A919E]">⏳ Confirm in your wallet…</p>}
+                  {m.actionState === 'done' && (
+                    <a href={`https://basescan.org/tx/${m.actionTx}`} target="_blank" rel="noopener noreferrer"
+                      className="text-xs font-bold text-green-600 hover:underline">✅ Done · view tx ↗</a>
+                  )}
+                  {m.actionState === 'cancelled' && <p className="text-xs text-[#8A919E]">Cancelled.</p>}
+                  {m.actionState === 'error' && (
+                    <div>
+                      <p className="text-xs text-red-500 mb-2">{m.actionError}</p>
+                      <button onClick={() => confirmAction(i)} className="text-xs font-bold text-[#0052FF] hover:underline">Retry</button>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           </div>
@@ -159,7 +241,7 @@ export default function AIChat() {
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
-          placeholder={premium ? 'Premium question ($0.01 USDC)…' : 'Ask anything…'}
+          placeholder={premium ? 'Ask or command ($0.01 USDC)…' : 'Ask or command the agent…'}
           className="flex-1 bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#0052FF]"
         />
         <button onClick={() => send()} disabled={loading || !input.trim()}
