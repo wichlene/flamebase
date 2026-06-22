@@ -10,11 +10,10 @@ import { BUILDER_CODE, declareBuilderCodeExtension } from '@x402/extensions/buil
 // transaction is attributed to FlameBase for Base builder rewards.
 export const FLAMEBASE_BUILDER_CODE = process.env.BUILDER_CODE || 'bc_m8fvx957'
 
-// Address that receives the x402 micropayments. Must be set in the
-// environment before going live; the zero-address fallback only exists so the
-// 402 challenge can be exercised locally.
+// Address that receives the x402 micropayments (FlameBase main wallet on
+// Base). Public on-chain data; env override supported.
 export const X402_PAY_TO =
-  process.env.X402_PAY_TO || '0x0000000000000000000000000000000000000000'
+  process.env.X402_PAY_TO || '0xa77A5D4D37d6F39C20C2441295da9fA60Ab9fD69'
 
 // Base mainnet.
 export const X402_NETWORK = 'eip155:8453' as const
