@@ -8,13 +8,10 @@ import { ExactEvmScheme } from '@x402/evm/exact/client'
 // needs address + signTypedData (USDC supports EIP-3009 transferWithAuthorization).
 type WalletLike = {
   account?: { address: `0x${string}` } | undefined
-  signTypedData: (args: {
-    account: { address: `0x${string}` }
-    domain: Record<string, unknown>
-    types: Record<string, unknown>
-    primaryType: string
-    message: Record<string, unknown>
-  }) => Promise<`0x${string}`>
+  // viem's WalletClient.signTypedData is a deeply generic method; accept it
+  // loosely so a wagmi wallet client satisfies this type at the call site.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  signTypedData: (args: any) => Promise<`0x${string}`>
 }
 
 export type PremiumResult = {
