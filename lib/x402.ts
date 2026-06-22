@@ -20,10 +20,11 @@ export const X402_NETWORK = 'eip155:8453' as const
 
 // The CDP facilitator settles payments on Base. It reads CDP_API_KEY_ID /
 // CDP_API_KEY_SECRET from the environment (required for mainnet settlement).
-// Syncing with the facilitator on startup is disabled by default so the 402
-// challenge can be generated without network/credentials; set
-// X402_SYNC_FACILITATOR=true in production to pre-sync.
-export const x402SyncOnStart = process.env.X402_SYNC_FACILITATOR === 'true'
+// The resource server must sync the facilitator's supported kinds before it
+// can issue 402 challenges or settle, so this is ON by default. It can be
+// disabled with X402_SYNC_FACILITATOR=false (e.g. in offline/test sandboxes
+// where the facilitator is unreachable).
+export const x402SyncOnStart = process.env.X402_SYNC_FACILITATOR !== 'false'
 
 let _server: x402ResourceServer | null = null
 
