@@ -14,9 +14,15 @@ type WalletLike = {
   signTypedData: (args: any) => Promise<`0x${string}`>
 }
 
+export type AgentReply =
+  | { type: 'text'; content: string }
+  | { type: 'action'; tool: string; args: Record<string, unknown>; note?: string }
+  | { type: 'error'; content: string }
+
 export type PremiumResult = {
-  content?: string
-  txHash?: string
+  reply?: AgentReply
+  // x402 settlement tx for the $0.01 premium fee.
+  paymentTx?: string
   status: number
 }
 
@@ -71,11 +77,11 @@ export async function askPremium(
   })
 
   const data = await res.json().catch(() => ({}))
-  let txHash: string | undefined
+  let paymentTx: string | undefined
   if (settlement) {
     try {
-      txHash = decodePaymentResponseHeader(settlement).transaction
+      paymentTx = decodePaymentResponseHeader(settlement).transaction
     } catch {}
   }
-  return { content: data.content, txHash, status: res.status }
+  return { reply: data as AgentReply, paymentTx, status: res.status }
 }
