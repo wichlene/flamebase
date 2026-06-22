@@ -22,7 +22,7 @@ export default function AIChat() {
   ])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
-  const [premium, setPremium] = useState(false)
+  const [premium, setPremium] = useState(true)
   const endRef = useRef<HTMLDivElement>(null)
   const { isConnected } = useAccount()
   const { data: walletClient } = useWalletClient()
@@ -87,13 +87,13 @@ export default function AIChat() {
           <p className="text-xs text-[#5B6271]">{premium ? 'Premium · deeper answers · $0.01' : 'Llama 3 · Groq · Free'}</p>
         </div>
         {/* FREE ⟷ PREMIUM toggle */}
-        <div className="flex items-center bg-[#F0F2F5] rounded-full p-0.5 text-[10px] font-bold">
+        <div className="flex items-center bg-[#F0F2F5] rounded-full p-1 text-sm font-bold shadow-sm">
           <button onClick={() => setPremium(false)}
-            className={`px-2.5 py-1 rounded-full transition-colors ${!premium ? 'bg-green-100 text-green-700' : 'text-[#8A919E]'}`}>
+            className={`px-4 py-2 rounded-full transition-colors ${!premium ? 'bg-green-100 text-green-700' : 'text-[#8A919E]'}`}>
             FREE
           </button>
           <button onClick={() => setPremium(true)}
-            className={`px-2.5 py-1 rounded-full transition-colors ${premium ? 'bg-gradient-to-r from-[#7B3FE4] to-[#0052FF] text-white' : 'text-[#8A919E]'}`}>
+            className={`px-4 py-2 rounded-full transition-colors ${premium ? 'bg-gradient-to-r from-[#7B3FE4] to-[#0052FF] text-white shadow' : 'text-[#8A919E]'}`}>
             ✨ PREMIUM
           </button>
         </div>
