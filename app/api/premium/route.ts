@@ -60,7 +60,7 @@ export const POST = withX402(
       price: '$0.01',
       network: X402_NETWORK,
     },
-    description: 'FlameBase AI Premium — one in-depth AI completion',
+    description: 'FlameBase AI Premium - one in-depth AI completion',
     mimeType: 'application/json',
     extensions: builderCodeExtension(),
   },
