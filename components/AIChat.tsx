@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { useAccount, useWalletClient } from 'wagmi'
+import { useAccount, useWalletClient, usePublicClient } from 'wagmi'
 import { askPremium, type AgentReply } from '../lib/premiumAI'
 import { executeAction, describeAction, validateAction, type AgentAction } from '../lib/agentExec'
 
@@ -18,9 +18,9 @@ type Message = {
 
 const SUGGESTIONS = [
   'Send 0.001 ETH to 0x…',
-  'What is Base blockchain?',
-  'How do I earn ETH on FlameBase?',
-  'What are the post fees?',
+  'Like the latest post',
+  'Post: gm FlameBase ☀️',
+  'Do my daily check-in',
 ]
 
 function friendlyError(e: unknown): string {
@@ -34,7 +34,7 @@ export default function AIChat() {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
-      content: "Hey! I'm FlameBase Agent 🤖 I can answer questions AND do on-chain actions on Base — like sending ETH or USDC. Just tell me what to do!",
+      content: "Hey! I'm FlameBase Agent 🤖 I can answer questions AND do on-chain actions on Base — send ETH/USDC, like/tip/comment/post, check in, deploy a token, or run a DAO proposal/vote. Just tell me what to do!",
     },
   ])
   const [input, setInput] = useState('')
@@ -43,6 +43,7 @@ export default function AIChat() {
   const endRef = useRef<HTMLDivElement>(null)
   const { isConnected } = useAccount()
   const { data: walletClient } = useWalletClient()
+  const publicClient = usePublicClient()
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -111,13 +112,13 @@ export default function AIChat() {
   const confirmAction = async (i: number) => {
     const m = messages[i]
     if (!m.action) return
-    if (!isConnected || !walletClient) {
+    if (!isConnected || !walletClient || !publicClient) {
       updateAt(i, { actionError: 'Connect your wallet first.' })
       return
     }
     updateAt(i, { actionState: 'running', actionError: undefined })
     try {
-      const hash = await executeAction(m.action, walletClient)
+      const hash = await executeAction(m.action, walletClient, publicClient)
       updateAt(i, { actionState: 'done', actionTx: hash })
     } catch (e) {
       updateAt(i, { actionState: 'error', actionError: friendlyError(e) })
