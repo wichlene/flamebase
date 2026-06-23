@@ -35,12 +35,24 @@ export type PremiumResult = {
  * authorization (gasless — the facilitator submits the settlement tx, which is
  * attributed to FlameBase via its Builder Code).
  */
+// FlameBase's own payout wallet (mirrors X402_PAY_TO in lib/x402.ts — public
+// on-chain data, duplicated here since that module pulls in server-only x402
+// packages that shouldn't ship to the client bundle). A wallet can't pay
+// itself: USDC's transferWithAuthorization is a no-op transfer in that case,
+// and the facilitator's settlement step chokes on it (comes back as an empty
+// 402 with no reason). Catch it client-side with an accurate message instead
+// of letting it look like a missing-USDC failure.
+const X402_PAY_TO = (process.env.NEXT_PUBLIC_X402_PAY_TO || '0xa77A5D4D37d6F39C20C2441295da9fA60Ab9fD69').toLowerCase()
+
 export async function askPremium(
   walletClient: WalletLike,
   messages: { role: 'user' | 'assistant'; content: string }[],
 ): Promise<PremiumResult> {
   const account = walletClient.account
   if (!account) throw new Error('Wallet not connected')
+  if (account.address.toLowerCase() === X402_PAY_TO) {
+    return { status: 0, error: "this wallet is FlameBase's own payout wallet — it can't pay itself. Connect a different wallet to use the agent." }
+  }
 
   const signer = {
     address: account.address,

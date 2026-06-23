@@ -94,9 +94,14 @@ export default function AIChat() {
         handleReply(r.reply, r.paymentTx)
       } else {
         // The wallet signed but the $0.01 couldn't be settled (most often: no
-        // USDC on Base, or a facilitator hiccup). Surface why so the user can fix it.
-        const why = r.error ? ` (${r.error})` : ''
-        push({ role: 'assistant', content: `⚠️ Payment didn't go through${why}. Make sure you have a little USDC on Base, then try again.` })
+        // USDC on Base, or a facilitator hiccup) — show the real reason if we
+        // have one instead of guessing.
+        push({
+          role: 'assistant',
+          content: r.error
+            ? `⚠️ Payment didn't go through: ${r.error}`
+            : "⚠️ Payment didn't go through. Make sure you have a little USDC on Base, then try again.",
+        })
       }
     } catch (e: unknown) {
       push({ role: 'assistant', content: friendlyError(e) })
