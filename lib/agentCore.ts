@@ -58,7 +58,7 @@ const TOOLS = [
       parameters: {
         type: 'object',
         properties: {
-          postId: { type: 'string', description: 'Numeric post ID. Omit for "the/a post" with no specific ID — resolves to the latest post.' },
+          postId: { type: ['string', 'null'], description: 'Numeric post ID. Use null for "the/a post" with no specific ID — resolves to the latest post.' },
         },
       },
     },
@@ -71,7 +71,7 @@ const TOOLS = [
       parameters: {
         type: 'object',
         properties: {
-          postId: { type: 'string', description: 'Numeric post ID. Omit to mean the latest post.' },
+          postId: { type: ['string', 'null'], description: 'Numeric post ID. Use null to mean the latest post.' },
           amount: { type: 'string', description: 'Human-readable ETH amount to tip, e.g. "0.001"' },
         },
         required: ['amount'],
@@ -86,7 +86,7 @@ const TOOLS = [
       parameters: {
         type: 'object',
         properties: {
-          postId: { type: 'string', description: 'Numeric post ID. Omit to mean the latest post.' },
+          postId: { type: ['string', 'null'], description: 'Numeric post ID. Use null to mean the latest post.' },
           text: { type: 'string', description: 'Comment text' },
         },
         required: ['text'],
@@ -186,7 +186,7 @@ const TOOLS = [
         type: 'object',
         properties: {
           title: { type: 'string', description: 'Proposal title' },
-          description: { type: 'string', description: 'Proposal description' },
+          description: { type: ['string', 'null'], description: 'Proposal description (use null if none given)' },
         },
         required: ['title'],
       },

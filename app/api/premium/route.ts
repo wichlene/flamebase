@@ -15,7 +15,11 @@ async function handler(request: NextRequest): Promise<NextResponse> {
   try {
     const { messages } = await request.json()
     const reply = await runAgent(messages ?? [], { maxTokens: 1500 })
-    return NextResponse.json(reply)
+    // Don't charge the $0.01 for a failed completion: returning a non-2xx makes
+    // the x402 layer cancel settlement (it only settles on a successful handler
+    // response), so the user keeps their USDC when the agent errors out.
+    const status = reply.type === 'error' ? 502 : 200
+    return NextResponse.json(reply, { status })
   } catch (e: any) {
     return NextResponse.json({ type: 'error', content: e?.message || 'Request failed' }, { status: 500 })
   }

@@ -216,15 +216,15 @@ export function validateAction(a: AgentAction): string | null {
       return null
     }
     case 'like_post':
-      if (args.postId !== undefined && args.postId !== '' && !isNumeric(args.postId)) return 'Invalid post ID.'
+      if (args.postId != null && args.postId !== '' && !isNumeric(args.postId)) return 'Invalid post ID.'
       return null
     case 'tip_post': {
-      if (args.postId !== undefined && args.postId !== '' && !isNumeric(args.postId)) return 'Invalid post ID.'
+      if (args.postId != null && args.postId !== '' && !isNumeric(args.postId)) return 'Invalid post ID.'
       if (!args.amount || isNaN(Number(args.amount)) || Number(args.amount) <= 0) return 'Invalid tip amount.'
       return null
     }
     case 'comment_post': {
-      if (args.postId !== undefined && args.postId !== '' && !isNumeric(args.postId)) return 'Invalid post ID.'
+      if (args.postId != null && args.postId !== '' && !isNumeric(args.postId)) return 'Invalid post ID.'
       if (!args.text || typeof args.text !== 'string' || !args.text.trim()) return 'Comment text is required.'
       return null
     }
