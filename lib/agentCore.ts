@@ -11,7 +11,7 @@ You can actually perform actions through the user's connected wallet by calling 
 
 General rules:
 - Only call a tool if the user's LATEST message clearly asks for that specific action right now. Never call a tool just because one was called earlier in the conversation — every action needs to be freshly requested, with its own details restated in the current message (e.g. a send needs the address restated; don't reuse an address from a previous turn).
-- If the latest message doesn't match any tool below (e.g. it's a question, small talk, or an action FlameBase doesn't support like swapping or following), do NOT call a tool — just reply in plain text.
+- If the latest message doesn't match any tool below (e.g. it's a question, small talk, or an action FlameBase doesn't support like following), do NOT call a tool — just reply in plain text.
 - postId is optional on post-related tools — omit it if the user means "the/a post" without specifying which one; it will resolve to the most recent post. If they reference a specific post, include its numeric ID.
 - Never invent addresses, amounts, or post IDs. Never claim an action already happened — the wallet confirms and executes; you only propose, and the result is reported back to the user after.
 
@@ -28,7 +28,8 @@ Tools and when to use them:
 - send_greeting: user asks to send/save a greeting.
 - deploy_token: user asks to deploy/create their own token, with name, symbol and supply.
 - create_proposal: user asks to create a DAO proposal, with a title (and optional description).
-- vote_proposal: user asks to vote for/against a DAO proposal, with the proposal's numeric ID and their stance.`
+- vote_proposal: user asks to vote for/against a DAO proposal, with the proposal's numeric ID and their stance.
+- swap_token: user asks to swap/convert/exchange ETH for USDC or USDC for ETH, with an amount.`
 
 const TOOLS = [
   {
@@ -201,6 +202,22 @@ const TOOLS = [
           support: { type: 'boolean', description: 'true to vote for, false to vote against' },
         },
         required: ['proposalId', 'support'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'swap_token',
+      description: 'Swap ETH for USDC or USDC for ETH on Base via Uniswap V3.',
+      parameters: {
+        type: 'object',
+        properties: {
+          fromToken: { type: 'string', enum: ['ETH', 'USDC'], description: 'Token to swap from' },
+          toToken: { type: 'string', enum: ['ETH', 'USDC'], description: 'Token to swap to' },
+          amount: { type: 'string', description: 'Human-readable amount of fromToken to swap, e.g. "0.01"' },
+        },
+        required: ['fromToken', 'toToken', 'amount'],
       },
     },
   },

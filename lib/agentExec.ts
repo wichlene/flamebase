@@ -20,11 +20,100 @@ type WalletLike = {
 type PublicClientLike = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   readContract: (args: any) => Promise<any>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  waitForTransactionReceipt?: (args: any) => Promise<any>
 }
 
 const DEFAULT_LIKE_PRICE = parseEther('0.0001')
 const DEFAULT_COMMENT_PRICE = parseEther('0.0003')
 const DEFAULT_POST_PRICE = parseEther('0.0002')
+
+// Uniswap V3 on Base (official addresses from Uniswap/docs Base-Deployments.md).
+const WETH_ADDRESS = '0x4200000000000000000000000000000000000006' as const
+const SWAP_ROUTER_ADDRESS = '0x2626664c2603336E57B271c5C0b26F421741e481' as const
+const QUOTER_ADDRESS = '0x3d4e44Eb1374240CE5F1B871ab261CD16335B76a' as const
+const SWAP_FEE_TIERS = [500, 3000, 10000] as const
+const SWAP_SLIPPAGE_BPS = 100n // 1%
+
+const QUOTER_V2_ABI = [{
+  type: 'function', name: 'quoteExactInputSingle', stateMutability: 'nonpayable',
+  inputs: [{
+    name: 'params', type: 'tuple', components: [
+      { name: 'tokenIn', type: 'address' },
+      { name: 'tokenOut', type: 'address' },
+      { name: 'amountIn', type: 'uint256' },
+      { name: 'fee', type: 'uint24' },
+      { name: 'sqrtPriceLimitX96', type: 'uint160' },
+    ],
+  }],
+  outputs: [
+    { name: 'amountOut', type: 'uint256' },
+    { name: 'sqrtPriceX96After', type: 'uint160' },
+    { name: 'initializedTicksCrossed', type: 'uint32' },
+    { name: 'gasEstimate', type: 'uint256' },
+  ],
+}] as const
+
+const SWAP_ROUTER_ABI = [
+  {
+    type: 'function', name: 'exactInputSingle', stateMutability: 'payable',
+    inputs: [{
+      name: 'params', type: 'tuple', components: [
+        { name: 'tokenIn', type: 'address' },
+        { name: 'tokenOut', type: 'address' },
+        { name: 'fee', type: 'uint24' },
+        { name: 'recipient', type: 'address' },
+        { name: 'amountIn', type: 'uint256' },
+        { name: 'amountOutMinimum', type: 'uint256' },
+        { name: 'sqrtPriceLimitX96', type: 'uint160' },
+      ],
+    }],
+    outputs: [{ name: 'amountOut', type: 'uint256' }],
+  },
+  {
+    type: 'function', name: 'unwrapWETH9', stateMutability: 'payable',
+    inputs: [{ name: 'amountMinimum', type: 'uint256' }, { name: 'recipient', type: 'address' }],
+    outputs: [],
+  },
+  {
+    type: 'function', name: 'multicall', stateMutability: 'payable',
+    inputs: [{ name: 'data', type: 'bytes[]' }],
+    outputs: [{ name: '', type: 'bytes[]' }],
+  },
+] as const
+
+function tokenAddress(symbol: string): `0x${string}` {
+  if (symbol === 'ETH') return WETH_ADDRESS
+  if (symbol === 'USDC') return USDC_ADDRESS
+  throw new Error('Unsupported token (ETH or USDC only).')
+}
+
+function tokenDecimals(symbol: string): number {
+  return symbol === 'USDC' ? 6 : 18
+}
+
+async function bestSwapQuote(
+  publicClient: PublicClientLike,
+  tokenIn: `0x${string}`,
+  tokenOut: `0x${string}`,
+  amountIn: bigint,
+): Promise<{ fee: number; amountOut: bigint }> {
+  let best: { fee: number; amountOut: bigint } | null = null
+  for (const fee of SWAP_FEE_TIERS) {
+    try {
+      const result = (await publicClient.readContract({
+        address: QUOTER_ADDRESS,
+        abi: QUOTER_V2_ABI,
+        functionName: 'quoteExactInputSingle',
+        args: [{ tokenIn, tokenOut, amountIn, fee, sqrtPriceLimitX96: 0n }],
+      })) as readonly [bigint, bigint, number, bigint]
+      const amountOut = result[0]
+      if (!best || amountOut > best.amountOut) best = { fee, amountOut }
+    } catch {}
+  }
+  if (!best) throw new Error('No liquidity found for this swap on Base.')
+  return best
+}
 
 // Same USD-pegged fee FlameBase's UI charges for "Tools" actions (count,
 // check-in, log, greet, deploy, propose, vote) — these contracts don't
@@ -108,6 +197,8 @@ export function describeAction(a: AgentAction): string {
       return `Create DAO proposal "${args.title}"`
     case 'vote_proposal':
       return `Vote ${args.support ? 'FOR' : 'AGAINST'} proposal ${args.proposalId}`
+    case 'swap_token':
+      return `Swap ${args.amount} ${args.fromToken} → ${args.toToken} (Uniswap V3)`
     default:
       return `Run ${a.tool}`
   }
@@ -166,6 +257,14 @@ export function validateAction(a: AgentAction): string | null {
     case 'vote_proposal': {
       if (!isNumeric(args.proposalId)) return 'Invalid proposal ID.'
       if (typeof args.support !== 'boolean') return 'Vote must be for or against.'
+      return null
+    }
+    case 'swap_token': {
+      const { fromToken, toToken, amount } = args
+      if (fromToken !== 'ETH' && fromToken !== 'USDC') return 'Unsupported token (ETH or USDC only).'
+      if (toToken !== 'ETH' && toToken !== 'USDC') return 'Unsupported token (ETH or USDC only).'
+      if (fromToken === toToken) return 'From and to token must be different.'
+      if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) return 'Invalid amount.'
       return null
     }
     default:
@@ -276,6 +375,51 @@ export async function executeAction(a: AgentAction, wallet: WalletLike, publicCl
         args: [BigInt(args.proposalId), Boolean(args.support)],
       })
       return wallet.sendTransaction({ to: DAO_ADDRESS, data, value })
+    }
+
+    case 'swap_token': {
+      const { fromToken, toToken, amount } = args as { fromToken: string; toToken: string; amount: string }
+      if (fromToken === toToken) throw new Error('From and to token must be different.')
+      const tokenIn = tokenAddress(fromToken)
+      const tokenOut = tokenAddress(toToken)
+      const amountIn = parseUnits(String(amount), tokenDecimals(fromToken))
+
+      const { fee, amountOut } = await bestSwapQuote(publicClient, tokenIn, tokenOut, amountIn)
+      const amountOutMinimum = amountOut - (amountOut * SWAP_SLIPPAGE_BPS) / 10000n
+      const value = fromToken === 'ETH' ? amountIn : 0n
+
+      if (fromToken === 'USDC') {
+        const allowance = (await publicClient.readContract({
+          address: USDC_ADDRESS, abi: erc20Abi, functionName: 'allowance',
+          args: [wallet.account.address, SWAP_ROUTER_ADDRESS],
+        })) as bigint
+        if (allowance < amountIn) {
+          const approveData = encodeFunctionData({ abi: erc20Abi, functionName: 'approve', args: [SWAP_ROUTER_ADDRESS, amountIn] })
+          const approveHash = await wallet.sendTransaction({ to: USDC_ADDRESS, data: approveData })
+          if (publicClient.waitForTransactionReceipt) await publicClient.waitForTransactionReceipt({ hash: approveHash })
+        }
+      }
+
+      if (toToken === 'ETH') {
+        // The router pays out unwrapWETH9's call to whoever calls it using its
+        // ENTIRE WETH balance — swap and unwrap must be one atomic multicall,
+        // never two separate txs, or the unwrapped ETH could be front-run.
+        const swapData = encodeFunctionData({
+          abi: SWAP_ROUTER_ABI, functionName: 'exactInputSingle',
+          args: [{ tokenIn, tokenOut, fee, recipient: SWAP_ROUTER_ADDRESS, amountIn, amountOutMinimum, sqrtPriceLimitX96: 0n }],
+        })
+        const unwrapData = encodeFunctionData({
+          abi: SWAP_ROUTER_ABI, functionName: 'unwrapWETH9', args: [amountOutMinimum, wallet.account.address],
+        })
+        const data = encodeFunctionData({ abi: SWAP_ROUTER_ABI, functionName: 'multicall', args: [[swapData, unwrapData]] })
+        return wallet.sendTransaction({ to: SWAP_ROUTER_ADDRESS, data, value })
+      }
+
+      const data = encodeFunctionData({
+        abi: SWAP_ROUTER_ABI, functionName: 'exactInputSingle',
+        args: [{ tokenIn, tokenOut, fee, recipient: wallet.account.address, amountIn, amountOutMinimum, sqrtPriceLimitX96: 0n }],
+      })
+      return wallet.sendTransaction({ to: SWAP_ROUTER_ADDRESS, data, value })
     }
 
     default:
