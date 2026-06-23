@@ -76,12 +76,23 @@ export async function askPremium(
     body: JSON.stringify({ messages }),
   })
 
-  const data = await res.json().catch(() => ({}))
+  const data = await res.json().catch(() => null)
   let paymentTx: string | undefined
   if (settlement) {
     try {
       paymentTx = decodePaymentResponseHeader(settlement).transaction
     } catch {}
   }
-  return { reply: data as AgentReply, paymentTx, status: res.status }
+
+  // Surface the real failure instead of a generic message: if the server didn't
+  // return a well-formed AgentReply (e.g. a 5xx/timeout with an HTML or empty
+  // body), build an error reply from the status so the user sees what happened.
+  const reply: AgentReply | undefined =
+    data && typeof data === 'object' && 'type' in data
+      ? (data as AgentReply)
+      : res.status === 402
+        ? undefined
+        : { type: 'error', content: `The AI request failed (HTTP ${res.status}). Please try again in a moment.` }
+
+  return { reply, paymentTx, status: res.status }
 }
