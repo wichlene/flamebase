@@ -254,6 +254,7 @@ export default function Home() {
   }, [connect, wagmiConnectors])
   const [activeTab, setActiveTab] = useState<Tab>('feed')
   const [reelsEverOpened, setReelsEverOpened] = useState(false)
+  const [aiEverOpened, setAiEverOpened] = useState(false)
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
 
   // Hydrate theme from localStorage on mount, then sync to <html data-theme>.
@@ -1712,6 +1713,7 @@ export default function Home() {
               <button key={tab} onClick={() => {
                 setActiveTab(tab)
                 if (tab === 'reels') setReelsEverOpened(true)
+                if (tab === 'ai') setAiEverOpened(true)
                 if (tab === 'activity') {
                   const snapshot: Record<string, number> = {}
                   myPosts.forEach(p => { snapshot[p.id.toString()] = Number(p.likes) + Number(p.tips) })
@@ -1724,7 +1726,12 @@ export default function Home() {
                   activeTab === tab ? 'bg-[#E6EEFF] text-[#0052FF]' : 'text-[#5B6271] hover:bg-[#F7F9FC] hover:text-[#0A0B0D]'
                 }`}>
                 <span className="text-lg">{icon}</span>
-                <span className="flex-1">{t(labelKey)}</span>
+                <span className="flex-1 flex items-center gap-1.5">
+                  {t(labelKey)}
+                  {tab === 'ai' && (
+                    <span className="text-[9px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full font-black border border-purple-200">402</span>
+                  )}
+                </span>
                 {tab === 'activity' && activityCount > 0 && (
                   <span className="bg-red-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center">{activityCount > 99 ? '99+' : activityCount}</span>
                 )}
@@ -2688,9 +2695,11 @@ export default function Home() {
               </div>
             )}
 
-            {/* ══ AI CHAT + TOKEN ANALYZER ══ */}
-            {activeTab === 'ai' && (
-              <AITabContent />
+            {/* ══ AI CHAT + TOKEN ANALYZER ══ — keep mounted once first visited so chat history persists across tab switches */}
+            {(activeTab === 'ai' || aiEverOpened) && (
+              <div style={{ display: activeTab === 'ai' ? undefined : 'none' }}>
+                <AITabContent />
+              </div>
             )}
 
             {/* ══ REELS ══ — keep mounted once first visited so video plays in background */}
@@ -3349,6 +3358,7 @@ export default function Home() {
             <button key={tab} onClick={() => {
               setActiveTab(tab)
               if (tab === 'reels') setReelsEverOpened(true)
+              if (tab === 'ai') setAiEverOpened(true)
               if (tab === 'activity') {
                 const snapshot: Record<string, number> = {}
                 myPosts.forEach(p => { snapshot[p.id.toString()] = Number(p.likes) + Number(p.tips) })
@@ -3367,7 +3377,12 @@ export default function Home() {
                   <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] font-black px-1 py-0.5 rounded-full min-w-[14px] text-center leading-none">{unreadMessages > 9 ? '9+' : unreadMessages}</span>
                 )}
               </span>
-              <span className="text-[10px] font-bold">{t(labelKey)}</span>
+              <span className="text-[10px] font-bold flex items-center gap-1">
+                {t(labelKey)}
+                {tab === 'ai' && (
+                  <span className="text-[7px] leading-none bg-purple-100 text-purple-700 px-1 py-0.5 rounded-full font-black border border-purple-200">402</span>
+                )}
+              </span>
             </button>
           ))}
         </div>
