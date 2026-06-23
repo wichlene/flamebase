@@ -9,6 +9,16 @@ const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as const
 
 export type AgentAction = { tool: string; args: Record<string, unknown> }
 
+// Intentional, user-facing failures (vs. raw wallet/RPC errors). AIChat's
+// friendlyError surfaces these verbatim instead of collapsing them to a
+// generic "Something went wrong", so the user learns what to actually fix.
+export class AgentActionError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'AgentActionError'
+  }
+}
+
 type WalletLike = {
   account?: { address: `0x${string}` } | undefined
   // viem WalletClient.sendTransaction is deeply generic; accept loosely.
@@ -85,7 +95,7 @@ const SWAP_ROUTER_ABI = [
 function tokenAddress(symbol: string): `0x${string}` {
   if (symbol === 'ETH') return WETH_ADDRESS
   if (symbol === 'USDC') return USDC_ADDRESS
-  throw new Error('Unsupported token (ETH or USDC only).')
+  throw new AgentActionError('Unsupported token (ETH or USDC only).')
 }
 
 function tokenDecimals(symbol: string): number {
@@ -111,8 +121,21 @@ async function bestSwapQuote(
       if (!best || amountOut > best.amountOut) best = { fee, amountOut }
     } catch {}
   }
-  if (!best) throw new Error('No liquidity found for this swap on Base.')
+  if (!best) throw new AgentActionError('No liquidity found for this swap on Base.')
   return best
+}
+
+// Whether an address has a FlameBase profile (profiles() returns
+// [username, avatarHash, exists, flames, tips]).
+async function hasProfile(publicClient: PublicClientLike, address: `0x${string}`): Promise<boolean> {
+  try {
+    const p = (await publicClient.readContract({
+      address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'profiles', args: [address],
+    })) as readonly unknown[]
+    return Boolean(p?.[2])
+  } catch {
+    return false
+  }
 }
 
 // Same USD-pegged fee FlameBase's UI charges for "Tools" actions (count,
@@ -148,19 +171,19 @@ async function effectiveFee(
 
 async function resolveLatestPostId(publicClient: PublicClientLike): Promise<bigint> {
   const count = (await publicClient.readContract({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'postCount' })) as bigint
-  if (count === 0n) throw new Error('No posts yet on FlameBase.')
+  if (count === 0n) throw new AgentActionError('No posts yet on FlameBase.')
   return count - 1n
 }
 
 function parsePostId(postId: unknown): bigint | undefined {
   if (postId === undefined || postId === null || postId === '') return undefined
   const n = BigInt(postId as string | number)
-  if (n < 0n) throw new Error('Invalid post ID.')
+  if (n < 0n) throw new AgentActionError('Invalid post ID.')
   return n
 }
 
 function requireAddress(address: string, label: string): void {
-  if (!address) throw new Error(`${label} isn't deployed yet.`)
+  if (!address) throw new AgentActionError(`${label} isn't deployed yet.`)
 }
 
 function isNumeric(v: unknown): boolean {
@@ -253,6 +276,8 @@ export function validateAction(a: AgentAction): string | null {
     }
     case 'create_proposal':
       if (!args.title || typeof args.title !== 'string' || !args.title.trim()) return 'Proposal title is required.'
+      // Contract caps the title at 100 bytes (require "Title 1-100 chars").
+      if (new TextEncoder().encode(args.title).length > 100) return 'Proposal title is too long (max 100 characters).'
       return null
     case 'vote_proposal': {
       if (!isNumeric(args.proposalId)) return 'Invalid proposal ID.'
@@ -306,12 +331,19 @@ export async function executeAction(a: AgentAction, wallet: WalletLike, publicCl
     }
 
     case 'create_post': {
+      // createPost reverts with "Create profile first" if the caller has no
+      // profile — catch it up front with a message that tells them what to do.
+      if (!(await hasProfile(publicClient, wallet.account.address)))
+        throw new AgentActionError('You need a FlameBase profile before posting — ask me to create one for you first.')
       const value = await effectiveFee(publicClient, 'postPrice', DEFAULT_POST_PRICE)
       const data = encodeFunctionData({ abi: CONTRACT_ABI, functionName: 'createPost', args: [String(args.content), ''] })
       return wallet.sendTransaction({ to: CONTRACT_ADDRESS, data, value })
     }
 
     case 'create_profile': {
+      // createProfile reverts with "Profile exists" on a second call.
+      if (await hasProfile(publicClient, wallet.account.address))
+        throw new AgentActionError('You already have a FlameBase profile.')
       const data = encodeFunctionData({ abi: CONTRACT_ABI, functionName: 'createProfile', args: [String(args.username), ''] })
       return wallet.sendTransaction({ to: CONTRACT_ADDRESS, data })
     }
@@ -379,7 +411,7 @@ export async function executeAction(a: AgentAction, wallet: WalletLike, publicCl
 
     case 'swap_token': {
       const { fromToken, toToken, amount } = args as { fromToken: string; toToken: string; amount: string }
-      if (fromToken === toToken) throw new Error('From and to token must be different.')
+      if (fromToken === toToken) throw new AgentActionError('From and to token must be different.')
       const tokenIn = tokenAddress(fromToken)
       const tokenOut = tokenAddress(toToken)
       const amountIn = parseUnits(String(amount), tokenDecimals(fromToken))

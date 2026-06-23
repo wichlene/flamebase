@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAccount, useWalletClient, usePublicClient } from 'wagmi'
 import { askPremium, type AgentReply } from '../lib/premiumAI'
-import { executeAction, describeAction, validateAction, type AgentAction } from '../lib/agentExec'
+import { executeAction, describeAction, validateAction, AgentActionError, type AgentAction } from '../lib/agentExec'
 
 type ActionState = 'pending' | 'running' | 'done' | 'cancelled' | 'error'
 type Message = {
@@ -24,6 +24,8 @@ const SUGGESTIONS = [
 ]
 
 function friendlyError(e: unknown): string {
+  // Our own intentional, actionable errors are shown as-is.
+  if (e instanceof AgentActionError) return `⚠️ ${e.message}`
   const msg = e instanceof Error ? e.message : ''
   if (/reject|denied|cancel|user rejected/i.test(msg)) return '❌ Cancelled in wallet.'
   if (/insufficient|balance|exceeds/i.test(msg)) return '💸 Not enough balance for this on Base.'
