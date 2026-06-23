@@ -39,7 +39,6 @@ export default function AIChat() {
   ])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
-  const [premium, setPremium] = useState(true)
   const endRef = useRef<HTMLDivElement>(null)
   const { isConnected } = useAccount()
   const { data: walletClient } = useWalletClient()
@@ -79,8 +78,8 @@ export default function AIChat() {
     const content = (text ?? input).trim()
     if (!content || loading) return
 
-    if (premium && (!isConnected || !walletClient)) {
-      push({ role: 'assistant', content: '🔌 Connect your wallet first to use Premium AI (pays $0.01 USDC on Base).' })
+    if (!isConnected || !walletClient) {
+      push({ role: 'assistant', content: '🔌 Connect your wallet first — the agent runs on x402 ($0.01 USDC per message on Base).' })
       return
     }
 
@@ -90,18 +89,14 @@ export default function AIChat() {
     setLoading(true)
     try {
       const history = next.map(({ role, content }) => ({ role, content }))
-      if (premium) {
-        const r = await askPremium(walletClient!, history)
-        if (r.reply) handleReply(r.reply, r.paymentTx)
-        else push({ role: 'assistant', content: r.status === 402 ? '⚠️ Payment required but did not complete.' : 'Sorry, something went wrong.' })
+      const r = await askPremium(walletClient, history)
+      if (r.reply) {
+        handleReply(r.reply, r.paymentTx)
       } else {
-        const res = await fetch('/api/agent', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages: history }),
-        })
-        const reply = (await res.json()) as AgentReply
-        handleReply(reply)
+        // The wallet signed but the $0.01 couldn't be settled (most often: no
+        // USDC on Base, or a facilitator hiccup). Surface why so the user can fix it.
+        const why = r.error ? ` (${r.error})` : ''
+        push({ role: 'assistant', content: `⚠️ Payment didn't go through${why}. Make sure you have a little USDC on Base, then try again.` })
       }
     } catch (e: unknown) {
       push({ role: 'assistant', content: friendlyError(e) })
@@ -134,18 +129,15 @@ export default function AIChat() {
         </div>
         <div className="flex-1">
           <h2 className="font-black text-[#0A0B0D]">FlameBase Agent</h2>
-          <p className="text-xs text-[#5B6271]">{premium ? 'Premium · deeper + on-chain actions · $0.01' : 'Free · chat + on-chain actions'}</p>
+          <p className="text-xs text-[#5B6271]">Pay-per-use on-chain agent · powered by x402</p>
         </div>
-        {/* FREE ⟷ PREMIUM toggle */}
-        <div className="flex items-center bg-[#F0F2F5] rounded-full p-1 text-sm font-bold shadow-sm">
-          <button onClick={() => setPremium(false)}
-            className={`px-4 py-2 rounded-full transition-colors ${!premium ? 'bg-green-100 text-green-700' : 'text-[#8A919E]'}`}>
-            FREE
-          </button>
-          <button onClick={() => setPremium(true)}
-            className={`px-4 py-2 rounded-full transition-colors ${premium ? 'bg-gradient-to-r from-[#7B3FE4] to-[#0052FF] text-white shadow' : 'text-[#8A919E]'}`}>
-            ✨ PREMIUM
-          </button>
+        {/* x402 badge — every message is a $0.01 USDC micropayment on Base */}
+        <div className="flex flex-col items-end gap-1 flex-shrink-0">
+          <span className="flex items-center gap-1.5 bg-gradient-to-r from-[#7B3FE4] to-[#0052FF] text-white text-xs font-black px-3 py-1.5 rounded-full shadow">
+            <span>⚡</span>
+            <span>402</span>
+          </span>
+          <span className="text-[10px] text-[#8A919E] font-bold">$0.01 / message</span>
         </div>
       </div>
 
@@ -242,12 +234,12 @@ export default function AIChat() {
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
-          placeholder={premium ? 'Ask or command ($0.01 USDC)…' : 'Ask or command the agent…'}
+          placeholder="Ask or command ($0.01 USDC)…"
           className="flex-1 bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#0052FF]"
         />
         <button onClick={() => send()} disabled={loading || !input.trim()}
-          className={`text-white px-5 py-2 rounded-xl font-bold text-sm disabled:opacity-40 transition-colors ${premium ? 'bg-gradient-to-r from-[#7B3FE4] to-[#0052FF]' : 'bg-[#0052FF] hover:bg-[#1652F0]'}`}>
-          {premium ? 'Pay & Ask' : 'Send'}
+          className="text-white px-5 py-2 rounded-xl font-bold text-sm disabled:opacity-40 transition-colors bg-gradient-to-r from-[#7B3FE4] to-[#0052FF]">
+          Pay & Ask
         </button>
       </div>
     </div>

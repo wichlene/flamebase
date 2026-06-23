@@ -1729,7 +1729,7 @@ export default function Home() {
                 <span className="flex-1 flex items-center gap-1.5">
                   {t(labelKey)}
                   {tab === 'ai' && (
-                    <span className="text-[9px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full font-black border border-purple-200">402</span>
+                    <span className="text-[9px] bg-gradient-to-r from-[#7B3FE4] to-[#0052FF] text-white px-1.5 py-0.5 rounded-full font-black shadow-sm">402</span>
                   )}
                 </span>
                 {tab === 'activity' && activityCount > 0 && (
@@ -3380,7 +3380,7 @@ export default function Home() {
               <span className="text-[10px] font-bold flex items-center gap-1">
                 {t(labelKey)}
                 {tab === 'ai' && (
-                  <span className="text-[7px] leading-none bg-purple-100 text-purple-700 px-1 py-0.5 rounded-full font-black border border-purple-200">402</span>
+                  <span className="text-[7px] leading-none bg-gradient-to-r from-[#7B3FE4] to-[#0052FF] text-white px-1 py-0.5 rounded-full font-black">402</span>
                 )}
               </span>
             </button>

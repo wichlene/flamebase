@@ -24,6 +24,9 @@ export type PremiumResult = {
   // x402 settlement tx for the $0.01 premium fee.
   paymentTx?: string
   status: number
+  // When payment couldn't be settled (e.g. not enough USDC, or a facilitator
+  // hiccup), the server's 402 body often carries a human-readable reason.
+  error?: string
 }
 
 /**
@@ -84,6 +87,15 @@ export async function askPremium(
     } catch {}
   }
 
+  // The x402 fetch wrapper signs the payment and retries, but if the server
+  // can't *settle* (e.g. the wallet has no USDC on Base, or the facilitator is
+  // down) the retry comes back 402 with a body like `{ error: "..." }`. Pull
+  // that reason out so the caller can show it instead of a vague message.
+  const settlementError =
+    data && typeof data === 'object' && typeof (data as { error?: unknown }).error === 'string'
+      ? (data as { error: string }).error
+      : undefined
+
   // Surface the real failure instead of a generic message: if the server didn't
   // return a well-formed AgentReply (e.g. a 5xx/timeout with an HTML or empty
   // body), build an error reply from the status so the user sees what happened.
@@ -94,5 +106,5 @@ export async function askPremium(
         ? undefined
         : { type: 'error', content: `The AI request failed (HTTP ${res.status}). Please try again in a moment.` }
 
-  return { reply, paymentTx, status: res.status }
+  return { reply, paymentTx, status: res.status, error: settlementError }
 }
