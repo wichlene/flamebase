@@ -4,7 +4,9 @@
 // user confirms — the model only proposes the action.
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
-const MODEL = 'llama-3.3-70b-versatile'
+// Groq deprecated llama-3.3-70b-versatile (2026-06-17); openai/gpt-oss-120b is
+// the recommended replacement and supports tool/function calling.
+const MODEL = process.env.GROQ_MODEL || 'openai/gpt-oss-120b'
 
 const SYSTEM_PROMPT = `You are FlameBase Agent — an on-chain AI assistant on the Base network.
 You can actually perform actions through the user's connected wallet by calling tools.
@@ -236,21 +238,36 @@ export async function runAgent(
 ): Promise<AgentReply> {
   if (!process.env.GROQ_API_KEY) return { type: 'error', content: 'GROQ_API_KEY not configured' }
 
-  const res = await fetch(GROQ_URL, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: MODEL,
-      messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...messages],
-      tools: TOOLS,
-      tool_choice: 'auto',
-      max_tokens: opts.maxTokens ?? 800,
-      temperature: 0.6,
-    }),
-  })
+  // Bound the upstream call so a slow/hung model returns a clean error instead
+  // of silently exhausting the serverless function timeout (which surfaces to
+  // the client as a non-JSON 5xx).
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 25000)
+  let res: Response
+  try {
+    res = await fetch(GROQ_URL, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: MODEL,
+        messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...messages],
+        tools: TOOLS,
+        tool_choice: 'auto',
+        max_tokens: opts.maxTokens ?? 800,
+        temperature: 0.6,
+      }),
+      signal: controller.signal,
+    })
+  } catch (e: unknown) {
+    const aborted = e instanceof Error && e.name === 'AbortError'
+    return { type: 'error', content: aborted ? 'The AI took too long to respond. Please try again.' : 'Could not reach the AI service.' }
+  } finally {
+    clearTimeout(timeout)
+  }
 
-  const data = await res.json()
-  if (!res.ok) return { type: 'error', content: data?.error?.message || 'AI error' }
+  const data = await res.json().catch(() => null)
+  if (!res.ok) return { type: 'error', content: data?.error?.message || `AI error (${res.status})` }
+  if (!data) return { type: 'error', content: 'The AI returned an unreadable response.' }
 
   const msg = data.choices?.[0]?.message
   const call = msg?.tool_calls?.[0]
