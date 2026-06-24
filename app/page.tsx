@@ -329,7 +329,18 @@ export default function Home() {
   const writeContractAsync = async (config: any, type?: string) => {
     // Always include chainId so wagmi auto-switches to Base before sending.
     // dataSuffix appends Base Builder Code so every tx is attributed to FlameBase.
-    const hash = await rawWriteContract({ ...config, chainId: base.id, dataSuffix: BUILDER_CODE_DATA_SUFFIX })
+    //
+    // BUT: the Base App / Farcaster in-app Smart Wallet can't simulate calldata
+    // that carries the appended suffix — its preview shows "asset changes cannot
+    // be estimated" and the tx then fails to sign right after the user confirms.
+    // So for that connector only, drop the suffix (functionality > attribution);
+    // every other wallet still attributes to FlameBase via the Builder Code.
+    const isSmartWalletMiniApp = connector?.id === 'farcaster'
+    const hash = await rawWriteContract({
+      ...config,
+      chainId: base.id,
+      ...(isSmartWalletMiniApp ? {} : { dataSuffix: BUILDER_CODE_DATA_SUFFIX }),
+    })
     if (hash) {
       const entry = { hash, type: type || config?.functionName || 'tx', time: Date.now() }
       setTxLog(prev => {
