@@ -22,6 +22,10 @@ const miniapp = {
   ogTitle: 'FlameBase — Social on Base',
   ogDescription: 'Every like, tip, and comment lives on Base.',
   ogImageUrl: 'https://flamebase.xyz/logo.png',
+  heroImageUrl: 'https://flamebase.xyz/thumbnail-base.png',
+  // Base mainnet (CAIP-2). Tells Base App's catalog this is a Base-native app.
+  requiredChains: ['eip155:8453'],
+  noindex: false,
 }
 
 export function GET() {
