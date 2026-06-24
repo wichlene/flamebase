@@ -1291,7 +1291,7 @@ export default function Home() {
         // showing a redundant box and tell the user instead.
         const norm = (s: string) => s.trim().replace(/^["'“”]+|["'“”]+$/g, '').toLowerCase()
         if (norm(data.content) === norm(content)) {
-          showToast('error', t('alreadyInLanguage'))
+          showToast('info', t('alreadyInLanguage'))
         } else {
           setTranslatedPosts(prev => ({ ...prev, [postId]: data.content }))
         }
