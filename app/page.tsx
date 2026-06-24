@@ -2572,11 +2572,12 @@ export default function Home() {
                                     value={commentTexts[key] || ''}
                                     onChange={e => setCommentTexts(prev => ({ ...prev, [key]: e.target.value }))}
                                     onKeyDown={e => e.key === 'Enter' && handleComment(post.id)}
-                                    className="flex-1 bg-white border border-[#E4E7EB] rounded-xl px-3 py-2 text-sm text-[#0A0B0D] placeholder-[#8A919E] focus:outline-none focus:border-[#0052FF]"
+                                    enterKeyHint="send"
+                                    className="flex-1 min-w-0 bg-white border border-[#E4E7EB] rounded-xl px-3 py-2 text-sm text-[#0A0B0D] placeholder-[#8A919E] focus:outline-none focus:border-[#0052FF]"
                                   />
                                   <EmojiPicker onSelect={e => setCommentTexts(prev => ({ ...prev, [key]: (prev[key] || '') + e }))} />
                                   <button onClick={() => handleComment(post.id)} disabled={isCommenting || !commentTexts[key]}
-                                    className="bg-[#0052FF] hover:bg-[#1652F0] text-white disabled:opacity-40 px-4 py-2 rounded-xl text-sm font-bold transition-colors">
+                                    className="flex-shrink-0 bg-[#0052FF] hover:bg-[#1652F0] text-white disabled:opacity-40 px-4 py-2 rounded-xl text-sm font-bold transition-colors">
                                     {isCommenting ? '...' : '↑'}
                                   </button>
                                 </div>
