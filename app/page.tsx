@@ -633,6 +633,17 @@ export default function Home() {
     query: { enabled: !!address },
   })
 
+  // Keep the shared `profiles` cache in sync with the connected wallet's own
+  // profile — otherwise <Avatar> only knows about authors of fetched posts,
+  // so a freshly uploaded avatar never shows up for a user with 0 posts.
+  useEffect(() => {
+    if (!address || !myProfile) return
+    setProfiles(prev => ({
+      ...prev,
+      [address.toLowerCase()]: { username: myProfile[0], avatarHash: myProfile[1], exists: myProfile[2], flames: myProfile[3], tips: myProfile[4] },
+    }))
+  }, [address, myProfile])
+
   const { data: postCount, refetch: refetchCount } = useReadContract({
     address: CONTRACT_ADDRESS,
     abi: CONTRACT_ABI,
@@ -1274,7 +1285,17 @@ export default function Home() {
         body: JSON.stringify({ messages: [{ role: 'user', content: `Translate the following text to English. Reply with ONLY the translation, nothing else: "${content}"` }] }),
       })
       const data = await res.json()
-      if (data.content) setTranslatedPosts(prev => ({ ...prev, [postId]: data.content }))
+      if (data.content) {
+        // Strip quotes the model may echo back, then compare — if the post was
+        // already English the "translation" is just the original text, so skip
+        // showing a redundant box and tell the user instead.
+        const norm = (s: string) => s.trim().replace(/^["'“”]+|["'“”]+$/g, '').toLowerCase()
+        if (norm(data.content) === norm(content)) {
+          showToast('error', t('alreadyInLanguage'))
+        } else {
+          setTranslatedPosts(prev => ({ ...prev, [postId]: data.content }))
+        }
+      }
     } catch {}
     setTranslatingPost(null)
   }
@@ -1490,17 +1511,25 @@ export default function Home() {
       fd.append('file', file)
       const res = await fetch('/api/upload', { method: 'POST', body: fd })
       const data = await res.json()
-      if (data.ipfsHash) {
-        await writeContractAsync({
-          address: CONTRACT_ADDRESS,
-          abi: CONTRACT_ABI,
-          functionName: 'uploadAvatar',
-          args: [data.ipfsHash],
-          value: effectiveFee(photoPrice as bigint | undefined, DEFAULT_PHOTO_PRICE),
-        })
-        setTimeout(() => refetchProfile(), 3000)
+      if (!data.ipfsHash) {
+        console.error('Avatar upload failed', data)
+        showToast('error', t('errAvatarUploadFailed'))
+        setUploadingAvatar(false)
+        return
       }
-    } catch (e) { console.error(e) }
+      await writeContractAsync({
+        address: CONTRACT_ADDRESS,
+        abi: CONTRACT_ABI,
+        functionName: 'uploadAvatar',
+        args: [data.ipfsHash],
+        value: effectiveFee(photoPrice as bigint | undefined, DEFAULT_PHOTO_PRICE),
+      })
+      showToast('success', t('avatarUpdated'))
+      setTimeout(() => refetchProfile(), 3000)
+    } catch (e) {
+      console.error(e)
+      showToast('error', txError(e))
+    }
     setUploadingAvatar(false)
   }
 
@@ -3500,43 +3529,43 @@ export default function Home() {
       {/* ── User Profile Modal ── */}
       {selectedUser && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4" onClick={() => setSelectedUser(null)}>
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-y-auto overflow-x-hidden" onClick={e => e.stopPropagation()}>
             <div className="sticky top-0 bg-white border-b border-[#EEF1F5] px-5 py-4 flex items-center justify-between">
               <h2 className="font-black text-lg">Profile</h2>
               <button onClick={() => setSelectedUser(null)} className="w-8 h-8 rounded-full hover:bg-[#F7F9FC] flex items-center justify-center text-[#5B6271] transition-colors">✕</button>
             </div>
             {/* Profile header */}
             <div className="p-5">
-              <div className="flex items-center gap-4 mb-4">
+              <div className="flex items-center gap-3 mb-4">
                 <Avatar addr={selectedUser} profiles={profiles} size="lg" />
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-xl font-black">{getUsername(selectedUser)}</h3>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <h3 className="text-xl font-black truncate">{getUsername(selectedUser)}</h3>
                     {verifiedAddresses[selectedUser.toLowerCase()] && <VerifiedBadge />}
                   </div>
-                  <p className="text-[#8A919E] text-sm">{selectedUser.slice(0,8)}...{selectedUser.slice(-6)}</p>
+                  <p className="text-[#8A919E] text-sm truncate">{selectedUser.slice(0,8)}...{selectedUser.slice(-6)}</p>
                   <a href={`https://basescan.org/address/${selectedUser}`} target="_blank" className="text-[#0052FF] text-xs hover:underline">View on Basescan ↗</a>
                 </div>
-                {isConnected && address && selectedUser.toLowerCase() !== address.toLowerCase() && (
-                  <div className="flex flex-col gap-1.5">
-                    {following.has(selectedUser.toLowerCase()) ? (
-                      <button onClick={() => unfollowUser(selectedUser)} disabled={loadingAction === `follow-${selectedUser.toLowerCase()}`}
-                        className="px-4 py-1.5 rounded-xl border-2 border-[#0052FF] text-[#0052FF] text-xs font-black hover:bg-red-50 hover:border-red-500 hover:text-red-500 transition-colors disabled:opacity-50">
-                        {loadingAction === `follow-${selectedUser.toLowerCase()}` ? '…' : 'Friends ✓'}
-                      </button>
-                    ) : (
-                      <button onClick={() => followUser(selectedUser)} disabled={loadingAction === `follow-${selectedUser.toLowerCase()}`}
-                        className="px-4 py-1.5 rounded-xl bg-[#0052FF] text-white text-xs font-black hover:bg-[#1652F0] transition-colors disabled:opacity-50">
-                        {loadingAction === `follow-${selectedUser.toLowerCase()}` ? '…' : '+ Add Friend'}
-                      </button>
-                    )}
-                    <button onClick={() => { setPendingDmTarget(selectedUser); setActiveTab('messages'); setSelectedUser(null) }}
-                      className="px-4 py-1.5 rounded-xl bg-[#F0F4FF] text-[#0052FF] text-xs font-black hover:bg-[#E6EEFF] transition-colors">
-                      💬 Message
-                    </button>
-                  </div>
-                )}
               </div>
+              {isConnected && address && selectedUser.toLowerCase() !== address.toLowerCase() && (
+                <div className="flex gap-2 mb-4">
+                  {following.has(selectedUser.toLowerCase()) ? (
+                    <button onClick={() => unfollowUser(selectedUser)} disabled={loadingAction === `follow-${selectedUser.toLowerCase()}`}
+                      className="flex-1 px-3 py-2 rounded-xl border-2 border-[#0052FF] text-[#0052FF] text-xs font-black hover:bg-red-50 hover:border-red-500 hover:text-red-500 transition-colors disabled:opacity-50">
+                      {loadingAction === `follow-${selectedUser.toLowerCase()}` ? '…' : 'Friends ✓'}
+                    </button>
+                  ) : (
+                    <button onClick={() => followUser(selectedUser)} disabled={loadingAction === `follow-${selectedUser.toLowerCase()}`}
+                      className="flex-1 px-3 py-2 rounded-xl bg-[#0052FF] text-white text-xs font-black hover:bg-[#1652F0] transition-colors disabled:opacity-50">
+                      {loadingAction === `follow-${selectedUser.toLowerCase()}` ? '…' : '+ Add Friend'}
+                    </button>
+                  )}
+                  <button onClick={() => { setPendingDmTarget(selectedUser); setActiveTab('messages'); setSelectedUser(null) }}
+                    className="flex-1 px-3 py-2 rounded-xl bg-[#F0F4FF] text-[#0052FF] text-xs font-black hover:bg-[#E6EEFF] transition-colors">
+                    💬 Message
+                  </button>
+                </div>
+              )}
 
               {/* Stats row */}
               <div className="grid grid-cols-3 gap-2 mb-4">
