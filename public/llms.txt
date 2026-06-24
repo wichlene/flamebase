@@ -1,0 +1,22 @@
+# FlameBase
+
+> On-chain social network on Base. Every like, comment, tip, and follow is a
+> real transaction on Base mainnet (chainId 8453). Own your posts, your
+> followers, and your tips.
+
+## For AI agents (Base MCP / skill plugin)
+
+FlameBase exposes an agent API that returns unsigned Base transactions for its
+social actions. Pair it with Base MCP so a user can approve actions in one click.
+
+- Skill spec: https://flamebase.xyz/.well-known/flamebase-mcp.md
+- Action discovery + contract addresses: https://flamebase.xyz/api/mcp
+- Prepare an unsigned transaction: https://flamebase.xyz/api/mcp/prepare/{action}
+
+Actions: createPost, like, comment, tip, createProfile, follow, unfollow,
+checkIn, deployToken, propose, vote.
+
+## Links
+
+- App: https://flamebase.xyz
+- Mini App manifest: https://flamebase.xyz/.well-known/farcaster.json

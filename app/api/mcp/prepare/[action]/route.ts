@@ -5,6 +5,7 @@ import {
   TOOLS_ABI, TOOLS_ADDRESS,
   TOKEN_FACTORY_ABI, TOKEN_FACTORY_ADDRESS,
   DAO_ABI, DAO_ADDRESS,
+  FOLLOW_ABI, FOLLOW_ADDRESS,
 } from '../../../../../lib/toolsContracts'
 
 const CHAIN_ID = 8453
@@ -85,6 +86,28 @@ export async function GET(
           args: [q('username'), q('avatarHash')],
         })
         return ok(CONTRACT_ADDRESS, data, '0')
+      }
+
+      case 'follow': {
+        if (!FOLLOW_ADDRESS) return err('follow is not available on this deployment', 503)
+        if (!q('target')) return err('target (address) is required')
+        const data = encodeFunctionData({
+          abi: FOLLOW_ABI,
+          functionName: 'follow',
+          args: [q('target') as `0x${string}`],
+        })
+        return ok(FOLLOW_ADDRESS, data, '0')
+      }
+
+      case 'unfollow': {
+        if (!FOLLOW_ADDRESS) return err('unfollow is not available on this deployment', 503)
+        if (!q('target')) return err('target (address) is required')
+        const data = encodeFunctionData({
+          abi: FOLLOW_ABI,
+          functionName: 'unfollow',
+          args: [q('target') as `0x${string}`],
+        })
+        return ok(FOLLOW_ADDRESS, data, '0')
       }
 
       case 'checkIn': {

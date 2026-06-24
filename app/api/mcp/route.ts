@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { encodeFunctionData, parseEther } from 'viem'
 import { CONTRACT_ABI, CONTRACT_ADDRESS } from '../../../lib/contract'
-import { TOOLS_ABI, TOOLS_ADDRESS, TOKEN_FACTORY_ABI, TOKEN_FACTORY_ADDRESS, DAO_ABI, DAO_ADDRESS } from '../../../lib/toolsContracts'
+import { TOOLS_ABI, TOOLS_ADDRESS, TOKEN_FACTORY_ABI, TOKEN_FACTORY_ADDRESS, DAO_ABI, DAO_ADDRESS, FOLLOW_ABI, FOLLOW_ADDRESS } from '../../../lib/toolsContracts'
 
 const CHAIN_ID = 8453 // Base mainnet
 
@@ -16,10 +16,11 @@ export async function GET() {
       tools: TOOLS_ADDRESS,
       tokenFactory: TOKEN_FACTORY_ADDRESS,
       dao: DAO_ADDRESS,
+      follow: FOLLOW_ADDRESS,
     },
     actions: [
       'createPost', 'like', 'tip', 'comment',
-      'createProfile', 'checkIn', 'count',
+      'createProfile', 'follow', 'unfollow', 'checkIn', 'count',
       'log', 'greet', 'deployToken', 'propose', 'vote',
     ],
   })
@@ -73,6 +74,26 @@ export async function POST(request: Request) {
           args: [params.username ?? '', params.avatarHash ?? ''],
         })
         return tx(CONTRACT_ADDRESS, data, '0')
+      }
+
+      case 'follow': {
+        if (!FOLLOW_ADDRESS) return NextResponse.json({ error: 'follow is not available on this deployment' }, { status: 503 })
+        const data = encodeFunctionData({
+          abi: FOLLOW_ABI,
+          functionName: 'follow',
+          args: [(params.target ?? '0x0000000000000000000000000000000000000000') as `0x${string}`],
+        })
+        return tx(FOLLOW_ADDRESS, data, '0')
+      }
+
+      case 'unfollow': {
+        if (!FOLLOW_ADDRESS) return NextResponse.json({ error: 'unfollow is not available on this deployment' }, { status: 503 })
+        const data = encodeFunctionData({
+          abi: FOLLOW_ABI,
+          functionName: 'unfollow',
+          args: [(params.target ?? '0x0000000000000000000000000000000000000000') as `0x${string}`],
+        })
+        return tx(FOLLOW_ADDRESS, data, '0')
       }
 
       case 'checkIn': {
