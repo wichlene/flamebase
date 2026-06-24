@@ -327,6 +327,35 @@ export default function Home() {
   // Wrap writeContractAsync: auto-switch to Base if needed, then log tx
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const writeContractAsync = async (config: any, type?: string) => {
+    // Pre-flight simulate the call so a guaranteed on-chain revert surfaces its
+    // REAL reason (e.g. "Insufficient fee", "Create profile first", "Profile
+    // exists", "Post not found") instead of the wallet's opaque error. The Base
+    // App's Smart Wallet rejects reverting txs at sign time with only
+    // "transaction cannot be signed", giving the user no idea what's wrong — so
+    // we catch the revert here first. Best-effort: only block on an actual
+    // contract revert (it carries a reason string); transient RPC/simulation
+    // noise falls through so a valid tx is never blocked.
+    if (publicClient && address && config?.abi && config?.functionName) {
+      try {
+        await publicClient.simulateContract({
+          address: config.address,
+          abi: config.abi,
+          functionName: config.functionName,
+          args: config.args,
+          value: config.value,
+          account: address,
+        })
+      } catch (simErr: any) {
+        const reason: string =
+          simErr?.shortMessage || simErr?.details || (simErr instanceof Error ? simErr.message : '') || ''
+        const m = reason.match(/reverted with the following reason:\s*(.+)/i)
+        const clean = (m?.[1] || reason).split('\n')[0].trim()
+        if (/revert|insufficient fee|create profile|profile exists|post not found|send some eth|not found/i.test(reason)) {
+          throw new Error(`CONTRACT_REVERT:${clean}`)
+        }
+      }
+    }
+
     // Always include chainId so wagmi auto-switches to Base before sending.
     // dataSuffix appends Base Builder Code so every tx is attributed to FlameBase.
     //
@@ -354,6 +383,9 @@ export default function Home() {
 
   const txError = (e: unknown): string => {
     const msg = e instanceof Error ? e.message : String(e)
+    // A revert we caught in pre-flight simulation — show the contract's real
+    // reason verbatim so the user knows exactly what to fix.
+    if (msg.startsWith('CONTRACT_REVERT:')) return `⚠️ ${msg.slice('CONTRACT_REVERT:'.length).trim()}`
     if (msg.toLowerCase().includes('user rejected') || msg.toLowerCase().includes('denied')) return t('errUserRejected')
     if (msg.toLowerCase().includes('insufficient') || msg.toLowerCase().includes('funds')) return t('errInsufficientFunds')
     if (msg.toLowerCase().includes('chain') || msg.toLowerCase().includes('network')) return t('errWrongNetwork')
