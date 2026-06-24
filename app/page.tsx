@@ -4,7 +4,7 @@ import { ConnectButton, useConnectModal } from '@rainbow-me/rainbowkit'
 import { useAccount, useWriteContract, useReadContract, usePublicClient, useBalance, useSwitchChain, useChainId, useDisconnect, useConnect } from 'wagmi'
 import { sdk as fcSdk } from '@farcaster/miniapp-sdk'
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react'
-import { parseEther, formatEther, erc20Abi } from 'viem'
+import { parseEther, formatEther, erc20Abi, encodeFunctionData } from 'viem'
 import { base } from 'wagmi/chains'
 import dynamic from 'next/dynamic'
 import { CONTRACT_ADDRESS, CONTRACT_ABI } from '../lib/contract'
@@ -356,20 +356,60 @@ export default function Home() {
       }
     }
 
-    // Always include chainId so wagmi auto-switches to Base before sending.
-    // dataSuffix appends Base Builder Code so every tx is attributed to FlameBase.
-    //
-    // BUT: the Base App / Farcaster in-app Smart Wallet can't simulate calldata
-    // that carries the appended suffix — its preview shows "asset changes cannot
-    // be estimated" and the tx then fails to sign right after the user confirms.
-    // So for that connector only, drop the suffix (functionality > attribution);
-    // every other wallet still attributes to FlameBase via the Builder Code.
     const isSmartWalletMiniApp = connector?.id === 'farcaster'
-    const hash = await rawWriteContract({
-      ...config,
-      chainId: base.id,
-      ...(isSmartWalletMiniApp ? {} : { dataSuffix: BUILDER_CODE_DATA_SUFFIX }),
-    })
+
+    let hash: `0x${string}` | undefined
+
+    // The Base App's in-app Smart Wallet (Coinbase Smart Wallet) frequently
+    // fails the classic eth_sendTransaction path for contract calls with a bare
+    // "transaction cannot be signed. try again" — but it implements EIP-5792
+    // wallet_sendCalls. Route smart-wallet contract writes through that. If the
+    // wallet doesn't support the method, fall back to the classic path so
+    // behaviour is never worse than before (a genuine failure/rejection is
+    // surfaced, not retried, to avoid a double prompt).
+    if (isSmartWalletMiniApp && address && config?.abi && config?.functionName) {
+      try {
+        const provider: any = await connector?.getProvider()
+        if (!provider) throw new Error('no provider')
+        const data = encodeFunctionData({ abi: config.abi, functionName: config.functionName, args: config.args ?? [] })
+        const call: any = { to: config.address, data }
+        if (config.value) call.value = `0x${BigInt(config.value).toString(16)}`
+        const res: any = await provider.request({
+          method: 'wallet_sendCalls',
+          params: [{ version: '1.0', chainId: `0x${base.id.toString(16)}`, from: address, calls: [call] }],
+        })
+        const id: string = typeof res === 'string' ? res : res?.id
+        // Best-effort: resolve the bundle id to a real tx hash for the log.
+        for (let i = 0; i < 8 && !hash; i++) {
+          try {
+            const st: any = await provider.request({ method: 'wallet_getCallsStatus', params: [id] })
+            const h = st?.receipts?.[0]?.transactionHash
+            if (h) hash = h as `0x${string}`
+          } catch {}
+          if (!hash) await new Promise(r => setTimeout(r, 1500))
+        }
+        if (!hash) hash = id as `0x${string}`
+      } catch (e: any) {
+        const m = (e?.message || '').toLowerCase()
+        const unsupported =
+          e?.code === 4200 || e?.code === -32601 ||
+          m.includes('not support') || m.includes('unsupported') || m.includes('method not found') || m.includes('no provider')
+        if (!unsupported) throw e // real failure/rejection — surface it, don't double-prompt
+      }
+    }
+
+    // Classic path (non-smart-wallet wallets, or smart wallets without 5792).
+    // Always include chainId so wagmi auto-switches to Base before sending.
+    // dataSuffix appends Base Builder Code so every tx is attributed to
+    // FlameBase (skipped for the smart-wallet mini-app — its preview can't
+    // simulate the suffixed calldata).
+    if (!hash) {
+      hash = await rawWriteContract({
+        ...config,
+        chainId: base.id,
+        ...(isSmartWalletMiniApp ? {} : { dataSuffix: BUILDER_CODE_DATA_SUFFIX }),
+      })
+    }
     if (hash) {
       const entry = { hash, type: type || config?.functionName || 'tx', time: Date.now() }
       setTxLog(prev => {
