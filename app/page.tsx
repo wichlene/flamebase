@@ -426,6 +426,16 @@ export default function Home() {
     // A revert we caught in pre-flight simulation — show the contract's real
     // reason verbatim so the user knows exactly what to fix.
     if (msg.startsWith('CONTRACT_REVERT:')) return `⚠️ ${msg.slice('CONTRACT_REVERT:'.length).trim()}`
+    // Diagnostic (Base App mini-app only): the in-app Smart Wallet swallows the
+    // real reason behind its own opaque "transaction cannot be signed" toast.
+    // Surface the raw provider error (code + first line) so we can finally see
+    // what it actually rejects on. Other wallets keep the clean messages below.
+    if (connector?.id === 'farcaster') {
+      const code = (e as any)?.code
+      const raw = ((e as any)?.shortMessage || (e as any)?.details || (e as any)?.cause?.message || msg || 'unknown')
+        .toString().split('\n')[0].slice(0, 180)
+      return `⚠️ ${raw}${code !== undefined && code !== null ? ` [code ${code}]` : ''}`
+    }
     if (msg.toLowerCase().includes('user rejected') || msg.toLowerCase().includes('denied')) return t('errUserRejected')
     if (msg.toLowerCase().includes('insufficient') || msg.toLowerCase().includes('funds')) return t('errInsufficientFunds')
     if (msg.toLowerCase().includes('chain') || msg.toLowerCase().includes('network')) return t('errWrongNetwork')
