@@ -23,21 +23,51 @@ side:
 The agent gets the unsigned tx and passes it to Base MCP's send-transaction
 tool; the user approves in their own wallet. We never touch private keys.
 
-## Submitting to Base
+## Files
 
-Base's catalog (the protocols listed at base.org/agents — Morpho, Uniswap,
-Moonwell, Aerodrome, etc.) is populated from their plugins repo. To get
-FlameBase listed:
+- **`flamebase.md`** — the plugin file in Base's official `base/skills` format
+  (mirrors `skills/base-mcp/plugins/moonwell.md`). This is what gets submitted.
+- **`flamebase-skill.md`** — standalone skill spec, served live at
+  `https://flamebase.xyz/.well-known/flamebase-mcp.md`, usable today without a
+  listing.
 
-1. Confirm the skill spec is live: open
-   `https://flamebase.xyz/.well-known/flamebase-mcp.md`.
-2. Follow Base's custom-plugin guide:
-   https://docs.base.org/ai-agents/plugins/custom-plugins
-3. Open a PR to Base's plugins repository adding `flamebase-skill.md` (or a link
-   to the hosted spec), with FlameBase's metadata (name, homeUrl, category
-   `social`, chain `eip155:8453`).
-4. Anyone can already use it today without waiting for the listing: in Claude,
-   "Add to Claude" the Base MCP, then point the assistant at the spec URL above.
+## Submitting to Base (to appear at base.org/agents)
+
+The catalog (Morpho, Uniswap, Moonwell, Aerodrome, Virtuals…) lives in the
+public repo **https://github.com/base/skills** under `skills/base-mcp/`. Each
+protocol is a file in `plugins/` plus a row in `SKILL.md`'s plugin table. Native
+plugins fetch their API through Base MCP's `web_request`, which only allows
+**allowlisted** domains — so listing also means getting `flamebase.xyz` added to
+that allowlist.
+
+Steps:
+
+1. Verify everything is live:
+   - `https://flamebase.xyz/api/mcp`
+   - `https://flamebase.xyz/api/mcp/prepare/createPost?content=gm`
+   - `https://flamebase.xyz/.well-known/flamebase-mcp.md`
+2. Fork `base/skills`, add `base-plugin/flamebase.md` as
+   `skills/base-mcp/plugins/flamebase.md`.
+3. Add a row to the plugin table in `skills/base-mcp/SKILL.md`:
+
+   | [FlameBase](plugins/flamebase.md) | Open it when the user names **FlameBase** and wants to post, like, comment, tip, follow, check in, deploy a token, or vote in the DAO. | createPost, like, comment, tip, follow/unfollow, checkIn, deployToken, propose, vote | Base only. Posts are permanent on-chain. |
+
+4. In the PR description, request that **`flamebase.xyz`** be added to the
+   `web_request` allowlist (the plugin declares `requires.allowlist:
+   [flamebase.xyz]`).
+5. Read Base's contributing guide in the repo before opening the PR.
+
+## Works today without the listing
+
+"Add to Claude" the Base MCP, then in a chat:
+
+> Read https://flamebase.xyz/.well-known/flamebase-mcp.md and post "gm" for me
+> on FlameBase.
+
+Claude fetches the spec + prepare endpoint with its own browsing (not Base
+MCP's allowlisted `web_request`), gets the unsigned tx, and hands it to Base
+MCP's `send_calls` for one-click approval. Verified end-to-end on 2026-06-24
+(profile + post created on-chain via this flow).
 
 ## Test the API locally
 

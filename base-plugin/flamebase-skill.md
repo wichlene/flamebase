@@ -54,6 +54,19 @@ their own wallet with one click.
 To discover the live action list and the deployed contract addresses at any
 time, call `GET https://flamebase.xyz/api/mcp`.
 
+## Profile is required before posting
+
+Posting, liking, commenting and tipping require the user to have a FlameBase
+profile on-chain. If the user has never used FlameBase, send `createProfile`
+**first** (its own transaction), wait for it to confirm, then send the action
+they asked for. Skipping this makes the action revert with
+`"Create profile first"`.
+
+Do **not** bundle `createProfile` and the follow-up action into a single
+batched approval — gas estimation simulates the batch against current state, so
+the second call still sees "no profile" and the whole batch reverts. Send them
+as two separate, sequential approvals.
+
 ## Actions
 
 | action         | required params              | optional params         | what it does                                  |
