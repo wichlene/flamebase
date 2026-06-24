@@ -2932,22 +2932,22 @@ export default function Home() {
                             <span className="text-[#8A919E] font-normal ml-1">{t('balance')}</span>
                           </p>
                         )}
-                        <div className="grid grid-cols-2 gap-3 mb-3">
-                          <div className="bg-[#F7F9FC] rounded-xl p-4 text-center border border-[#EEF1F5]">
-                            <p className="text-3xl font-black text-[#0052FF]">{myProfile[3].toString()}</p>
-                            <p className="text-[#5B6271] text-sm mt-1 font-semibold">🔥 {t('flames')}</p>
+                        <div className="flex items-center gap-6 mb-3 pb-4 border-b border-[#EEF1F5] flex-wrap">
+                          <div>
+                            <p className="text-xl font-extrabold text-[#0A0B0D] leading-tight">{myProfile[3].toString()}</p>
+                            <p className="text-[#8A919E] text-xs">🔥 {t('flames')}</p>
                           </div>
-                          <div className="bg-[#F7F9FC] rounded-xl p-4 text-center border border-[#EEF1F5]">
-                            <p className="text-2xl font-black text-[#0052FF]">{parseFloat(formatEther(myProfile[4])).toFixed(4)}</p>
-                            <p className="text-[#5B6271] text-sm mt-1 font-semibold">💸 {t('ethEarned')}</p>
+                          <div>
+                            <p className="text-xl font-extrabold text-[#0A0B0D] leading-tight">{parseFloat(formatEther(myProfile[4])).toFixed(4)}</p>
+                            <p className="text-[#8A919E] text-xs">💸 {t('ethEarned')}</p>
                           </div>
-                          <div className="bg-[#F7F9FC] rounded-xl p-4 text-center border border-[#EEF1F5]">
-                            <p className="text-3xl font-black text-[#0052FF]">{myPosts.length}</p>
-                            <p className="text-[#5B6271] text-sm mt-1 font-semibold">📝 Posts</p>
+                          <div>
+                            <p className="text-xl font-extrabold text-[#0A0B0D] leading-tight">{myPosts.length}</p>
+                            <p className="text-[#8A919E] text-xs">📝 Posts</p>
                           </div>
-                          <div className="bg-[#F7F9FC] rounded-xl p-4 text-center border border-[#EEF1F5]">
-                            <p className="text-3xl font-black text-[#0052FF]">{following.size}</p>
-                            <p className="text-[#5B6271] text-sm mt-1 font-semibold">👥 Friends</p>
+                          <div>
+                            <p className="text-xl font-extrabold text-[#0A0B0D] leading-tight">{following.size}</p>
+                            <p className="text-[#8A919E] text-xs">👥 Friends</p>
                           </div>
                         </div>
                         <a href={`https://basescan.org/address/${address}`} target="_blank"
