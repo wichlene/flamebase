@@ -633,6 +633,22 @@ export default function Home() {
     query: { enabled: !!address },
   })
 
+  // Real on-chain follower/following counts for whoever's profile modal is open.
+  const { data: selectedUserFollowerCount } = useReadContract({
+    address: FOLLOW_ADDRESS,
+    abi: FOLLOW_ABI,
+    functionName: 'followerCount',
+    args: selectedUser ? [selectedUser as `0x${string}`] : undefined,
+    query: { enabled: FOLLOW_DEPLOYED && !!selectedUser },
+  })
+  const { data: selectedUserFollowingCount } = useReadContract({
+    address: FOLLOW_ADDRESS,
+    abi: FOLLOW_ABI,
+    functionName: 'followingCount',
+    args: selectedUser ? [selectedUser as `0x${string}`] : undefined,
+    query: { enabled: FOLLOW_DEPLOYED && !!selectedUser },
+  })
+
   // Keep the shared `profiles` cache in sync with the connected wallet's own
   // profile — otherwise <Avatar> only knows about authors of fetched posts,
   // so a freshly uploaded avatar never shows up for a user with 0 posts.
@@ -3569,18 +3585,18 @@ export default function Home() {
               )}
 
               {/* Stats row */}
-              <div className="grid grid-cols-3 gap-2 mb-4">
-                <div className="bg-[#F7F9FC] rounded-xl p-3 text-center border border-[#EEF1F5]">
-                  <p className="text-xl font-black text-[#0052FF]">{posts.filter(p => p.author.toLowerCase() === selectedUser.toLowerCase()).length}</p>
-                  <p className="text-[#5B6271] text-[10px] font-semibold">Posts</p>
+              <div className="flex items-center gap-6 mb-4 pb-4 border-b border-[#EEF1F5]">
+                <div>
+                  <p className="text-base font-extrabold text-[#0A0B0D] leading-tight">{posts.filter(p => p.author.toLowerCase() === selectedUser.toLowerCase()).length}</p>
+                  <p className="text-[#8A919E] text-xs">Posts</p>
                 </div>
-                <div className="bg-[#F7F9FC] rounded-xl p-3 text-center border border-[#EEF1F5]">
-                  <p className="text-xl font-black text-[#0052FF]">{profiles[selectedUser.toLowerCase()]?.flames?.toString() ?? '0'}</p>
-                  <p className="text-[#5B6271] text-[10px] font-semibold">🔥 Flames</p>
+                <div>
+                  <p className="text-base font-extrabold text-[#0A0B0D] leading-tight">{FOLLOW_DEPLOYED ? (selectedUserFollowerCount?.toString() ?? '0') : '0'}</p>
+                  <p className="text-[#8A919E] text-xs">Followers</p>
                 </div>
-                <div className="bg-[#F7F9FC] rounded-xl p-3 text-center border border-[#EEF1F5]">
-                  <p className="text-xl font-black text-[#0052FF]">{parseFloat(formatEther(profiles[selectedUser.toLowerCase()]?.tips ?? 0n)).toFixed(3)}</p>
-                  <p className="text-[#5B6271] text-[10px] font-semibold">💸 ETH</p>
+                <div>
+                  <p className="text-base font-extrabold text-[#0A0B0D] leading-tight">{FOLLOW_DEPLOYED ? (selectedUserFollowingCount?.toString() ?? '0') : '0'}</p>
+                  <p className="text-[#8A919E] text-xs">Following</p>
                 </div>
               </div>
               {/* User's posts */}
