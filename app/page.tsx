@@ -390,11 +390,15 @@ export default function Home() {
         }
         if (!hash) hash = id as `0x${string}`
       } catch (e: any) {
+        // Only a deliberate user rejection stops here; ANY other error
+        // (unsupported method, -32602 invalid params from a wallet that speaks
+        // a different 5792 dialect, etc.) falls through to the classic path so
+        // we never get stuck on the experimental route. The Farcaster wallet
+        // returns -32602 for wallet_sendCalls — that must degrade gracefully.
         const m = (e?.message || '').toLowerCase()
-        const unsupported =
-          e?.code === 4200 || e?.code === -32601 ||
-          m.includes('not support') || m.includes('unsupported') || m.includes('method not found') || m.includes('no provider')
-        if (!unsupported) throw e // real failure/rejection — surface it, don't double-prompt
+        const userRejected =
+          e?.code === 4001 || m.includes('user rejected') || m.includes('user denied') || m.includes('rejected the request')
+        if (userRejected) throw e
       }
     }
 
@@ -404,11 +408,20 @@ export default function Home() {
     // FlameBase (skipped for the smart-wallet mini-app — its preview can't
     // simulate the suffixed calldata).
     if (!hash) {
-      hash = await rawWriteContract({
-        ...config,
-        chainId: base.id,
-        ...(isSmartWalletMiniApp ? {} : { dataSuffix: BUILDER_CODE_DATA_SUFFIX }),
-      })
+      try {
+        hash = await rawWriteContract({
+          ...config,
+          chainId: base.id,
+          ...(isSmartWalletMiniApp ? {} : { dataSuffix: BUILDER_CODE_DATA_SUFFIX }),
+        })
+      } catch (e: any) {
+        // Tag mini-app failures so the diagnostic toast tells us the classic
+        // path (eth_sendTransaction) is the one failing, with its real code.
+        if (isSmartWalletMiniApp && e) {
+          try { e.message = `classic:${e.message}` } catch {}
+        }
+        throw e
+      }
     }
     if (hash) {
       const entry = { hash, type: type || config?.functionName || 'tx', time: Date.now() }
