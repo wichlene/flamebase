@@ -2582,20 +2582,22 @@ export default function Home() {
                             {isConnected ? (
                               <div className="flex gap-2 pt-2">
                                 <Avatar addr={address!} profiles={profiles} size="sm" />
-                                <div className="flex-1 flex gap-2">
+                                <div className="flex-1 min-w-0 flex flex-wrap gap-2">
                                   <input type="text"
                                     placeholder={replyingTo[key] ? t('replyPlaceholder', { user: replyingTo[key] }) : t('commentPlaceholder')}
                                     value={commentTexts[key] || ''}
                                     onChange={e => setCommentTexts(prev => ({ ...prev, [key]: e.target.value }))}
                                     onKeyDown={e => e.key === 'Enter' && handleComment(post.id)}
                                     enterKeyHint="send"
-                                    className="flex-1 min-w-0 bg-white border border-[#E4E7EB] rounded-xl px-3 py-2 text-sm text-[#0A0B0D] placeholder-[#8A919E] focus:outline-none focus:border-[#0052FF]"
+                                    className="flex-1 min-w-[140px] bg-white border border-[#E4E7EB] rounded-xl px-3 py-2 text-sm text-[#0A0B0D] placeholder-[#8A919E] focus:outline-none focus:border-[#0052FF]"
                                   />
-                                  <EmojiPicker onSelect={e => setCommentTexts(prev => ({ ...prev, [key]: (prev[key] || '') + e }))} />
-                                  <button onClick={() => handleComment(post.id)} disabled={isCommenting || !commentTexts[key]}
-                                    className="flex-shrink-0 bg-[#0052FF] hover:bg-[#1652F0] text-white disabled:opacity-40 px-4 py-2 rounded-xl text-sm font-bold transition-colors">
-                                    {isCommenting ? '...' : '↑'}
-                                  </button>
+                                  <div className="flex gap-2 flex-shrink-0 ml-auto">
+                                    <EmojiPicker onSelect={e => setCommentTexts(prev => ({ ...prev, [key]: (prev[key] || '') + e }))} />
+                                    <button onClick={() => handleComment(post.id)} disabled={isCommenting || !commentTexts[key]}
+                                      className="flex-shrink-0 bg-[#0052FF] hover:bg-[#1652F0] text-white disabled:opacity-40 px-4 py-2 rounded-xl text-sm font-bold transition-colors">
+                                      {isCommenting ? '...' : '↑'}
+                                    </button>
+                                  </div>
                                 </div>
                               </div>
                             ) : (
