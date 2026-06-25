@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
-const MODEL = 'llama-3.3-70b-versatile'
+// Groq deprecated llama-3.3-70b-versatile (2026-06-17); openai/gpt-oss-120b is its replacement.
+const MODEL = process.env.GROQ_MODEL || 'openai/gpt-oss-120b'
 
 export async function POST(request: Request) {
   if (!process.env.GROQ_API_KEY) {
@@ -79,6 +80,7 @@ Be concise, use emojis, max 180 words. No disclaimers.`
         max_tokens: 400,
         temperature: 0.7,
       }),
+      signal: AbortSignal.timeout(20000),
     })
 
     const data = await response.json()

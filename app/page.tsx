@@ -320,7 +320,7 @@ export default function Home() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [ethPrice, setEthPrice] = useState(2500)
-  const [txLog, setTxLog] = useState<Array<{ hash: string; type: string; time: number }>>([])
+  const [txLog, setTxLog] = useState<Array<{ hash: string; type: string; time: number; pending?: boolean }>>([])
   const [showTerminal, setShowTerminal] = useState(false)
   const publicClient = usePublicClient()
   const { writeContractAsync: rawWriteContract } = useWriteContract()
@@ -383,6 +383,7 @@ export default function Home() {
     const isSmartWalletMiniApp = connector?.id === 'farcaster'
 
     let hash: `0x${string}` | undefined
+    let pendingId: string | undefined
 
     // The Base App's in-app Smart Wallet (Coinbase Smart Wallet) frequently
     // fails the classic eth_sendTransaction path for contract calls with a bare
@@ -446,7 +447,10 @@ export default function Home() {
           } catch {}
           if (!hash) await new Promise(r => setTimeout(r, 1500))
         }
-        if (!hash) hash = id as `0x${string}`
+        // Didn't resolve in time — the bundle id is NOT a real tx hash (wrong
+        // format for Basescan), so don't pass it off as one. Log it as
+        // pending; the tx-log UI shows it without a (broken) explorer link.
+        if (!hash) pendingId = id
       } catch (e: any) {
         // Only a deliberate user rejection stops here; ANY other error
         // (unsupported method, -32602 invalid params from a wallet that speaks
@@ -481,8 +485,8 @@ export default function Home() {
         throw e
       }
     }
-    if (hash) {
-      const entry = { hash, type: type || config?.functionName || 'tx', time: Date.now() }
+    if (hash || pendingId) {
+      const entry = { hash: (hash || pendingId) as string, type: type || config?.functionName || 'tx', time: Date.now(), pending: !hash }
       setTxLog(prev => {
         const next = [entry, ...prev].slice(0, 50)
         localStorage.setItem('flamebase_tx_log', JSON.stringify(next))
@@ -1912,10 +1916,16 @@ export default function Home() {
                       <div key={i} className="flex items-start gap-2 hover:bg-green-400/5 px-2 py-1 rounded">
                         <span className="text-green-400/50 flex-shrink-0">[{hh}:{mm}:{ss}]</span>
                         <span className="text-yellow-400 flex-shrink-0">{tx.type}</span>
-                        <a href={`https://basescan.org/tx/${tx.hash}`} target="_blank"
-                          className="text-cyan-400 hover:text-cyan-300 underline truncate">
-                          {tx.hash.slice(0,10)}...{tx.hash.slice(-8)}
-                        </a>
+                        {tx.pending ? (
+                          <span className="text-green-400/50 truncate" title="Wallet hasn't confirmed an on-chain hash yet">
+                            {tx.hash.slice(0,10)}...{tx.hash.slice(-8)} (confirming…)
+                          </span>
+                        ) : (
+                          <a href={`https://basescan.org/tx/${tx.hash}`} target="_blank"
+                            className="text-cyan-400 hover:text-cyan-300 underline truncate">
+                            {tx.hash.slice(0,10)}...{tx.hash.slice(-8)}
+                          </a>
+                        )}
                       </div>
                     )
                   })}
@@ -3607,8 +3617,12 @@ export default function Home() {
                   <div key={i} className="flex gap-1 items-start leading-relaxed">
                     <span className="text-green-400/40 flex-shrink-0">{hh}:{mm}</span>
                     <span className="text-green-300 flex-shrink-0 max-w-[50px] truncate">{tx.type}</span>
-                    <a href={`https://basescan.org/tx/${tx.hash}`} target="_blank" rel="noreferrer"
-                      className="text-green-400 hover:text-white underline truncate">{tx.hash.slice(0,12)}…</a>
+                    {tx.pending ? (
+                      <span className="text-green-400/40 truncate">{tx.hash.slice(0,12)}… (confirming)</span>
+                    ) : (
+                      <a href={`https://basescan.org/tx/${tx.hash}`} target="_blank" rel="noreferrer"
+                        className="text-green-400 hover:text-white underline truncate">{tx.hash.slice(0,12)}…</a>
+                    )}
                   </div>
                 )
               })}

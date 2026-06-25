@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { encodeFunctionData, keccak256, parseEther, toHex } from 'viem'
+import { encodeFunctionData, isAddress, keccak256, parseEther, toHex } from 'viem'
 import { CONTRACT_ABI, CONTRACT_ADDRESS } from '../../../lib/contract'
 import {
   TOOLS_ABI, TOOLS_ADDRESS, TOKEN_FACTORY_ABI, TOKEN_FACTORY_ADDRESS, DAO_ABI, DAO_ADDRESS, FOLLOW_ABI, FOLLOW_ADDRESS,
@@ -130,8 +130,8 @@ export async function POST(request: Request) {
       }
 
       case 'deployB20Token': {
-        if (!params.account) {
-          return NextResponse.json({ error: 'account (your wallet address) is required' }, { status: 400 })
+        if (!params.account || !isAddress(params.account)) {
+          return NextResponse.json({ error: 'account (your wallet address) is required and must be a valid address' }, { status: 400 })
         }
         const decimals = params.decimals ?? 18
         if (!Number.isInteger(decimals) || decimals < 6 || decimals > 18) {

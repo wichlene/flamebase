@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { encodeFunctionData, keccak256, parseEther, toHex } from 'viem'
+import { encodeFunctionData, isAddress, keccak256, parseEther, toHex } from 'viem'
 import { CONTRACT_ABI, CONTRACT_ADDRESS } from '../../../../../lib/contract'
 import {
   TOOLS_ABI, TOOLS_ADDRESS,
@@ -146,7 +146,7 @@ export async function GET(
 
       case 'deployB20Token': {
         if (!q('name') || !q('symbol')) return err('name and symbol are required')
-        if (!q('account')) return err('account (your wallet address) is required')
+        if (!q('account') || !isAddress(q('account'))) return err('account (your wallet address) is required and must be a valid address')
         const decimals = q('decimals') ? Number(q('decimals')) : 18
         if (!Number.isInteger(decimals) || decimals < 6 || decimals > 18) {
           return err('decimals must be an integer between 6 and 18')

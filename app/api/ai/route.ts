@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
-const MODEL = 'llama-3.3-70b-versatile'
+// Groq deprecated llama-3.3-70b-versatile (2026-06-17); openai/gpt-oss-120b is its replacement.
+const MODEL = process.env.GROQ_MODEL || 'openai/gpt-oss-120b'
 
 const SYSTEM_PROMPTS: Record<string, string> = {
   chat: `You are FlameBase AI — an assistant for a Web3 social media platform built on Base blockchain.
@@ -37,6 +38,7 @@ export async function POST(request: Request) {
         max_tokens: type === 'improve' ? 200 : 600,
         temperature: type === 'improve' ? 0.7 : 0.8,
       }),
+      signal: AbortSignal.timeout(20000),
     })
 
     const data = await response.json()

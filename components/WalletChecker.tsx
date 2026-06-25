@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useWalletClient } from 'wagmi'
 
 interface DayActivity { date: string; count: number }
@@ -200,12 +200,15 @@ export default function WalletChecker({ onPay, compact }: { onPay?: () => Promis
 
   const address = walletClient?.account?.address
 
+  const mountedRef = useRef(true)
+  useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false } }, [])
+
   const run = async () => {
     if (!address) return
     setError('')
     setLoading(true); setLoadStep(0)
     let si = 0
-    const ticker = setInterval(() => { if (si < 3) setLoadStep(++si) }, 3000)
+    const ticker = setInterval(() => { if (si < 3 && mountedRef.current) setLoadStep(++si) }, 3000)
     try {
       const res = await fetch('/api/wallet-check', {
         method: 'POST',
@@ -213,13 +216,15 @@ export default function WalletChecker({ onPay, compact }: { onPay?: () => Promis
         body: JSON.stringify({ address }),
       })
       const data = await res.json()
-      if (!res.ok || data.error) setError(data.error || 'An error occurred')
-      else setResult(data)
+      if (mountedRef.current) {
+        if (!res.ok || data.error) setError(data.error || 'An error occurred')
+        else setResult(data)
+      }
     } catch (e: any) {
-      setError(e?.message || 'Connection error')
+      if (mountedRef.current) setError(e?.message || 'Connection error')
     }
     clearInterval(ticker)
-    setLoading(false)
+    if (mountedRef.current) setLoading(false)
   }
 
   const downloadCard = (dataUrl: string, addr: string) => {

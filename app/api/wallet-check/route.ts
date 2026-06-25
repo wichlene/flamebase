@@ -3,13 +3,15 @@ import { NextResponse } from 'next/server'
 const BS_V2 = 'https://base.blockscout.com/api/v2'
 const BS_COMPAT = 'https://base.blockscout.com/api'
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
-const MODEL = 'llama-3.3-70b-versatile'
+// Groq deprecated llama-3.3-70b-versatile (2026-06-17); openai/gpt-oss-120b is its replacement.
+const MODEL = process.env.GROQ_MODEL || 'openai/gpt-oss-120b'
 
 async function bsV2(path: string) {
   try {
     const res = await fetch(`${BS_V2}${path}`, {
       headers: { Accept: 'application/json' },
       next: { revalidate: 120 },
+      signal: AbortSignal.timeout(8000),
     })
     if (!res.ok) return null
     return res.json()
@@ -27,6 +29,7 @@ async function firstTxTimestamp(address: string): Promise<number> {
     const res = await fetch(`${BS_COMPAT}?${qs}`, {
       headers: { Accept: 'application/json' },
       next: { revalidate: 600 },
+      signal: AbortSignal.timeout(8000),
     })
     if (!res.ok) return 0
     const d = await res.json()
@@ -253,6 +256,7 @@ Drop estimate ranges (tokens / USD): S=12000-20000/$3000-5000, A=6000-10000/$150
           method: 'POST',
           headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ model: MODEL, messages: [{ role: 'user', content: prompt }], max_tokens: 280, temperature: 0.2 }),
+          signal: AbortSignal.timeout(20000),
         })
         const gd = await gr.json()
         const raw = gd.choices?.[0]?.message?.content?.trim() ?? ''
