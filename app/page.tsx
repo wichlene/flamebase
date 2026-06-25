@@ -347,11 +347,34 @@ export default function Home() {
           account: address,
         })
       } catch (simErr: any) {
-        const reason: string =
-          simErr?.shortMessage || simErr?.details || (simErr instanceof Error ? simErr.message : '') || ''
-        const m = reason.match(/reverted with the following reason:\s*(.+)/i)
-        const clean = (m?.[1] || reason).split('\n')[0].trim()
-        if (/revert|insufficient fee|create profile|profile exists|post not found|send some eth|not found/i.test(reason)) {
+        // Walk the viem error chain to decide: is this a genuine CONTRACT
+        // REVERT (the call WILL fail on-chain — block it and show the reason),
+        // or just RPC/transport noise (rate limit, timeout — let the tx through
+        // so a valid action is never blocked by a flaky public node)?
+        //
+        // Previously this only blocked on a hardcoded allowlist of reason
+        // strings. Any other revert reason ("Already followed", "Already
+        // voted", "Cannot tip yourself", a custom error, …) slipped through —
+        // the user signed, gas burned, and the wallet showed a bare "failed"
+        // with no explanation. Now ANY detected revert is surfaced up front.
+        let node: any = simErr
+        let isRevert = false
+        let reason = ''
+        for (let i = 0; node && i < 8; i++) {
+          const name: string = node?.name || ''
+          if (name === 'ContractFunctionRevertedError') {
+            isRevert = true
+            reason = node?.reason || node?.shortMessage || reason
+            break
+          }
+          const sm: string = (node?.shortMessage || '').toString()
+          if (/revert|execution reverted/i.test(sm)) { isRevert = true; if (!reason) reason = sm }
+          node = node?.cause
+        }
+        if (isRevert) {
+          if (!reason) reason = simErr?.shortMessage || simErr?.details || (simErr instanceof Error ? simErr.message : '') || 'transaction would revert'
+          const m = reason.match(/reverted with the following reason:\s*(.+)/i)
+          const clean = (m?.[1] || reason).split('\n')[0].trim()
           throw new Error(`CONTRACT_REVERT:${clean}`)
         }
       }
@@ -375,11 +398,45 @@ export default function Home() {
         const data = encodeFunctionData({ abi: config.abi, functionName: config.functionName, args: config.args ?? [] })
         const call: any = { to: config.address, data }
         if (config.value) call.value = `0x${BigInt(config.value).toString(16)}`
-        const res: any = await provider.request({
-          method: 'wallet_sendCalls',
-          params: [{ version: '1.0', chainId: `0x${base.id.toString(16)}`, from: address, calls: [call] }],
-        })
-        const id: string = typeof res === 'string' ? res : res?.id
+        const chainIdHex = `0x${base.id.toString(16)}`
+
+        // EIP-5792 changed shape across versions. The Base App / Farcaster
+        // hosts updated their wallets (Beryl, 2026-06-25) to the "2.0.0" spec,
+        // which rejects our old "1.0" payload with "method not supported",
+        // dropping us onto the classic path the smart wallet can't sign — so
+        // every action broke. Try the current "2.0.0" shape first, then fall
+        // back to legacy "1.0" for older hosts. Only a genuine method-missing
+        // / invalid-params error advances to the next shape; a user rejection
+        // or other real failure is rethrown.
+        const shapes = [
+          { version: '2.0.0', from: address, chainId: chainIdHex, atomicRequired: false, calls: [call] },
+          { version: '1.0', chainId: chainIdHex, from: address, calls: [call] },
+        ]
+        let id: string | undefined
+        let lastErr: any
+        for (const params of shapes) {
+          try {
+            const res: any = await provider.request({ method: 'wallet_sendCalls', params: [params] })
+            id = typeof res === 'string' ? res : res?.id
+            break
+          } catch (sendErr: any) {
+            const code = sendErr?.code
+            const msg = (sendErr?.message || '').toLowerCase()
+            const userRejected =
+              code === 4001 || msg.includes('user rejected') || msg.includes('user denied') || msg.includes('rejected the request')
+            if (userRejected) throw sendErr
+            // Wrong-shape signals: method unsupported (-32601/4200) or invalid
+            // params (-32602) → try the next version. Anything else is a real
+            // failure for this method; stop and let the classic path try.
+            const wrongShape =
+              code === -32601 || code === 4200 || code === -32602 ||
+              msg.includes('not support') || msg.includes('unsupported') ||
+              msg.includes('method not found') || msg.includes('invalid param')
+            lastErr = sendErr
+            if (!wrongShape) throw sendErr
+          }
+        }
+        if (!id) throw lastErr || new Error('wallet_sendCalls failed')
         // Best-effort: resolve the bundle id to a real tx hash for the log.
         for (let i = 0; i < 8 && !hash; i++) {
           try {
