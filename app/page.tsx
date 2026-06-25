@@ -1618,7 +1618,7 @@ export default function Home() {
   // Tool action helper
   const toolAction = async (action: () => Promise<void>, setLoad: (b: boolean) => void) => {
     setLoad(true)
-    try { await action() } catch (e) { console.error(e) }
+    try { await action() } catch (e) { console.error(e); showToast('error', txError(e)) }
     setLoad(false)
   }
 
