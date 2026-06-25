@@ -4,13 +4,13 @@ import { ConnectButton, useConnectModal } from '@rainbow-me/rainbowkit'
 import { useAccount, useWriteContract, useReadContract, usePublicClient, useBalance, useSwitchChain, useChainId, useDisconnect, useConnect } from 'wagmi'
 import { sdk as fcSdk } from '@farcaster/miniapp-sdk'
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react'
-import { parseEther, formatEther, erc20Abi, encodeFunctionData } from 'viem'
+import { parseEther, formatEther, erc20Abi, encodeFunctionData, keccak256, toHex } from 'viem'
 import { base } from 'wagmi/chains'
 import dynamic from 'next/dynamic'
 import { CONTRACT_ADDRESS, CONTRACT_ABI } from '../lib/contract'
 import { BUILDER_CODE_DATA_SUFFIX } from '../lib/builderCode'
 import { T, LANG_LABELS, type Lang } from '../lib/i18n'
-import { TOOLS_ADDRESS, TOKEN_FACTORY_ADDRESS, NFT_FACTORY_ADDRESS, DAO_ADDRESS, FOLLOW_ADDRESS, TOOLS_ABI, TOKEN_FACTORY_ABI, NFT_FACTORY_ABI, DAO_ABI, FOLLOW_ABI, FLAME_NFT_ADDRESS, FLAME_NFT_ABI } from '../lib/toolsContracts'
+import { TOOLS_ADDRESS, TOKEN_FACTORY_ADDRESS, NFT_FACTORY_ADDRESS, DAO_ADDRESS, FOLLOW_ADDRESS, TOOLS_ABI, TOKEN_FACTORY_ABI, NFT_FACTORY_ABI, DAO_ABI, FOLLOW_ABI, FLAME_NFT_ADDRESS, FLAME_NFT_ABI, B20_FACTORY_ADDRESS, B20_FACTORY_ABI, encodeB20AssetCreateParams, encodeB20BatchMintInitCall } from '../lib/toolsContracts'
 import { SFX, isSoundEnabled, setSoundEnabled } from '../lib/sounds'
 import { ToastStack, type ToastItem, type ToastKind } from '../components/Toast'
 import Avatar, { IPFS_GATEWAYS } from '../components/Avatar'
@@ -26,6 +26,7 @@ const TOKEN_FACTORY_DEPLOYED = TOKEN_FACTORY_ADDRESS.length > 0
 const NFT_FACTORY_DEPLOYED = NFT_FACTORY_ADDRESS.length > 0
 const DAO_DEPLOYED = DAO_ADDRESS.length > 0
 const FOLLOW_DEPLOYED = FOLLOW_ADDRESS.length > 0
+const B20_FACTORY_DEPLOYED = B20_FACTORY_ADDRESS.length > 0
 
 const ADMIN_ADDRESS = '0xa77A5D4D37d6F39C20C2441295da9fA60Ab9fD69'
 const FLM_TOKEN_ADDRESS = '0xadead5e8ca2893be6e8239cbbae83049a701cb07'
@@ -498,6 +499,10 @@ export default function Home() {
   const [tokenSymbol, setTokenSymbol] = useState('FLAME')
   const [tokenSupply, setTokenSupply] = useState('1000000')
   const [tokenLoading, setTokenLoading] = useState(false)
+  const [b20Name, setB20Name] = useState('FlameBase B20')
+  const [b20Symbol, setB20Symbol] = useState('FB20')
+  const [b20Supply, setB20Supply] = useState('1000000')
+  const [b20Loading, setB20Loading] = useState(false)
   const [nftName, setNftName] = useState('FlameBase NFT')
   const [nftSymbol, setNftSymbol] = useState('FNFT')
   const [nftMaxSupply, setNftMaxSupply] = useState('1000')
@@ -1554,6 +1559,19 @@ export default function Home() {
     setLoad(true)
     try { await action() } catch (e) { console.error(e) }
     setLoad(false)
+  }
+
+  // Deploy a token via Base's native B-20 precompile factory instead of FlameBase's
+  // own TokenFactory: no protocol fee (gas only), admin-less / fixed-supply forever.
+  const deployB20 = async () => {
+    if (!address) return
+    const decimals = 18
+    const supply = BigInt(b20Supply || '1000000')
+    const params = encodeB20AssetCreateParams(b20Name, b20Symbol, '0x0000000000000000000000000000000000000000', decimals)
+    const initCalls = [encodeB20BatchMintInitCall(address, supply * (10n ** BigInt(decimals)))]
+    const salt = keccak256(toHex(`${address}-${b20Symbol}-${b20Name}-${Date.now()}-${Math.random()}`))
+    await writeContractAsync({ address: B20_FACTORY_ADDRESS, abi: B20_FACTORY_ABI, functionName: 'createB20', args: [0, salt, params, initCalls], value: 0n })
+    setB20Name('FlameBase B20'); setB20Symbol('FB20'); setB20Supply('1000000')
   }
 
   // Filter posts
@@ -3202,6 +3220,12 @@ export default function Home() {
                     <span className="font-mono text-[#0052FF] font-black text-lg">[△]</span>
                     <span className="text-xs font-bold">DAO</span>
                   </button>
+                  <button onClick={() => setActiveTool(activeTool === 'b20' ? null : 'b20')}
+                    disabled={!B20_FACTORY_DEPLOYED}
+                    className={`flex flex-col items-center gap-1.5 py-4 px-1 rounded-xl border transition-all disabled:opacity-40 ${activeTool === 'b20' ? 'bg-[#E6EEFF] border-[#0052FF]' : 'bg-[#F8FAFF] border-[#E4E7EB] hover:border-[#0052FF] hover:bg-[#F0F4FF]'}`}>
+                    <span className="font-mono text-[#0052FF] font-black text-lg">[B20]</span>
+                    <span className="text-xs font-bold">B20</span>
+                  </button>
                 </div>
 
                 {activeTool === 'logbook' && (
@@ -3256,6 +3280,18 @@ export default function Home() {
                       {daoLoading ? 'Creating…' : 'Create Proposal'}
                     </button>
                     {renderProposalsList()}
+                  </div>
+                )}
+                {activeTool === 'b20' && (
+                  <div className="space-y-1 pt-1">
+                    <p className="text-[10px] text-[#0052FF] font-bold">Base native token — gas only, no FlameBase fee</p>
+                    <input value={b20Name} onChange={e => setB20Name(e.target.value)} placeholder="Token name" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
+                    <input value={b20Symbol} onChange={e => setB20Symbol(e.target.value)} placeholder="Symbol" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
+                    <input value={b20Supply} onChange={e => setB20Supply(e.target.value)} placeholder="Supply" type="number" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
+                    <button onClick={() => { if (!B20_FACTORY_DEPLOYED || !b20Name || !b20Symbol || !b20Supply) return; toolAction(deployB20, setB20Loading) }}
+                      disabled={b20Loading || !b20Name || !b20Symbol || !b20Supply} className="w-full bg-[#0052FF] text-white text-xs py-2 rounded-lg font-bold disabled:opacity-40">
+                      {b20Loading ? 'Deploying…' : 'Deploy B20 Token'}
+                    </button>
                   </div>
                 )}
               </div>
@@ -3401,6 +3437,14 @@ export default function Home() {
                 <span className="text-xs font-bold text-[#0A0B0D]">DAO</span>
               </button>
 
+              {/* B20 */}
+              <button onClick={() => setActiveTool(activeTool === 'b20' ? null : 'b20')}
+                disabled={!B20_FACTORY_DEPLOYED}
+                className={`flex flex-col items-center gap-1.5 py-4 px-1 rounded-xl border transition-all disabled:opacity-40 ${activeTool === 'b20' ? 'bg-[#E6EEFF] border-[#0052FF]' : 'bg-white border-[#E4E7EB] hover:border-[#0052FF] hover:bg-[#F0F4FF]'}`}>
+                <span className="font-mono text-[#0052FF] font-black text-lg">[B20]</span>
+                <span className="text-xs font-bold text-[#0A0B0D]">B20</span>
+              </button>
+
               {/* Wallet Check */}
               <button onClick={() => setActiveTool(activeTool === 'wallet' ? null : 'wallet')}
                 className={`flex flex-col items-center gap-1.5 py-4 px-1 rounded-xl border transition-all ${activeTool === 'wallet' ? 'bg-[#E6EEFF] border-[#0052FF]' : 'bg-white border-[#E4E7EB] hover:border-[#0052FF] hover:bg-[#F0F4FF]'}`}>
@@ -3464,6 +3508,18 @@ export default function Home() {
                   {daoLoading ? 'Creating…' : 'Create Proposal'}
                 </button>
                 {renderProposalsList()}
+              </div>
+            )}
+            {activeTool === 'b20' && (
+              <div className="mt-2 space-y-1">
+                <p className="text-[10px] text-[#0052FF] font-bold">Base native token — gas only, no FlameBase fee</p>
+                <input value={b20Name} onChange={e => setB20Name(e.target.value)} placeholder="Token name" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
+                <input value={b20Symbol} onChange={e => setB20Symbol(e.target.value)} placeholder="Symbol" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
+                <input value={b20Supply} onChange={e => setB20Supply(e.target.value)} placeholder="Supply" type="number" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
+                <button onClick={() => { if (!B20_FACTORY_DEPLOYED || !b20Name || !b20Symbol || !b20Supply) return; toolAction(deployB20, setB20Loading) }}
+                  disabled={b20Loading || !b20Name || !b20Symbol || !b20Supply} className="w-full bg-[#0052FF] text-white text-xs py-2 rounded-lg font-bold disabled:opacity-40">
+                  {b20Loading ? 'Deploying…' : 'Deploy B20 Token'}
+                </button>
               </div>
             )}
             {activeTool === 'wallet' && (
