@@ -92,6 +92,18 @@ GET /api/mcp/prepare/greet?from=<address>&greeting=<text>
 GET /api/mcp/prepare/deployToken?from=<address>&name=<name>&symbol=<symbol>&supply=<amount>
 ```
 
+**Deploy a native Base B-20 token** (Beryl upgrade, live since 2026-06-25)
+```
+GET /api/mcp/prepare/deployB20Token?account=<address>&name=<name>&symbol=<symbol>&supply=<amount>&decimals=<6-18>
+```
+Goes through Base's `0xB20f...` factory precompile instead of FlameBase's own
+`TokenFactory` — no protocol fee (gas only), admin-less / fixed-supply.
+`account` is **required** (not just the usual `from` convention): the initial
+supply's recipient is encoded directly into the calldata, so the address must
+be known before calling, not inferred from `msg.sender` on submission. New as
+of this upgrade — prefer `deployToken` unless the user asks for B-20
+specifically.
+
 **Create DAO proposal**
 ```
 GET /api/mcp/prepare/propose?from=<address>&title=<title>&description=<text>

@@ -1,3 +1,5 @@
+import { encodeAbiParameters, encodeFunctionData, parseAbiParameters } from 'viem'
+
 export const TOOLS_ADDRESS = (process.env.NEXT_PUBLIC_TOOLS_CONTRACT || '') as `0x${string}`
 export const TOKEN_FACTORY_ADDRESS = (process.env.NEXT_PUBLIC_TOKEN_FACTORY || '') as `0x${string}`
 export const NFT_FACTORY_ADDRESS = (process.env.NEXT_PUBLIC_NFT_FACTORY || '') as `0x${string}`
@@ -53,6 +55,53 @@ export const DAO_ABI = [
   { name: 'isActive', type: 'function', stateMutability: 'view', inputs: [{ name: '_id', type: 'uint256' }], outputs: [{ type: 'bool' }] },
   { name: 'hasVoted', type: 'function', stateMutability: 'view', inputs: [{ name: '', type: 'uint256' }, { name: '', type: 'address' }], outputs: [{ type: 'bool' }] },
 ] as const
+
+// Base's native B-20 token standard (Beryl upgrade, live on Base mainnet since 2026-06-25).
+// Singleton precompile — same address on every Base chain that has activated Beryl.
+// Spec: https://github.com/base/base-std (src/interfaces/IB20Factory.sol, src/lib/B20FactoryLib.sol)
+export const B20_FACTORY_ADDRESS = '0xB20f000000000000000000000000000000000000' as const
+
+export const B20_FACTORY_ABI = [
+  {
+    name: 'createB20',
+    type: 'function',
+    stateMutability: 'payable',
+    inputs: [
+      { name: 'variant', type: 'uint8' },
+      { name: 'salt', type: 'bytes32' },
+      { name: 'params', type: 'bytes' },
+      { name: 'initCalls', type: 'bytes[]' },
+    ],
+    outputs: [{ name: 'token', type: 'address' }],
+  },
+] as const
+
+const B20_BATCH_MINT_ABI = [
+  {
+    name: 'batchMint',
+    type: 'function',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'recipients', type: 'address[]' },
+      { name: 'amounts', type: 'uint256[]' },
+    ],
+    outputs: [],
+  },
+] as const
+
+// Mirrors B20FactoryLib.encodeAssetCreateParams: abi.encode(version=1, name, symbol, initialAdmin, decimals).
+export function encodeB20AssetCreateParams(name: string, symbol: string, initialAdmin: `0x${string}`, decimals: number) {
+  return encodeAbiParameters(
+    parseAbiParameters('uint8, string, string, address, uint8'),
+    [1, name, symbol, initialAdmin, decimals],
+  )
+}
+
+// Mirrors B20FactoryLib.encodeBatchMint — passed as a createB20 initCall to mint the initial
+// supply during the bootstrap window, which bypasses MINT_ROLE entirely.
+export function encodeB20BatchMintInitCall(recipient: `0x${string}`, amount: bigint) {
+  return encodeFunctionData({ abi: B20_BATCH_MINT_ABI, functionName: 'batchMint', args: [[recipient], [amount]] })
+}
 
 export const FOLLOW_ABI = [
   { name: 'follow', type: 'function', stateMutability: 'payable', inputs: [{ name: 'target', type: 'address' }], outputs: [] },

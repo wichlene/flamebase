@@ -14,7 +14,7 @@ social actions. Pair it with Base MCP so a user can approve actions in one click
 - Prepare an unsigned transaction: https://flamebase.xyz/api/mcp/prepare/{action}
 
 Actions: createPost, like, comment, tip, createProfile, follow, unfollow,
-checkIn, deployToken, propose, vote.
+checkIn, deployToken, deployB20Token, propose, vote.
 
 ## Links
 

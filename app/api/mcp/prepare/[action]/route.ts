@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server'
-import { encodeFunctionData, parseEther } from 'viem'
+import { encodeFunctionData, keccak256, parseEther, toHex } from 'viem'
 import { CONTRACT_ABI, CONTRACT_ADDRESS } from '../../../../../lib/contract'
 import {
   TOOLS_ABI, TOOLS_ADDRESS,
   TOKEN_FACTORY_ABI, TOKEN_FACTORY_ADDRESS,
   DAO_ABI, DAO_ADDRESS,
   FOLLOW_ABI, FOLLOW_ADDRESS,
+  B20_FACTORY_ABI, B20_FACTORY_ADDRESS,
+  encodeB20AssetCreateParams, encodeB20BatchMintInitCall,
 } from '../../../../../lib/toolsContracts'
 
 const CHAIN_ID = 8453
@@ -140,6 +142,32 @@ export async function GET(
           args: [q('name'), q('symbol'), BigInt(q('supply') || '1000000')],
         })
         return ok(TOKEN_FACTORY_ADDRESS, data, '0.001')
+      }
+
+      case 'deployB20Token': {
+        if (!q('name') || !q('symbol')) return err('name and symbol are required')
+        if (!q('account')) return err('account (your wallet address) is required')
+        const decimals = q('decimals') ? Number(q('decimals')) : 18
+        if (!Number.isInteger(decimals) || decimals < 6 || decimals > 18) {
+          return err('decimals must be an integer between 6 and 18')
+        }
+        const supply = BigInt(q('supply') || '1000000')
+        const account = q('account') as `0x${string}`
+        // Admin-less (initialAdmin = address(0)): supply is minted once via initCalls below,
+        // then no one — not even the creator — can ever mint, pause, or change policy again.
+        const params = encodeB20AssetCreateParams(
+          q('name'), q('symbol'),
+          '0x0000000000000000000000000000000000000000',
+          decimals,
+        )
+        const initCalls = [encodeB20BatchMintInitCall(account, supply * (10n ** BigInt(decimals)))]
+        const salt = keccak256(toHex(`${account}-${q('symbol')}-${q('name')}-${Date.now()}-${Math.random()}`))
+        const data = encodeFunctionData({
+          abi: B20_FACTORY_ABI,
+          functionName: 'createB20',
+          args: [0, salt, params, initCalls],
+        })
+        return ok(B20_FACTORY_ADDRESS, data, '0')
       }
 
       case 'propose': {

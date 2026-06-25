@@ -80,6 +80,7 @@ as two separate, sequential approvals.
 | `unfollow`     | `target` (address)           | —                       | Unfollow a user on-chain                      |
 | `checkIn`      | —                            | —                       | Daily check-in (streak)                        |
 | `deployToken`  | `name`, `symbol`             | `supply`                | Deploy an ERC-20 via the FlameBase factory    |
+| `deployB20Token`| `name`, `symbol`, `account`  | `supply`, `decimals`    | Deploy a native Base B-20 token (Beryl)       |
 | `propose`      | `title`, `description`       | —                       | Open a FlameBase DAO proposal                 |
 | `vote`         | `proposalId`                 | `support` (true/false)  | Vote on a DAO proposal                        |
 
@@ -92,10 +93,34 @@ as two separate, sequential approvals.
 - "Follow 0xabc…123 on FlameBase"
   → `GET /api/mcp/prepare/follow?target=0xabc...123`
 
+## deployB20Token — Base's native token standard
+
+`deployB20Token` creates a token through Base's B-20 precompile factory
+(`0xB20f...`, live on Base mainnet since the 2026-06-25 Beryl upgrade) instead
+of FlameBase's own `TokenFactory` contract. Differences from `deployToken`:
+
+- **No protocol fee** — only gas. `deployToken` charges a fixed 0.001 ETH fee.
+- Standard ERC-20 interface, but token logic runs as a chain-native precompile
+  (cheaper transfers, no separate contract bytecode per token).
+- Requires an extra **`account`** param: the caller's own wallet address. Unlike
+  every other action here, the recipient of the initial supply is baked
+  directly into the unsigned transaction's calldata (it cannot be inferred
+  from `msg.sender` on-chain like the other actions), so it must be supplied
+  up front. Never guess this — use the address returned by the wallet/Base MCP
+  detection step.
+- Deploys admin-less (no `DEFAULT_ADMIN_ROLE` holder): the full `supply` is
+  minted once to `account` at creation, and after that nobody — including the
+  creator — can ever mint more, pause it, or change its policies. This mirrors
+  `deployToken`'s fixed-supply guarantee.
+- `decimals` (optional, default `18`) must be an integer in `[6, 18]`.
+
+This is new (hours old at time of writing) infrastructure. Prefer `deployToken`
+unless the user specifically asks for a B-20 / native Base token.
+
 ## Rules
 
-- Never fabricate a `postId`, `target` address, or amount. If the user hasn't
-  given it, ask.
+- Never fabricate a `postId`, `target` address, `account` address, or amount.
+  If the user hasn't given it, ask.
 - `amount`/`value`-style params are denominated in ETH as a decimal string
   (e.g. `0.0003`), not wei.
 - Always let the user approve the transaction in their wallet. This skill only

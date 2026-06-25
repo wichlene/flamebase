@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server'
-import { encodeFunctionData, parseEther } from 'viem'
+import { encodeFunctionData, keccak256, parseEther, toHex } from 'viem'
 import { CONTRACT_ABI, CONTRACT_ADDRESS } from '../../../lib/contract'
-import { TOOLS_ABI, TOOLS_ADDRESS, TOKEN_FACTORY_ABI, TOKEN_FACTORY_ADDRESS, DAO_ABI, DAO_ADDRESS, FOLLOW_ABI, FOLLOW_ADDRESS } from '../../../lib/toolsContracts'
+import {
+  TOOLS_ABI, TOOLS_ADDRESS, TOKEN_FACTORY_ABI, TOKEN_FACTORY_ADDRESS, DAO_ABI, DAO_ADDRESS, FOLLOW_ABI, FOLLOW_ADDRESS,
+  B20_FACTORY_ABI, B20_FACTORY_ADDRESS, encodeB20AssetCreateParams, encodeB20BatchMintInitCall,
+} from '../../../lib/toolsContracts'
 
 const CHAIN_ID = 8453 // Base mainnet
 
@@ -17,11 +20,12 @@ export async function GET() {
       tokenFactory: TOKEN_FACTORY_ADDRESS,
       dao: DAO_ADDRESS,
       follow: FOLLOW_ADDRESS,
+      b20Factory: B20_FACTORY_ADDRESS,
     },
     actions: [
       'createPost', 'like', 'tip', 'comment',
       'createProfile', 'follow', 'unfollow', 'checkIn', 'count',
-      'log', 'greet', 'deployToken', 'propose', 'vote',
+      'log', 'greet', 'deployToken', 'deployB20Token', 'propose', 'vote',
     ],
   })
 }
@@ -123,6 +127,31 @@ export async function POST(request: Request) {
           args: [params.name ?? '', params.symbol ?? '', BigInt(params.supply ?? 1000000)],
         })
         return tx(TOKEN_FACTORY_ADDRESS, data, '0.001')
+      }
+
+      case 'deployB20Token': {
+        if (!params.account) {
+          return NextResponse.json({ error: 'account (your wallet address) is required' }, { status: 400 })
+        }
+        const decimals = params.decimals ?? 18
+        if (!Number.isInteger(decimals) || decimals < 6 || decimals > 18) {
+          return NextResponse.json({ error: 'decimals must be an integer between 6 and 18' }, { status: 400 })
+        }
+        const supply = BigInt(params.supply ?? 1000000)
+        const account = params.account as `0x${string}`
+        const b20Params = encodeB20AssetCreateParams(
+          params.name ?? '', params.symbol ?? '',
+          '0x0000000000000000000000000000000000000000',
+          decimals,
+        )
+        const initCalls = [encodeB20BatchMintInitCall(account, supply * (10n ** BigInt(decimals)))]
+        const salt = keccak256(toHex(`${account}-${params.symbol ?? ''}-${params.name ?? ''}-${Date.now()}-${Math.random()}`))
+        const data = encodeFunctionData({
+          abi: B20_FACTORY_ABI,
+          functionName: 'createB20',
+          args: [0, salt, b20Params, initCalls],
+        })
+        return tx(B20_FACTORY_ADDRESS, data, '0')
       }
 
       case 'propose': {

@@ -57,6 +57,7 @@ missing field. Never invent a `postId`, `target`, or amount.
 | `unfollow`     | `target` (address)      | —                      | Unfollow a user on-chain          |
 | `checkIn`      | —                       | —                      | Daily check-in (streak)           |
 | `deployToken`  | `name`, `symbol`        | `supply`               | Deploy an ERC-20                  |
+| `deployB20Token`| `name`, `symbol`, `account` | `supply`, `decimals` | Deploy a native Base B-20 token  |
 | `propose`      | `title`, `description`  | —                      | Open a DAO proposal               |
 | `vote`         | `proposalId`            | `support` (true/false) | Vote on a DAO proposal            |
 
@@ -87,6 +88,14 @@ second call still sees "no profile" and the whole batch reverts.
 
 ## Notes
 
+- `deployB20Token` deploys via Base's native B-20 precompile factory
+  (`0xB20f...`, live since the 2026-06-25 Beryl upgrade) instead of
+  FlameBase's `TokenFactory`: no protocol fee (gas only), admin-less /
+  fixed-supply by design, and — unlike every other action here — needs an
+  `account` param (the caller's wallet address) because the initial-supply
+  recipient is baked into the calldata itself, not inferred from
+  `msg.sender`. It's brand new; default to `deployToken` unless the user
+  asks for a B-20 / native token specifically.
 - `amount` / `value` params are ETH decimal strings (e.g. `0.0003`), not wei.
 - All transactions settle on Base mainnet (chain id 8453).
 - Usernames are permanent: the contract has no rename, so confirm the username
