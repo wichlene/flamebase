@@ -373,8 +373,13 @@ export default function Home() {
         }
         if (isRevert) {
           if (!reason) reason = simErr?.shortMessage || simErr?.details || (simErr instanceof Error ? simErr.message : '') || 'transaction would revert'
-          const m = reason.match(/reverted with the following reason:\s*(.+)/i)
-          const clean = (m?.[1] || reason).split('\n')[0].trim()
+          const reasonMatch = reason.match(/reverted with the following reason:\s*(.+)/i)
+          // Custom error our ABI can't decode to a name: viem's message ends
+          // with "...following signature:\n0xabcd1234" — the selector is on
+          // the NEXT line, so a plain split('\n')[0] above used to discard it
+          // and show a sentence fragment with no actual information.
+          const sigMatch = reason.match(/reverted with the following signature:\s*\n?\s*(0x[0-9a-fA-F]+)/i)
+          const clean = (reasonMatch?.[1] || (sigMatch ? `unrecognized error ${sigMatch[1]}` : reason.split('\n')[0])).trim()
           throw new Error(`CONTRACT_REVERT:${clean}`)
         }
       }
