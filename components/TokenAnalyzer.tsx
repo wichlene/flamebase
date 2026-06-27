@@ -177,7 +177,7 @@ export default function TokenAnalyzer() {
           {/* AI Analysis */}
           <div className="bg-gradient-to-br from-[#F0F4FF] to-[#EEF2FF] border border-[#D6E2FF] rounded-2xl p-4">
             <p className="text-xs font-bold text-[#0052FF] mb-2 flex items-center gap-1.5">
-              🤖 AI Analysis <span className="text-[#8A919E] font-normal">powered by Llama 3</span>
+              🤖 AI Analysis <span className="text-[#8A919E] font-normal">powered by AI</span>
             </p>
             <p className="text-sm text-[#0A0B0D] whitespace-pre-wrap leading-relaxed">{result.analysis}</p>
           </div>

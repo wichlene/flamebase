@@ -27,6 +27,9 @@ const NFT_FACTORY_DEPLOYED = NFT_FACTORY_ADDRESS.length > 0
 const DAO_DEPLOYED = DAO_ADDRESS.length > 0
 const FOLLOW_DEPLOYED = FOLLOW_ADDRESS.length > 0
 const B20_FACTORY_DEPLOYED = B20_FACTORY_ADDRESS.length > 0
+// Base hasn't activated the B20 ASSET variant on mainnet yet (createB20 reverts
+// FeatureNotActivated 0xb9b2a425). Keep the deploy path gated until it goes live.
+const B20_ACTIVATED: boolean = false
 
 const ADMIN_ADDRESS = '0xa77A5D4D37d6F39C20C2441295da9fA60Ab9fD69'
 const FLM_TOKEN_ADDRESS = '0xadead5e8ca2893be6e8239cbbae83049a701cb07'
@@ -1631,6 +1634,11 @@ export default function Home() {
   // own TokenFactory: no protocol fee (gas only), admin-less / fixed-supply forever.
   const deployB20 = async () => {
     if (!address) return
+    // B20 ASSET variant isn't activated on Base yet — the factory reverts with
+    // FeatureNotActivated (0xb9b2a425). Stop here with a clear message instead
+    // of letting the user sign a tx that's guaranteed to fail. Flip B20_ACTIVATED
+    // to true once Base turns the activation flag on.
+    if (!B20_ACTIVATED) { showToast('error', t('errB20NotActive')); return }
     const decimals = 18
     const supply = BigInt(b20Supply || '1000000')
     const params = encodeB20AssetCreateParams(b20Name, b20Symbol, '0x0000000000000000000000000000000000000000', decimals)
