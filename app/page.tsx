@@ -2568,79 +2568,11 @@ export default function Home() {
                                 <span className="font-bold">{comments.length > 0 ? comments.length : ''}</span>
                               </button>
 
-                              <div className="relative">
-                                <button onClick={() => { setSharePost(sharePost === key ? null : key); setShareCopied(false) }}
-                                  className="flex items-center gap-1.5 text-[#5B6271] hover:text-[#0052FF] hover:bg-[#E6EEFF] rounded-xl px-3 py-2 text-sm transition-all"
-                                  title="Share">
-                                  <span className="text-lg">🔗</span>
-                                </button>
-                                {sharePost === key && (() => {
-                                  const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/post/${key}`
-                                  const text = (post.content || 'Check out this post on FlameBase').slice(0, 200)
-                                  const xUrl = `https://x.com/intent/tweet?text=${encodeURIComponent(`${text}\n\n`)}&url=${encodeURIComponent(url)}`
-                                  const fcUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(`${text}\n\n${url}`)}`
-                                  return (
-                                    <>
-                                      <div className="fixed inset-0 z-20" onClick={() => setSharePost(null)} />
-                                      <div className="absolute z-30 top-full left-0 mt-1 w-52 bg-white border border-[#E4E7EB] rounded-xl shadow-xl overflow-hidden">
-                                        <button
-                                          onClick={async () => {
-                                            try { await navigator.clipboard.writeText(url) } catch {}
-                                            setShareCopied(true)
-                                            setTimeout(() => { setShareCopied(false); setSharePost(null) }, 1200)
-                                          }}
-                                          className="w-full text-left px-3 py-2.5 text-sm font-semibold text-[#0A0B0D] hover:bg-[#F7F9FC] flex items-center gap-2.5 border-b border-[#EEF1F5]"
-                                        >
-                                          <span className="text-base">{shareCopied ? '✅' : '📋'}</span>
-                                          {shareCopied ? 'Copied!' : 'Copy link'}
-                                        </button>
-                                        <a href={xUrl} target="_blank" rel="noopener noreferrer"
-                                          onClick={() => setSharePost(null)}
-                                          className="w-full px-3 py-2.5 text-sm font-semibold text-[#0A0B0D] hover:bg-[#F7F9FC] flex items-center gap-2.5 border-b border-[#EEF1F5]">
-                                          <span className="text-base">𝕏</span> Share on X
-                                        </a>
-                                        <a href={fcUrl} target="_blank" rel="noopener noreferrer"
-                                          onClick={() => setSharePost(null)}
-                                          className="w-full px-3 py-2.5 text-sm font-semibold text-[#0A0B0D] hover:bg-[#F7F9FC] flex items-center gap-2.5">
-                                          <span className="text-base">🟣</span> Share on Farcaster
-                                        </a>
-                                      </div>
-                                    </>
-                                  )
-                                })()}
-                              </div>
-
-                              {post.content && post.content.length > 5 && (
-                                <button onClick={() => translatePost(key, post.content)}
-                                  title={translatedPosts[key] ? 'Hide translation' : 'Translate post'}
-                                  className={`flex items-center gap-1 rounded-xl px-3 py-2 text-sm transition-all ${translatedPosts[key] ? 'text-green-600 bg-green-50' : 'text-[#5B6271] hover:text-green-600 hover:bg-green-50'}`}>
-                                  <span className="text-lg">{translatingPost === key ? '⏳' : '🌐'}</span>
-                                </button>
-                              )}
-                              <button onClick={() => toggleBookmark(key)}
-                                title={bookmarks.has(key) ? 'Remove bookmark' : 'Bookmark'}
-                                className={`flex items-center gap-1 rounded-xl px-3 py-2 text-sm transition-all ${bookmarks.has(key) ? 'text-[#0052FF] bg-[#E6EEFF]' : 'text-[#5B6271] hover:text-[#0052FF] hover:bg-[#E6EEFF]'}`}>
-                                <span className="text-lg">🔖</span>
-                              </button>
                               <button onClick={() => quotePost(post)}
-                                title="Quote post"
+                                title="Repost / quote"
                                 className="flex items-center gap-1 text-[#5B6271] hover:text-[#0052FF] hover:bg-[#E6EEFF] rounded-xl px-3 py-2 text-sm transition-all">
                                 <span className="text-lg">🔁</span>
                               </button>
-                              {isConnected && (
-                                <button onClick={() => boostPost(key)} disabled={loadingAction === `boost-${key}` || !isConnected || (boostedPosts[key] || 0) > Date.now()}
-                                  title="Boost post ($0.09)"
-                                  className={`flex items-center gap-1 rounded-xl px-3 py-2 text-sm transition-all disabled:opacity-40 ${(boostedPosts[key] || 0) > Date.now() ? 'text-orange-500 bg-orange-50' : 'text-[#5B6271] hover:text-orange-500 hover:bg-orange-50'}`}>
-                                  <span className="text-lg">🚀</span>
-                                </button>
-                              )}
-                              {isConnected && NFT_FACTORY_DEPLOYED && (
-                                <button onClick={() => mintPostAsNft(post)} disabled={loadingAction === `mintnft-${key}`}
-                                  title="Mint this post as an NFT"
-                                  className="flex items-center gap-1 text-[#5B6271] hover:text-purple-600 hover:bg-purple-50 rounded-xl px-3 py-2 text-sm transition-all disabled:opacity-40">
-                                  <span className="text-lg">{loadingAction === `mintnft-${key}` ? '⏳' : '🖼️'}</span>
-                                </button>
-                              )}
 
                               <div className="flex items-center gap-1 ml-auto">
                                 {[0.5, 1, 5].map(amt => (
