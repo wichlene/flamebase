@@ -1316,6 +1316,20 @@ export default function Home() {
     if (next && !postComments[postId]) await loadComments(postId)
   }
 
+  // Prefetch comments for feed posts (once each) so the 💬 count is visible
+  // without having to open each post first.
+  const prefetchedComments = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    if (activeTab !== 'feed' || !publicClient) return
+    const targets = posts.filter(p => {
+      const k = p.id.toString()
+      return !postComments[k] && !prefetchedComments.current.has(k)
+    }).slice(0, 40)
+    if (targets.length === 0) return
+    targets.forEach(p => { prefetchedComments.current.add(p.id.toString()); loadComments(p.id.toString()) })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [posts, activeTab, publicClient])
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] || null
     if (file && file.size > 50 * 1024 * 1024) {
@@ -2306,31 +2320,6 @@ export default function Home() {
             {/* ══ FEED ══ */}
             {activeTab === 'feed' && (
               <div>
-                <div className="hidden md:flex items-center justify-between px-5 py-4 border-b border-[#EEF1F5] sticky top-0 bg-white/95 backdrop-blur z-10">
-                  <h1 className="text-lg font-black text-[#0A0B0D]">{t('feedTitle')}</h1>
-                  <div className="flex items-center gap-2">
-                    {/* Notification bell desktop */}
-                    <button
-                      onClick={() => setShowNotifications(!showNotifications)}
-                      className="relative w-9 h-9 flex items-center justify-center rounded-full hover:bg-[#F7F9FC] transition-colors"
-                    >
-                      <span className="text-lg">🔔</span>
-                      {notifications.length > 0 && (
-                        <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white" />
-                      )}
-                    </button>
-                    <button onClick={() => setShowBookmarks(b => !b)}
-                      title={showBookmarks ? 'Show all posts' : 'Show bookmarks'}
-                      className={`w-9 h-9 flex items-center justify-center rounded-full transition-colors ${showBookmarks ? 'bg-[#E6EEFF] text-[#0052FF]' : 'hover:bg-[#F7F9FC]'}`}>
-                      <span className="text-lg">🔖</span>
-                    </button>
-                    <button onClick={() => setActiveTab('post')}
-                      className="bg-[#0052FF] hover:bg-[#1652F0] text-white px-5 py-2 rounded-xl font-bold text-sm transition-colors shadow-sm">
-                      {t('navNewPost')}
-                    </button>
-                  </div>
-                </div>
-
                 {/* Search bar */}
                 <div className="px-4 pt-3 pb-2">
                   <input
@@ -2340,44 +2329,6 @@ export default function Home() {
                     className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-4 py-2.5 text-sm text-[#0A0B0D] placeholder-[#8A919E] focus:outline-none focus:border-[#0052FF]"
                   />
                 </div>
-
-                {/* FlameBase Logo NFT mint card */}
-                {logoNftDeployed && (
-                  <div className="mx-4 my-3 bg-gradient-to-br from-orange-500 via-red-500 to-pink-500 rounded-2xl p-5 text-white shadow-lg">
-                    <div className="flex items-center gap-4">
-                      <img src="/logo.png" alt="FlameBase Logo" className="w-16 h-16 rounded-xl bg-white/10 p-1.5 flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="font-black text-base">🎨 FlameBase Logo NFT</p>
-                        <p className="text-white/80 text-xs mt-0.5">Official collection on Base</p>
-                        {logoNftTotalSupply !== undefined && logoNftMaxSupply !== undefined && (
-                          <div className="mt-2">
-                            <div className="flex justify-between text-[10px] mb-1">
-                              <span>Minted</span>
-                              <span className="font-bold">{(logoNftTotalSupply as bigint).toString()} / {(logoNftMaxSupply as bigint).toString()}</span>
-                            </div>
-                            <div className="w-full h-1.5 bg-white/20 rounded-full overflow-hidden">
-                              <div className="h-full bg-white" style={{ width: `${Math.min(100, Number((logoNftTotalSupply as bigint) * 100n / (logoNftMaxSupply as bigint)))}%` }} />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="mt-3 flex items-center gap-2">
-                      {logoNftBalance !== undefined && (logoNftBalance as bigint) > 0n && (
-                        <span className="bg-white/20 text-white text-xs font-bold px-2.5 py-1.5 rounded-lg">
-                          ✨ You own {(logoNftBalance as bigint).toString()}
-                        </span>
-                      )}
-                      <button
-                        onClick={mintLogoNft}
-                        disabled={!isConnected || mintingLogoNft || logoNftMintPrice === undefined || (logoNftTotalSupply !== undefined && logoNftMaxSupply !== undefined && (logoNftTotalSupply as bigint) >= (logoNftMaxSupply as bigint))}
-                        className="ml-auto bg-white hover:bg-white/90 text-orange-600 disabled:opacity-50 font-black text-sm px-5 py-2.5 rounded-xl transition-colors shadow-sm"
-                      >
-                        {mintingLogoNft ? 'Minting…' : !isConnected ? 'Connect to mint' : logoNftMintPrice === undefined ? 'Loading…' : (logoNftTotalSupply !== undefined && logoNftMaxSupply !== undefined && (logoNftTotalSupply as bigint) >= (logoNftMaxSupply as bigint)) ? 'Sold out' : '🔥 Mint $0.50'}
-                      </button>
-                    </div>
-                  </div>
-                )}
 
                 {/* Trending hashtags — clickable chips that filter the feed */}
                 {trendingTags.length > 0 && (
@@ -3278,6 +3229,44 @@ export default function Home() {
           {activeTab === 'tools' && (
             <div className="p-4 pb-24 space-y-4">
               <h1 className="text-xl font-black text-[#0A0B0D]">🛠️ Tools</h1>
+
+              {/* FlameBase Logo NFT mint card */}
+              {logoNftDeployed && (
+                <div className="bg-gradient-to-br from-orange-500 via-red-500 to-pink-500 rounded-2xl p-5 text-white shadow-lg">
+                  <div className="flex items-center gap-4">
+                    <img src="/logo.png" alt="FlameBase Logo" className="w-16 h-16 rounded-xl bg-white/10 p-1.5 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-black text-base">🎨 FlameBase Logo NFT</p>
+                      <p className="text-white/80 text-xs mt-0.5">Official collection on Base</p>
+                      {logoNftTotalSupply !== undefined && logoNftMaxSupply !== undefined && (
+                        <div className="mt-2">
+                          <div className="flex justify-between text-[10px] mb-1">
+                            <span>Minted</span>
+                            <span className="font-bold">{(logoNftTotalSupply as bigint).toString()} / {(logoNftMaxSupply as bigint).toString()}</span>
+                          </div>
+                          <div className="w-full h-1.5 bg-white/20 rounded-full overflow-hidden">
+                            <div className="h-full bg-white" style={{ width: `${Math.min(100, Number((logoNftTotalSupply as bigint) * 100n / (logoNftMaxSupply as bigint)))}%` }} />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="mt-3 flex items-center gap-2">
+                    {logoNftBalance !== undefined && (logoNftBalance as bigint) > 0n && (
+                      <span className="bg-white/20 text-white text-xs font-bold px-2.5 py-1.5 rounded-lg">
+                        ✨ You own {(logoNftBalance as bigint).toString()}
+                      </span>
+                    )}
+                    <button
+                      onClick={mintLogoNft}
+                      disabled={!isConnected || mintingLogoNft || logoNftMintPrice === undefined || (logoNftTotalSupply !== undefined && logoNftMaxSupply !== undefined && (logoNftTotalSupply as bigint) >= (logoNftMaxSupply as bigint))}
+                      className="ml-auto bg-white hover:bg-white/90 text-orange-600 disabled:opacity-50 font-black text-sm px-5 py-2.5 rounded-xl transition-colors shadow-sm"
+                    >
+                      {mintingLogoNft ? 'Minting…' : !isConnected ? 'Connect to mint' : logoNftMintPrice === undefined ? 'Loading…' : (logoNftTotalSupply !== undefined && logoNftMaxSupply !== undefined && (logoNftTotalSupply as bigint) >= (logoNftMaxSupply as bigint)) ? 'Sold out' : '🔥 Mint $0.50'}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <div className="bg-white border border-[#E4E7EB] rounded-2xl overflow-hidden">
                 <div className="px-4 py-3 border-b border-[#EEF1F5]">
