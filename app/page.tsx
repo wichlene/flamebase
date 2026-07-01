@@ -34,6 +34,16 @@ const B20_ACTIVATED: boolean = false
 const ADMIN_ADDRESS = '0xa77A5D4D37d6F39C20C2441295da9fA60Ab9fD69'
 const FLM_TOKEN_ADDRESS = '0xadead5e8ca2893be6e8239cbbae83049a701cb07'
 
+// Convert a base64url VAPID public key to the Uint8Array the Push API expects.
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
+  const raw = atob(base64)
+  const out = new Uint8Array(raw.length)
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i)
+  return out
+}
+
 interface Post {
   id: bigint
   author: string
@@ -771,6 +781,7 @@ export default function Home() {
     try {
       await writeContractAsync({ address: FOLLOW_ADDRESS, abi: FOLLOW_ABI, functionName: 'follow', args: [target as `0x${string}`], value: fixedFee }, 'follow')
       showToast('success', 'Followed on-chain 🤝')
+      notify(target, 'follow')
     } catch (e) {
       console.error(e)
       const revert = new Set(next); revert.delete(t)
@@ -1396,6 +1407,7 @@ export default function Home() {
     try {
       await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'like', args: [postId], value: effectiveFee(likePrice as bigint | undefined, DEFAULT_LIKE_PRICE) })
       setPosts(prev => prev.map(p => p.id === postId ? { ...p, likes: p.likes + 1n } : p))
+      notify(posts.find(p => p.id === postId)?.author, 'like', posts.find(p => p.id === postId)?.content?.slice(0, 60))
     } catch (e: unknown) {
       console.error(e)
       showToast('error', txError(e))
@@ -1412,6 +1424,7 @@ export default function Home() {
       await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'comment', args: [postId, text], value: effectiveFee(commentPrice as bigint | undefined, DEFAULT_COMMENT_PRICE) })
       setCommentTexts(prev => ({ ...prev, [key]: '' }))
       setReplyingTo(prev => ({ ...prev, [key]: '' }))
+      notify(posts.find(p => p.id === postId)?.author, 'comment', text)
       await loadComments(key)
     } catch (e) { console.error(e); showToast('error', t('errCommentFailed')) }
     setLoadingAction(null)
@@ -1430,6 +1443,7 @@ export default function Home() {
       setTipAmounts(prev => ({ ...prev, [key]: '' }))
       SFX.tip()
       showToast('success', `Tipped $${usd}`)
+      notify(posts.find(p => p.id === postId)?.author, 'tip', `$${usd}`)
     } catch (e) {
       console.error(e)
       showToast('error', 'Tip failed — transaction rejected or reverted')
@@ -1472,13 +1486,38 @@ export default function Home() {
   const requestPush = async () => {
     if (typeof Notification === 'undefined') { showToast('error', 'Browser notifications not supported'); return }
     const perm = await Notification.requestPermission()
-    if (perm === 'granted') {
-      setPushEnabled(true)
-      localStorage.setItem('flamebase_push', 'true')
-      showToast('success', '🔔 Push notifications enabled!')
-    } else {
-      showToast('error', 'Notification permission denied')
-    }
+    if (perm !== 'granted') { showToast('error', 'Notification permission denied'); return }
+    setPushEnabled(true)
+    localStorage.setItem('flamebase_push', 'true')
+    // Register a real Web Push subscription so notifications also arrive when
+    // the tab/app is closed. Needs NEXT_PUBLIC_VAPID_PUBLIC_KEY + a service
+    // worker; falls back to in-tab notifications when either is missing.
+    try {
+      const vapid = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
+      if (vapid && 'serviceWorker' in navigator && 'PushManager' in window && address) {
+        const reg = await navigator.serviceWorker.ready
+        const sub = (await reg.pushManager.getSubscription()) || (await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(vapid),
+        }))
+        await fetch('/api/push/subscribe', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ address, subscription: sub.toJSON() }),
+        })
+      }
+    } catch (e) { console.error('web push subscribe failed', e) }
+    showToast('success', '🔔 Push notifications enabled!')
+  }
+
+  // Fire-and-forget: ask the server to push a notification to another user when
+  // we like/comment/tip/follow them. Never notifies yourself, never throws.
+  const notify = (to: string | undefined, type: 'like' | 'comment' | 'tip' | 'follow', preview?: string) => {
+    if (!to || !address || to.toLowerCase() === address.toLowerCase()) return
+    const actor = (myProfile && myProfile[0]) || `${address.slice(0, 6)}…${address.slice(-4)}`
+    fetch('/api/notify', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to, type, actor, preview }),
+    }).catch(() => {})
   }
 
   const translatePost = async (postId: string, content: string) => {
