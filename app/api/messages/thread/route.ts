@@ -9,7 +9,8 @@ export async function GET(req: Request) {
   const b = searchParams.get('b') || ''
   if (!isAddr(a) || !isAddr(b)) return NextResponse.json({ error: 'two valid addresses required' }, { status: 400 })
   try {
-    const messages = await getThread(convId(a, b))
+    // `a` is the viewer, so their "delete for me" clear point is applied.
+    const messages = await getThread(convId(a, b), a)
     return NextResponse.json({ messages })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'failed' }, { status: 500 })

@@ -33,6 +33,7 @@ async function redis(cmd: (string | number)[]): Promise<any> {
 // ── in-memory fallback (local dev only — not shared across serverless invocations) ──
 const memLists: Record<string, string[]> = {}
 const memZ: Record<string, Record<string, number>> = {}
+const memClr: Record<string, number> = {}
 
 const isAddr = (s: string) => /^0x[a-fA-F0-9]{40}$/.test(s)
 
@@ -64,11 +65,38 @@ export async function addMessage(fromRaw: string, toRaw: string, textRaw: string
   return msg
 }
 
-export async function getThread(cid: string): Promise<StoredMsg[]> {
+// "Delete for me": drop the conversation from this user's list and remember the
+// moment they cleared it, so older messages stay hidden FOR THEM while the peer
+// and the shared history are untouched. A new incoming message re-adds the
+// conversation (with only the new messages visible to this user).
+export async function clearConversationForUser(meRaw: string, cid: string): Promise<void> {
+  const me = meRaw.toLowerCase()
+  if (!isAddr(me) || !cid.includes(me)) return // can only clear your own conversations
+  const ts = Date.now()
+  if (useRedis) {
+    await redis(['ZREM', `fb:uc:${me}`, cid])
+    await redis(['SET', `fb:clr:${me}:${cid}`, ts])
+  } else {
+    delete memZ[`fb:uc:${me}`]?.[cid]
+    memClr[`fb:clr:${me}:${cid}`] = ts
+  }
+}
+
+async function getCleared(me: string, cid: string): Promise<number> {
+  if (useRedis) { const v = await redis(['GET', `fb:clr:${me}:${cid}`]); return v ? Number(v) : 0 }
+  return memClr[`fb:clr:${me}:${cid}`] || 0
+}
+
+export async function getThread(cid: string, viewerRaw?: string): Promise<StoredMsg[]> {
   let raw: string[]
   if (useRedis) raw = (await redis(['LRANGE', `fb:conv:${cid}`, 0, -1])) || []
   else raw = memLists[`fb:conv:${cid}`] || []
-  return raw.map(s => { try { return JSON.parse(s) as StoredMsg } catch { return null } }).filter(Boolean) as StoredMsg[]
+  let msgs = raw.map(s => { try { return JSON.parse(s) as StoredMsg } catch { return null } }).filter(Boolean) as StoredMsg[]
+  if (viewerRaw && isAddr(viewerRaw)) {
+    const cleared = await getCleared(viewerRaw.toLowerCase(), cid)
+    if (cleared) msgs = msgs.filter(m => m.ts > cleared)
+  }
+  return msgs
 }
 
 export async function getConversations(addrRaw: string): Promise<ConvSummary[]> {
@@ -82,7 +110,9 @@ export async function getConversations(addrRaw: string): Promise<ConvSummary[]> 
   }
   const out: ConvSummary[] = []
   for (const cid of cids) {
-    const thread = await getThread(cid)
+    const thread = await getThread(cid, addr)
+    // Skip conversations this user has cleared with nothing new since.
+    if (thread.length === 0) continue
     const last = thread[thread.length - 1]
     out.push({ convId: cid, peer: peerOf(cid, addr), lastMessage: last?.text || '', lastSentAt: last?.ts || 0 })
   }

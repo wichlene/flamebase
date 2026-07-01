@@ -29,16 +29,6 @@ type Props = {
 }
 
 const SEEN_KEY = 'flamebase_msg_seen'
-const HIDDEN_KEY = 'flamebase_msg_hidden'
-
-function getHidden(): Set<string> {
-  try { return new Set(JSON.parse(localStorage.getItem(HIDDEN_KEY) || '[]')) } catch { return new Set() }
-}
-
-function addHidden(id: string) {
-  const s = getHidden(); s.add(id)
-  localStorage.setItem(HIDDEN_KEY, JSON.stringify([...s]))
-}
 
 function getSeenMap(): Record<string, number> {
   try { return JSON.parse(localStorage.getItem(SEEN_KEY) || '{}') } catch { return {} }
@@ -66,7 +56,6 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
   const [sending, setSending] = useState(false)
   const endRef = useRef<HTMLDivElement>(null)
   const activeIdRef = useRef<string | null>(null)
-  const [hiddenConvs, setHiddenConvs] = useState<Set<string>>(() => getHidden())
 
   // Build username → address reverse lookup
   const usernameToAddress: Record<string, string> = {}
@@ -232,7 +221,6 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
   const activePeer = activeId ? peerOf(activeId) : ''
   const activePeerLabel = activeId ? labelFor(activePeer) : ''
   const visibleConvs = conversations
-    .filter(c => !hiddenConvs.has(c.convId))
     .filter(c => {
       if (!listSearch) return true
       const q = listSearch.toLowerCase()
@@ -280,10 +268,17 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
                   </div>
                 </button>
                 <button
-                  onClick={() => {
-                    addHidden(c.convId)
-                    setHiddenConvs(getHidden())
+                  onClick={async () => {
                     if (activeId === c.convId) { setActiveId(null); setMessages([]) }
+                    // Optimistic remove, then persist the "delete for me" server-side
+                    // so it sticks across devices and never touches the peer's copy.
+                    setConversations(prev => prev.filter(x => x.convId !== c.convId))
+                    try {
+                      await fetch('/api/messages/delete', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ address: me, convId: c.convId }),
+                      })
+                    } catch {}
                   }}
                   className="opacity-0 group-hover:opacity-100 mr-2 w-6 h-6 flex items-center justify-center rounded-full hover:bg-red-100 text-[#8A919E] hover:text-red-500 text-xs transition-all flex-shrink-0"
                   title="Delete conversation">
