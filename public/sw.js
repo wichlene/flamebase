@@ -23,32 +23,3 @@ self.addEventListener('fetch', (event) => {
     fetch(event.request).catch(() => caches.match('/'))
   )
 })
-
-// Web Push: show the notification (the device plays its own sound).
-self.addEventListener('push', (event) => {
-  let data = {}
-  try { data = event.data ? event.data.json() : {} } catch (e) { data = {} }
-  const title = data.title || 'FlameBase 🔥'
-  event.waitUntil(
-    self.registration.showNotification(title, {
-      body: data.body || '',
-      icon: '/icon.png',
-      badge: '/icon.png',
-      data: { url: data.url || 'https://flamebase.xyz' },
-    })
-  )
-})
-
-// Focus an existing tab (or open one) when the user taps the notification.
-self.addEventListener('notificationclick', (event) => {
-  event.notification.close()
-  const url = (event.notification.data && event.notification.data.url) || 'https://flamebase.xyz'
-  event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
-      for (const client of list) {
-        if ('focus' in client) return client.focus()
-      }
-      return self.clients.openWindow(url)
-    })
-  )
-})
