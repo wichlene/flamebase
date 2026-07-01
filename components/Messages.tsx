@@ -47,6 +47,7 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
   const me = address?.toLowerCase() || ''
 
   const [conversations, setConversations] = useState<Conv[]>([])
+  const [durable, setDurable] = useState(true)
   const [activeId, setActiveId] = useState<string | null>(null)
   const [messages, setMessages] = useState<Msg[]>([])
   const [draft, setDraft] = useState('')
@@ -79,6 +80,7 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
     try {
       const res = await fetch(`/api/messages/conversations?address=${me}`, { cache: 'no-store' })
       const data = await res.json()
+      if (typeof data.durable === 'boolean') setDurable(data.durable)
       if (Array.isArray(data.conversations)) {
         setConversations(data.conversations)
         reportUnread(data.conversations)
@@ -246,6 +248,11 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
             placeholder="Search messages"
             className="w-full bg-[#F0F2F5] rounded-full px-4 py-2 text-sm placeholder:text-[#8A919E] focus:outline-none" />
         </div>
+        {!durable && (
+          <div className="mx-3 mb-2 flex-shrink-0 text-[11px] leading-snug bg-amber-50 border border-amber-200 text-amber-700 rounded-lg px-3 py-2">
+            ⚠️ Messages aren&apos;t being saved permanently — the durable store (Upstash Redis) isn&apos;t connected, so conversations reset on each deploy. Connect it in Vercel to keep chats.
+          </div>
+        )}
         <div className="overflow-y-auto flex-1 min-h-0 px-2">
           {visibleConvs.length === 0 ? (
             <p className="p-4 text-xs text-[#8A919E] text-center">{listSearch ? 'No matches' : 'No conversations yet'}</p>
