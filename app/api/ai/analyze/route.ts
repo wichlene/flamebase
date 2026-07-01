@@ -12,8 +12,12 @@ export async function POST(request: Request) {
   try {
     const { address } = await request.json()
     if (!address) return NextResponse.json({ error: 'No address provided' }, { status: 400 })
+    const addr = String(address).trim()
+    if (!/^0x[0-9a-fA-F]{40}$/.test(addr)) {
+      return NextResponse.json({ error: 'Invalid token address' }, { status: 400 })
+    }
 
-    const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${address.trim()}`, {
+    const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${encodeURIComponent(addr)}`, {
       headers: { Accept: 'application/json' },
     })
     const dexData = await dexRes.json()

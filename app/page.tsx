@@ -1046,7 +1046,10 @@ export default function Home() {
   useEffect(() => {
     fetch('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd')
       .then(r => r.json())
-      .then(d => { if (d?.ethereum?.usd) setEthPrice(d.ethereum.usd) })
+      // Clamp to a sane range so a bad/manipulated price feed can't inflate the
+      // ETH value of any fee/tip (fee = usd / ethPrice — a tiny price would blow
+      // the value up). $100–$100k covers any realistic ETH price.
+      .then(d => { const p = Number(d?.ethereum?.usd); if (p >= 100 && p <= 100000) setEthPrice(p) })
       .catch(() => {})
   }, [])
 

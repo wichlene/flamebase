@@ -37,8 +37,10 @@ export async function POST(request: Request) {
     try { data = JSON.parse(text) } catch { data = { raw: text } }
 
     if (!response.ok) {
+      // Log the upstream detail server-side, but don't echo the raw Pinata
+      // response body back to the client.
       console.error('Pinata upload failed', response.status, data)
-      return NextResponse.json({ error: data, status: response.status }, { status: 500 })
+      return NextResponse.json({ error: 'Upload failed' }, { status: 502 })
     }
 
     return NextResponse.json({ ipfsHash: data.IpfsHash })

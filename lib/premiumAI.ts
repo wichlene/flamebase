@@ -61,14 +61,30 @@ export async function askPremium(
       types: Record<string, unknown>
       primaryType: string
       message: Record<string, unknown>
-    }) =>
-      walletClient.signTypedData({
+    }) => {
+      // Defense-in-depth: this flow must only ever authorize the fixed $0.01
+      // USDC fee to FlameBase's own payout wallet. If a compromised/MITM'd
+      // /api/premium response asked us to sign a transfer to a different
+      // recipient or for a larger amount, refuse — so a user who expects to pay
+      // a penny can never be tricked into signing away their USDC. ($0.01 USDC =
+      // 10000 units at 6 decimals; allow up to $0.10 of slack.)
+      const m = msg.message as { to?: unknown; value?: unknown }
+      if (typeof m?.to === 'string' && m.to.toLowerCase() !== X402_PAY_TO) {
+        throw new Error('Payment blocked: unexpected recipient.')
+      }
+      if (m?.value !== undefined) {
+        let v: bigint
+        try { v = BigInt(m.value as string | number | bigint) } catch { throw new Error('Payment blocked: unreadable amount.') }
+        if (v > 100000n) throw new Error('Payment blocked: amount exceeds the $0.01 fee.')
+      }
+      return walletClient.signTypedData({
         account,
         domain: msg.domain,
         types: msg.types,
         primaryType: msg.primaryType,
         message: msg.message,
-      }),
+      })
+    },
   }
 
   const client = new x402Client()
