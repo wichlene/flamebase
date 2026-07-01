@@ -293,6 +293,24 @@ export default function Home() {
   const [posts, setPosts] = useState<Post[]>([])
   const [seenActivity, setSeenActivity] = useState<Record<string, number>>({})
 
+  // Deep-link: /post/<id> redirects into the app as /?post=<id>. Once the feed
+  // has that post in the DOM, jump to it and flash a highlight. Runs at most
+  // once per load (retries as posts stream in until the target appears).
+  const deepLinkedRef = useRef(false)
+  useEffect(() => {
+    if (deepLinkedRef.current || typeof window === 'undefined') return
+    const pid = new URLSearchParams(window.location.search).get('post')
+    if (!pid) { deepLinkedRef.current = true; return }
+    const el = document.getElementById(`post-${pid}`)
+    if (!el) return
+    deepLinkedRef.current = true
+    setActiveTab('feed')
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    el.style.transition = 'background-color 1s'
+    el.style.backgroundColor = '#EAF1FF'
+    setTimeout(() => { el.style.backgroundColor = '' }, 2000)
+  }, [posts])
+
   // Derive unseen activity count: likes+comments on user's posts since last visit to activity tab
   const myPosts = address ? posts.filter(p => p.author.toLowerCase() === address.toLowerCase()) : []
   const activityCount = myPosts.reduce((sum, p) => {
@@ -2398,7 +2416,7 @@ export default function Home() {
                   const isOwnPost = address && post.author.toLowerCase() === address.toLowerCase()
 
                   return (
-                    <article key={key} className="border-b border-[#EEF1F5] hover:bg-[#FAFBFD] hover:shadow-sm transition-all duration-200 overflow-hidden">
+                    <article key={key} id={`post-${key}`} className="border-b border-[#EEF1F5] hover:bg-[#FAFBFD] hover:shadow-sm transition-all duration-200 overflow-hidden">
                       <div className="p-4">
                         <div className="flex gap-3">
                           <button onClick={() => setSelectedUser(post.author)} className="flex-shrink-0 cursor-pointer">
@@ -2557,7 +2575,7 @@ export default function Home() {
                                   <span className="text-lg">🔗</span>
                                 </button>
                                 {sharePost === key && (() => {
-                                  const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/?post=${key}`
+                                  const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/post/${key}`
                                   const text = (post.content || 'Check out this post on FlameBase').slice(0, 200)
                                   const xUrl = `https://x.com/intent/tweet?text=${encodeURIComponent(`${text}\n\n`)}&url=${encodeURIComponent(url)}`
                                   const fcUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(`${text}\n\n${url}`)}`
