@@ -2361,25 +2361,6 @@ export default function Home() {
                   </div>
                 )}
 
-                {/* What is FlameBase — value hook (leads with social value, not token) */}
-                <div className="mx-4 mt-3 p-4 rounded-2xl bg-gradient-to-r from-[#F0F4FF] to-[#EAF0FF] border border-[#D6E2FF]">
-                  <div className="flex items-start gap-3">
-                    <FlameLogo size={36} />
-                    <div className="flex-1 min-w-0">
-                      <p className="font-bold text-[#0A0B0D] text-sm">{t('hookTitle')}</p>
-                      <p className="text-[#5B6271] text-xs mt-0.5 leading-relaxed">{t('hookSub')}</p>
-                      <div className="mt-2.5">
-                        <button
-                          onClick={() => { if (isConnected) { setActiveTab('post') } else if (isInFarcaster) { connectFarcaster() } else { openWallet() } }}
-                          className="bg-[#0052FF] hover:bg-[#1652F0] text-white font-bold text-xs px-3.5 py-2 rounded-xl transition-colors flex-shrink-0"
-                        >
-                          {isConnected ? t('hookCtaPost') : t('connectWallet')}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
                 {posts.length === 0 && postCount === undefined && (
                   <div className="divide-y divide-[#EEF1F5]">
                     {Array.from({ length: 4 }).map((_, i) => (
@@ -3480,6 +3461,37 @@ export default function Home() {
                 </span>
               )}
             </div>
+
+            {/* FlameBase Logo NFT mint card */}
+            {logoNftDeployed && (
+              <div className="mb-3 bg-gradient-to-br from-orange-500 via-red-500 to-pink-500 rounded-2xl p-3.5 text-white shadow-lg">
+                <div className="flex items-center gap-3">
+                  <img src="/logo.png" alt="FlameBase Logo" className="w-11 h-11 rounded-xl bg-white/10 p-1 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-black text-sm leading-tight">🎨 FlameBase Logo NFT</p>
+                    {logoNftTotalSupply !== undefined && logoNftMaxSupply !== undefined && (
+                      <>
+                        <div className="flex justify-between text-[10px] mt-1.5 mb-1">
+                          <span className="text-white/80">Minted</span>
+                          <span className="font-bold">{(logoNftTotalSupply as bigint).toString()} / {(logoNftMaxSupply as bigint).toString()}</span>
+                        </div>
+                        <div className="w-full h-1.5 bg-white/20 rounded-full overflow-hidden">
+                          <div className="h-full bg-white" style={{ width: `${Math.min(100, Number((logoNftTotalSupply as bigint) * 100n / (logoNftMaxSupply as bigint)))}%` }} />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <button
+                  onClick={mintLogoNft}
+                  disabled={!isConnected || mintingLogoNft || logoNftMintPrice === undefined || (logoNftTotalSupply !== undefined && logoNftMaxSupply !== undefined && (logoNftTotalSupply as bigint) >= (logoNftMaxSupply as bigint))}
+                  className="mt-3 w-full bg-white hover:bg-white/90 text-orange-600 disabled:opacity-50 font-black text-sm px-4 py-2 rounded-xl transition-colors shadow-sm"
+                >
+                  {mintingLogoNft ? 'Minting…' : !isConnected ? 'Connect to mint' : logoNftMintPrice === undefined ? 'Loading…' : (logoNftTotalSupply !== undefined && logoNftMaxSupply !== undefined && (logoNftTotalSupply as bigint) >= (logoNftMaxSupply as bigint)) ? 'Sold out' : '🔥 Mint $0.50'}
+                </button>
+              </div>
+            )}
+
             <div className="grid grid-cols-3 gap-2">
 
               {/* Counter */}
