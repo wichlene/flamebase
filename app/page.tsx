@@ -648,6 +648,23 @@ export default function Home() {
   // back to localStorage-only so the feature still works.
   const [following, setFollowing] = useState<Set<string>>(new Set())
 
+  // Profile: hide/show the ETH balance (persisted), and which relationship
+  // list (following / followers) is currently expanded under the stats row.
+  const [balanceHidden, setBalanceHidden] = useState(false)
+  useEffect(() => {
+    try { setBalanceHidden(localStorage.getItem('flamebase_hide_balance') === '1') } catch {}
+  }, [])
+  const toggleBalanceHidden = () => {
+    setBalanceHidden(prev => {
+      const next = !prev
+      try { localStorage.setItem('flamebase_hide_balance', next ? '1' : '0') } catch {}
+      return next
+    })
+  }
+  const [profileList, setProfileList] = useState<null | 'following' | 'followers'>(null)
+  const [followersList, setFollowersList] = useState<string[]>([])
+  const [followersLoading, setFollowersLoading] = useState(false)
+
   const persistFollowing = useCallback((set: Set<string>) => {
     if (!address) return
     try { localStorage.setItem(`flamebase_following_${address.toLowerCase()}`, JSON.stringify([...set])) } catch {}
@@ -675,6 +692,72 @@ export default function Home() {
     })()
     return () => { cancelled = true }
   }, [address, publicClient, persistFollowing])
+
+  // My own follower count (the contract exposes a count but no follower list).
+  const { data: myFollowerCount } = useReadContract({
+    address: FOLLOW_ADDRESS,
+    abi: FOLLOW_ABI,
+    functionName: 'followerCount',
+    args: address ? [address as `0x${string}`] : undefined,
+    query: { enabled: FOLLOW_DEPLOYED && !!address },
+  })
+
+  // Resolve the follower LIST on demand (when the user opens it). There's no
+  // on-chain getter for followers, so we gather candidate addresses (known
+  // profiles, post authors, plus Followed-event logs when the RPC allows it)
+  // and confirm each with isFollowing(candidate, me).
+  useEffect(() => {
+    if (profileList !== 'followers' || !address || !publicClient || !FOLLOW_DEPLOYED) return
+    let cancelled = false
+    ;(async () => {
+      setFollowersLoading(true)
+      try {
+        const me = address.toLowerCase()
+        let eventFollowers: string[] = []
+        try {
+          const logs = await publicClient.getLogs({
+            address: FOLLOW_ADDRESS,
+            event: {
+              type: 'event', name: 'Followed',
+              inputs: [
+                { name: 'follower', type: 'address', indexed: true },
+                { name: 'target', type: 'address', indexed: true },
+              ],
+            },
+            args: { target: address as `0x${string}` },
+            fromBlock: 0n,
+            toBlock: 'latest',
+          })
+          eventFollowers = logs.map((l: any) => (l.args?.follower || '').toLowerCase()).filter(Boolean)
+        } catch { /* RPC may reject a full-range getLogs — fall back to known addresses */ }
+
+        const candidates = Array.from(new Set([
+          ...Object.keys(profiles),
+          ...posts.map(p => p.author.toLowerCase()),
+          ...following,
+          ...eventFollowers,
+        ])).filter(a => a && a !== me)
+
+        const checks = await Promise.all(candidates.map(async a => {
+          try {
+            const isF = await publicClient.readContract({
+              address: FOLLOW_ADDRESS, abi: FOLLOW_ABI, functionName: 'isFollowing',
+              args: [a as `0x${string}`, address as `0x${string}`],
+            })
+            return isF ? a : null
+          } catch { return null }
+        }))
+        if (cancelled) return
+        setFollowersList(checks.filter(Boolean) as string[])
+      } finally {
+        if (!cancelled) setFollowersLoading(false)
+      }
+    })()
+    return () => { cancelled = true }
+    // Fetch once each time the followers list is opened; intentionally not
+    // re-running on every profiles/posts change while it's open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profileList, address, publicClient])
 
   const followUser = async (target: string) => {
     if (!address) return
@@ -2942,21 +3025,8 @@ export default function Home() {
                 ) : myProfile ? (
                   <>
                     <div className="bg-white border border-[#E4E7EB] rounded-2xl overflow-hidden shadow-sm">
-                      <div className="h-28 relative overflow-hidden group">
-                        {profileBanners[address!.toLowerCase()] ? (
-                          <IpfsImage hash={profileBanners[address!.toLowerCase()]} className="w-full h-full object-cover" alt="banner" />
-                        ) : (
-                          <div className="w-full h-full bg-gradient-to-r from-[#0052FF] via-[#1652F0] to-[#4D8FFF]" />
-                        )}
-                        <label className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-colors cursor-pointer">
-                          <span className="opacity-0 group-hover:opacity-100 bg-black/60 text-white text-xs px-3 py-1.5 rounded-lg transition-opacity">
-                            {uploadingBanner ? 'Uploading…' : '📷 Change banner'}
-                          </span>
-                          <input type="file" accept="image/*" className="hidden" onChange={uploadBanner} disabled={uploadingBanner} />
-                        </label>
-                      </div>
-                      <div className="px-6 pb-6">
-                        <div className="relative -mt-12 mb-4 inline-block">
+                      <div className="px-6 pb-6 pt-6">
+                        <div className="relative mb-4 inline-block">
                           <Avatar addr={address!} profiles={profiles} size="lg" />
                           <label className="absolute bottom-0 right-0 w-7 h-7 bg-[#0052FF] hover:bg-[#1652F0] rounded-full flex items-center justify-center cursor-pointer shadow-md transition-colors">
                             <span className="text-white text-xs">📷</span>
@@ -2975,29 +3045,65 @@ export default function Home() {
                         </div>
                         <p className="text-[#5B6271] text-sm mb-1">{address?.slice(0,10)}...{address?.slice(-6)}</p>
                         {walletBalance && (
-                          <p className="text-[#0052FF] text-sm font-bold mb-5">
-                            {parseFloat(formatEther(walletBalance.value)).toFixed(4)} ETH
-                            <span className="text-[#8A919E] font-normal ml-1">{t('balance')}</span>
+                          <p className="text-[#0052FF] text-sm font-bold mb-5 flex items-center gap-1.5">
+                            {balanceHidden ? '••••••' : `${parseFloat(formatEther(walletBalance.value)).toFixed(4)} ETH`}
+                            {!balanceHidden && <span className="text-[#8A919E] font-normal">{t('balance')}</span>}
+                            <button onClick={toggleBalanceHidden}
+                              title={balanceHidden ? t('showBalance') : t('hideBalance')}
+                              className="text-[#8A919E] hover:text-[#0052FF] transition-colors">
+                              {balanceHidden ? '👁️' : '🙈'}
+                            </button>
                           </p>
                         )}
                         <div className="flex items-center gap-6 mb-3 pb-4 border-b border-[#EEF1F5] flex-wrap">
+                          <button onClick={() => setProfileList(profileList === 'following' ? null : 'following')}
+                            className={`text-left transition-opacity hover:opacity-70 ${profileList === 'following' ? 'opacity-100' : ''}`}>
+                            <p className="text-xl font-extrabold text-[#0A0B0D] leading-tight">{following.size}</p>
+                            <p className="text-[#8A919E] text-xs">{t('following')}</p>
+                          </button>
+                          <button onClick={() => setProfileList(profileList === 'followers' ? null : 'followers')}
+                            className="text-left transition-opacity hover:opacity-70">
+                            <p className="text-xl font-extrabold text-[#0A0B0D] leading-tight">{myFollowerCount !== undefined ? myFollowerCount.toString() : '—'}</p>
+                            <p className="text-[#8A919E] text-xs">{t('followers')}</p>
+                          </button>
                           <div>
                             <p className="text-xl font-extrabold text-[#0A0B0D] leading-tight">{myProfile[3].toString()}</p>
                             <p className="text-[#8A919E] text-xs">🔥 {t('flames')}</p>
                           </div>
-                          <div>
-                            <p className="text-xl font-extrabold text-[#0A0B0D] leading-tight">{parseFloat(formatEther(myProfile[4])).toFixed(4)}</p>
-                            <p className="text-[#8A919E] text-xs">💸 {t('ethEarned')}</p>
-                          </div>
-                          <div>
-                            <p className="text-xl font-extrabold text-[#0A0B0D] leading-tight">{myPosts.length}</p>
-                            <p className="text-[#8A919E] text-xs">📝 Posts</p>
-                          </div>
-                          <div>
-                            <p className="text-xl font-extrabold text-[#0A0B0D] leading-tight">{following.size}</p>
-                            <p className="text-[#8A919E] text-xs">👥 Friends</p>
-                          </div>
                         </div>
+
+                        {/* Following / followers list, toggled from the stats above */}
+                        {profileList && (
+                          <div className="mb-3 pb-3 border-b border-[#EEF1F5]">
+                            {(() => {
+                              const list = profileList === 'following' ? [...following] : followersList
+                              const loading = profileList === 'followers' && followersLoading
+                              if (loading) return <p className="text-[#8A919E] text-sm py-2">{t('loading')}</p>
+                              if (list.length === 0) return <p className="text-[#8A919E] text-sm py-2">{profileList === 'following' ? t('noFollowing') : t('noFollowers')}</p>
+                              return (
+                                <div className="space-y-1">
+                                  {list.map(addr => (
+                                    <div key={addr} className="flex items-center gap-3 py-1.5 px-2 hover:bg-[#F7F9FC] rounded-xl transition-colors">
+                                      <button onClick={() => setSelectedUser(addr)} className="flex items-center gap-2 flex-1 min-w-0 hover:opacity-80 transition-opacity">
+                                        <Avatar addr={addr} profiles={profiles} size="sm" />
+                                        <div className="min-w-0 text-left">
+                                          <p className="text-sm font-bold truncate text-[#0A0B0D]">{profiles[addr]?.username || `${addr.slice(0,6)}…${addr.slice(-4)}`}</p>
+                                          <p className="text-xs text-[#8A919E] truncate">{addr.slice(0,8)}…</p>
+                                        </div>
+                                      </button>
+                                      {profileList === 'following' && (
+                                        <button onClick={() => unfollowUser(addr)} disabled={loadingAction === `follow-${addr.toLowerCase()}`}
+                                          className="text-xs text-red-400 hover:text-red-600 font-bold px-2 py-1 rounded-lg hover:bg-red-50 transition-colors flex-shrink-0 disabled:opacity-50">
+                                          {loadingAction === `follow-${addr.toLowerCase()}` ? '…' : t('unfollow')}
+                                        </button>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )
+                            })()}
+                          </div>
+                        )}
                         <a href={`https://basescan.org/address/${address}`} target="_blank"
                           className="flex items-center justify-center gap-2 mt-4 text-[#5B6271] hover:text-[#0052FF] text-sm transition-colors font-semibold">
                           {t('viewBasescan')}
@@ -3058,30 +3164,6 @@ export default function Home() {
                         </div>
                       )
                     })()}
-
-                    {/* Friends list */}
-                    {following.size > 0 && (
-                      <div className="bg-white border border-[#E4E7EB] rounded-2xl p-5 shadow-sm mb-4">
-                        <h3 className="font-black text-[#0A0B0D] mb-3">Friends ({following.size})</h3>
-                        <div className="space-y-2">
-                          {[...following].map(addr => (
-                            <div key={addr} className="flex items-center gap-3">
-                              <button onClick={() => setSelectedUser(addr)} className="flex items-center gap-2 flex-1 min-w-0 hover:opacity-80 transition-opacity">
-                                <Avatar addr={addr} profiles={profiles} size="sm" />
-                                <div className="min-w-0">
-                                  <p className="text-sm font-bold truncate text-[#0A0B0D]">{profiles[addr]?.username || `${addr.slice(0,6)}…${addr.slice(-4)}`}</p>
-                                  <p className="text-xs text-[#8A919E] truncate">{addr.slice(0,8)}…</p>
-                                </div>
-                              </button>
-                              <button onClick={() => unfollowUser(addr)} disabled={loadingAction === `follow-${addr.toLowerCase()}`}
-                                className="text-xs text-red-400 hover:text-red-600 font-bold px-2 py-1 rounded-lg hover:bg-red-50 transition-colors flex-shrink-0 disabled:opacity-50">
-                                {loadingAction === `follow-${addr.toLowerCase()}` ? '…' : 'Remove'}
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
 
                     {/* My Posts grid */}
                     {myPosts.length > 0 && (
