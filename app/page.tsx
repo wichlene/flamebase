@@ -3249,6 +3249,27 @@ export default function Home() {
                 </div>
               )}
 
+              {/* $FLM Token — trade on Uniswap (Base) */}
+              <a
+                href={`https://app.uniswap.org/explore/tokens/base/${FLM_TOKEN_ADDRESS}`}
+                target="_blank" rel="noopener noreferrer"
+                className="block bg-gradient-to-br from-[#0052FF] via-[#1652F0] to-[#4D8FFF] rounded-2xl p-5 text-white shadow-lg hover:opacity-95 transition-opacity"
+              >
+                <div className="flex items-center gap-4">
+                  <img src="/logo.png" alt="$FLM" className="w-14 h-14 rounded-xl bg-white/10 p-1.5 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="font-black text-base">$FLM Token</p>
+                      <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded-full font-bold">BASE</span>
+                    </div>
+                    <p className="text-white/80 text-xs mt-0.5">FlameBase&apos;s native token — trade it on Uniswap</p>
+                  </div>
+                </div>
+                <div className="mt-3 bg-white text-[#0052FF] font-black text-sm px-5 py-2.5 rounded-xl text-center shadow-sm">
+                  🦄 Trade on Uniswap ↗
+                </div>
+              </a>
+
               <div className="bg-white border border-[#E4E7EB] rounded-2xl overflow-hidden">
                 <div className="px-4 py-3 border-b border-[#EEF1F5]">
                   <p className="text-sm font-black text-[#0A0B0D]">🏦 Wallet Analyzer</p>
