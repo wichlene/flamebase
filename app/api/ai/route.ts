@@ -24,6 +24,9 @@ export async function POST(request: Request) {
 
   try {
     const { messages, type = 'chat' } = await request.json()
+    if (!Array.isArray(messages)) {
+      return NextResponse.json({ error: 'messages must be an array' }, { status: 400 })
+    }
     const systemPrompt = SYSTEM_PROMPTS[type] || SYSTEM_PROMPTS.chat
 
     const response = await fetch(GROQ_URL, {

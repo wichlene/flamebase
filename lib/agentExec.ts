@@ -271,7 +271,9 @@ export function validateAction(a: AgentAction): string | null {
       if (!name || typeof name !== 'string' || !name.trim()) return 'Token name is required.'
       if (!symbol || typeof symbol !== 'string' || !symbol.trim()) return 'Token symbol is required.'
       const n = Number(supply)
-      if (!isNumeric(supply) || n <= 0 || n > 1_000_000_000) return 'Supply must be between 1 and 1,000,000,000.'
+      // Must be a whole number too — a decimal like "1000.5" passes isNumeric
+      // but then throws a raw RangeError at BigInt(supply) later.
+      if (!isNumeric(supply) || !Number.isInteger(n) || n <= 0 || n > 1_000_000_000) return 'Supply must be a whole number between 1 and 1,000,000,000.'
       return null
     }
     case 'create_proposal':

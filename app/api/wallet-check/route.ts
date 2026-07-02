@@ -79,8 +79,10 @@ async function txStats(address: string, maxPages = 16) {
         if (tx.value && tx.value !== '0') {
           try { volumeWei += BigInt(tx.value) } catch { /* */ }
         }
+        // Only count unique CONTRACTS, not every EOA the wallet sent ETH to —
+        // otherwise plain transfers inflate the "unique contracts" score/badge.
         const to = tx.to?.hash?.toLowerCase()
-        if (to) contractSet.add(to)
+        if (to && tx.to?.is_contract) contractSet.add(to)
         if (tx.method || (tx.raw_input && tx.raw_input !== '0x')) contractCallCount++
       }
     }
@@ -287,7 +289,6 @@ Drop estimate ranges (tokens / USD): S=12000-20000/$3000-5000, A=6000-10000/$150
       aiDropTokens = Math.max(aiDropTokens || 0, floorTokens)
       aiDropUsd = Math.round(aiDropTokens * 0.25)
     }
-    const finalAiTier = (aiScore >= formulaScore && aiTier !== 'D') ? aiTier : finalTier
 
     return NextResponse.json({
       txCount, hasMore, contractCallCount, tokenTransfers,
@@ -300,7 +301,7 @@ Drop estimate ranges (tokens / USD): S=12000-20000/$3000-5000, A=6000-10000/$150
       scanned: stats.scanned,
       sybilFlags, sybilRisk, userType, aiSummary, dropRationale,
       badges,
-      score: finalScore, tier: finalAiTier,
+      score: finalScore, tier: finalTier,
       estimatedTokens: aiDropTokens, estimatedUsd: aiDropUsd,
     })
   } catch (e: any) {

@@ -301,10 +301,12 @@ export default function Home() {
     if (deepLinkedRef.current || typeof window === 'undefined') return
     const pid = new URLSearchParams(window.location.search).get('post')
     if (!pid) { deepLinkedRef.current = true; return }
+    // Make sure we're on the feed first — the post article only renders there,
+    // so switching tabs is required before the element can be found/scrolled to.
+    setActiveTab('feed')
     const el = document.getElementById(`post-${pid}`)
     if (!el) return
     deepLinkedRef.current = true
-    setActiveTab('feed')
     el.scrollIntoView({ behavior: 'smooth', block: 'center' })
     el.style.transition = 'background-color 1s'
     el.style.backgroundColor = '#EAF1FF'
@@ -316,7 +318,9 @@ export default function Home() {
   const activityCount = myPosts.reduce((sum, p) => {
     const key = p.id.toString()
     const prev = seenActivity[key] ?? 0
-    const current = Number(p.likes) + Number(p.tips)
+    // Count new likes only — tips are a wei AMOUNT, not a count, so adding them
+    // blew the badge up to absurd numbers whenever a post got tipped.
+    const current = Number(p.likes)
     return sum + Math.max(0, current - prev)
   }, 0)
   const [profiles, setProfiles] = useState<Record<string, ProfileData>>({})
@@ -1389,6 +1393,22 @@ export default function Home() {
     setLoading(false)
   }
 
+  // When you like/tip your OWN post, advance the notification snapshot so the
+  // notifications effect doesn't fire a "someone engaged with your post" alert
+  // to yourself (it's count-based and can't tell the actor apart otherwise).
+  const markSelfSeen = (postId: bigint, kind: 'likes' | 'tips', delta: bigint) => {
+    const mine = posts.find(p => p.id === postId)
+    if (!mine || !address || mine.author.toLowerCase() !== address.toLowerCase()) return
+    const storageKey = kind === 'likes' ? 'flamebase_last_likes' : 'flamebase_last_tips'
+    const newTotal = (kind === 'likes' ? mine.likes : mine.tips) + delta
+    try {
+      const raw = localStorage.getItem(storageKey)
+      const m = raw ? JSON.parse(raw) : {}
+      m[postId.toString()] = newTotal.toString()
+      localStorage.setItem(storageKey, JSON.stringify(m))
+    } catch {}
+  }
+
   const handleLike = async (postId: bigint) => {
     if (!isConnected) return
     const key = postId.toString()
@@ -1399,6 +1419,7 @@ export default function Home() {
     try {
       await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'like', args: [postId], value: effectiveFee(likePrice as bigint | undefined, DEFAULT_LIKE_PRICE) })
       setPosts(prev => prev.map(p => p.id === postId ? { ...p, likes: p.likes + 1n } : p))
+      markSelfSeen(postId, 'likes', 1n)
     } catch (e: unknown) {
       console.error(e)
       showToast('error', txError(e))
@@ -1430,6 +1451,7 @@ export default function Home() {
     try {
       await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'tip', args: [postId], value: weiAmount })
       setPosts(prev => prev.map(p => p.id === postId ? { ...p, tips: p.tips + weiAmount } : p))
+      markSelfSeen(postId, 'tips', weiAmount)
       setTipAmounts(prev => ({ ...prev, [key]: '' }))
       SFX.tip()
       showToast('success', `Tipped $${usd}`)
@@ -2083,7 +2105,7 @@ export default function Home() {
                 if (tab === 'ai') setAiEverOpened(true)
                 if (tab === 'activity') {
                   const snapshot: Record<string, number> = {}
-                  myPosts.forEach(p => { snapshot[p.id.toString()] = Number(p.likes) + Number(p.tips) })
+                  myPosts.forEach(p => { snapshot[p.id.toString()] = Number(p.likes) })
                   setSeenActivity(snapshot)
                   localStorage.setItem('flamebase_seen_activity', JSON.stringify(snapshot))
                   myPosts.forEach(p => { if (!postComments[p.id.toString()]) loadComments(p.id.toString()) })
@@ -2884,7 +2906,7 @@ export default function Home() {
                     {myPosts.slice().sort((a, b) => Number(b.likes + b.tips) - Number(a.likes + a.tips)).map(post => {
                       const key = post.id.toString()
                       const prev = seenActivity[key] ?? 0
-                      const current = Number(post.likes) + Number(post.tips)
+                      const current = Number(post.likes)
                       const isNew = current > prev
                       const commentCount = postComments[key]?.length ?? 0
                       return (

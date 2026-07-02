@@ -57,6 +57,7 @@ export async function GET(request: Request) {
         const dp = new URLSearchParams({ key: KEY, part: 'snippet,statistics,contentDetails', id: ids })
         const dr = await fetch(`https://www.googleapis.com/youtube/v3/videos?${dp}`)
         const dd = await dr.json()
+        if (!dr.ok) return NextResponse.json({ error: dd?.error?.message || 'YouTube error' }, { status: 500 })
         items = dd.items || []
       }
     } else {

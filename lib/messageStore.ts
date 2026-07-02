@@ -71,14 +71,18 @@ export async function addMessage(fromRaw: string, toRaw: string, textRaw: string
 // conversation (with only the new messages visible to this user).
 export async function clearConversationForUser(meRaw: string, cid: string): Promise<void> {
   const me = meRaw.toLowerCase()
-  if (!isAddr(me) || !cid.includes(me)) return // can only clear your own conversations
+  // Normalize the cid to match how every read path builds it (convId lowercases
+  // both halves); otherwise an uppercase-hex cid would write a mismatched key
+  // and the delete would silently no-op while the API reports success.
+  const cidLc = cid.toLowerCase()
+  if (!isAddr(me) || !cidLc.includes(me)) return // can only clear your own conversations
   const ts = Date.now()
   if (useRedis) {
-    await redis(['ZREM', `fb:uc:${me}`, cid])
-    await redis(['SET', `fb:clr:${me}:${cid}`, ts])
+    await redis(['ZREM', `fb:uc:${me}`, cidLc])
+    await redis(['SET', `fb:clr:${me}:${cidLc}`, ts])
   } else {
-    delete memZ[`fb:uc:${me}`]?.[cid]
-    memClr[`fb:clr:${me}:${cid}`] = ts
+    delete memZ[`fb:uc:${me}`]?.[cidLc]
+    memClr[`fb:clr:${me}:${cidLc}`] = ts
   }
 }
 
