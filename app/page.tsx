@@ -33,6 +33,10 @@ const B20_ACTIVATED: boolean = false
 
 const ADMIN_ADDRESS = '0xa77A5D4D37d6F39C20C2441295da9fA60Ab9fD69'
 const FLM_TOKEN_ADDRESS = '0xadead5e8ca2893be6e8239cbbae83049a701cb07'
+// Buy/trade link. Uniswap's web app chokes on this token's Uniswap-V4 / Clanker
+// pool (fails swaps, shows $0), so point buyers at DexScreener, which renders
+// the live pool and routes trades correctly for V4/Clanker tokens.
+const FLM_TRADE_URL = `https://dexscreener.com/base/${FLM_TOKEN_ADDRESS}`
 
 interface Post {
   id: bigint
@@ -2132,7 +2136,7 @@ export default function Home() {
 
             {/* $FLM token — under Tools */}
             <a
-              href={`https://app.uniswap.org/explore/tokens/base/${FLM_TOKEN_ADDRESS}`}
+              href={FLM_TRADE_URL}
               target="_blank"
               rel="noopener noreferrer"
               className="mt-2 w-full flex items-center gap-3 px-4 py-2.5 rounded-xl font-semibold text-left text-sm text-[#5B6271] hover:bg-[#F7F9FC] hover:text-[#0A0B0D] transition-all"
@@ -3276,7 +3280,7 @@ export default function Home() {
 
               {/* $FLM Token — trade on Uniswap (Base) */}
               <a
-                href={`https://app.uniswap.org/explore/tokens/base/${FLM_TOKEN_ADDRESS}`}
+                href={FLM_TRADE_URL}
                 target="_blank" rel="noopener noreferrer"
                 className="block bg-gradient-to-br from-[#0052FF] via-[#1652F0] to-[#4D8FFF] rounded-2xl p-5 text-white shadow-lg hover:opacity-95 transition-opacity"
               >
