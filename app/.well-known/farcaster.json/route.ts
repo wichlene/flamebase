@@ -9,9 +9,11 @@ const miniapp = {
   name: 'FlameBase',
   iconUrl: 'https://flamebase.xyz/icon.png',
   homeUrl: 'https://flamebase.xyz',
-  imageUrl: 'https://flamebase.xyz/logo.png',
+  // Embed card image MUST be 3:2 — a portrait/square image makes Base App
+  // reject the launchable card and fall back to opening the URL as a website.
+  imageUrl: 'https://flamebase.xyz/embed-card.png',
   buttonTitle: 'Open FlameBase',
-  splashImageUrl: 'https://flamebase.xyz/logo.png',
+  splashImageUrl: 'https://flamebase.xyz/splash-200.png',
   splashBackgroundColor: '#0052FF',
   subtitle: 'On-chain social on Base',
   description:

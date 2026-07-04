@@ -13,14 +13,16 @@ const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 // key; `fc:frame` is kept for backwards compatibility with older clients.
 const miniappEmbed = {
   version: '1',
-  imageUrl: 'https://flamebase.xyz/logo.png',
+  // 3:2 embed image — a portrait/square image here makes Base App reject the
+  // launchable Mini App card and open the URL as a plain website instead.
+  imageUrl: 'https://flamebase.xyz/embed-card.png',
   button: {
     title: 'Open FlameBase',
     action: {
       type: 'launch_miniapp',
       name: 'FlameBase',
       url: 'https://flamebase.xyz',
-      splashImageUrl: 'https://flamebase.xyz/logo.png',
+      splashImageUrl: 'https://flamebase.xyz/splash-200.png',
       splashBackgroundColor: '#0052FF',
     },
   },
