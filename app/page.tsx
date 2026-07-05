@@ -32,11 +32,6 @@ const B20_FACTORY_DEPLOYED = B20_FACTORY_ADDRESS.length > 0
 const B20_ACTIVATED: boolean = false
 
 const ADMIN_ADDRESS = '0xa77A5D4D37d6F39C20C2441295da9fA60Ab9fD69'
-const FLM_TOKEN_ADDRESS = '0xadead5e8ca2893be6e8239cbbae83049a701cb07'
-// Buy/trade link. Uniswap's web app shows this token as $0 and DexScreener
-// can't find its Uniswap-V4 / Clanker pool, so point buyers at the token's
-// native Clanker page, which renders it and its trade widget correctly.
-const FLM_TRADE_URL = `https://clanker.world/clanker/${FLM_TOKEN_ADDRESS}`
 
 interface Post {
   id: bigint
@@ -2137,17 +2132,6 @@ export default function Home() {
               </button>
             ))}
 
-            {/* $FLM token — under Tools */}
-            <a
-              href={FLM_TRADE_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-2 w-full flex items-center gap-3 px-4 py-2.5 rounded-xl font-semibold text-left text-sm text-[#5B6271] hover:bg-[#F7F9FC] hover:text-[#0A0B0D] transition-all"
-            >
-              <img src="/logo.png" alt="FLM" className="w-5 h-5 rounded-full object-cover flex-shrink-0" />
-              <span className="flex-1">$FLM Token</span>
-              <span className="text-[10px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full font-bold border border-orange-200">BASE</span>
-            </a>
           </nav>
 
           <div className="border-t border-[#EEF1F5] pt-4 mt-4 space-y-3">
@@ -3281,27 +3265,6 @@ export default function Home() {
                 </div>
               )}
 
-              {/* $FLM Token — trade on Uniswap (Base) */}
-              <a
-                href={FLM_TRADE_URL}
-                target="_blank" rel="noopener noreferrer"
-                className="block bg-gradient-to-br from-[#0052FF] via-[#1652F0] to-[#4D8FFF] rounded-2xl p-5 text-white shadow-lg hover:opacity-95 transition-opacity"
-              >
-                <div className="flex items-center gap-4">
-                  <img src="/logo.png" alt="$FLM" className="w-14 h-14 rounded-xl bg-white/10 p-1.5 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="font-black text-base">$FLM Token</p>
-                      <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded-full font-bold">BASE</span>
-                    </div>
-                    <p className="text-white/80 text-xs mt-0.5">FlameBase&apos;s native token — trade it on Uniswap</p>
-                  </div>
-                </div>
-                <div className="mt-3 bg-white text-[#0052FF] font-black text-sm px-5 py-2.5 rounded-xl text-center shadow-sm">
-                  🦄 Trade on Uniswap ↗
-                </div>
-              </a>
-
               <div className="bg-white border border-[#E4E7EB] rounded-2xl overflow-hidden">
                 <div className="px-4 py-3 border-b border-[#EEF1F5]">
                   <p className="text-sm font-black text-[#0A0B0D]">🏦 Wallet Analyzer</p>
@@ -3463,8 +3426,6 @@ export default function Home() {
             </div>
             <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-[#8A919E] mb-3">
               <a href={`https://basescan.org/address/${CONTRACT_ADDRESS}`} target="_blank" rel="noopener noreferrer" className="hover:text-[#0052FF] transition-colors">{t('footerContract')}</a>
-              <span>·</span>
-              <a href={`https://basescan.org/token/${FLM_TOKEN_ADDRESS}`} target="_blank" rel="noopener noreferrer" className="hover:text-[#FF6B00] transition-colors">{t('footerFLMToken')}</a>
               <span>·</span>
               <a href="/privacy" className="hover:text-[#0052FF] transition-colors">{t('footerPrivacy')}</a>
               <span>·</span>

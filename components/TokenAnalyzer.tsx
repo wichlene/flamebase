@@ -34,7 +34,6 @@ function PctBadge({ val }: { val: number | null }) {
 }
 
 const QUICK = [
-  { label: '$FLM', address: '0xadead5e8ca2893be6e8239cbbae83049a701cb07' },
   { label: 'ETH', address: '0x4200000000000000000000000000000000000006' },
 ]
 
