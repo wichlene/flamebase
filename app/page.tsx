@@ -1061,12 +1061,15 @@ export default function Home() {
       .catch(() => {})
   }, [])
 
-  // Auto-switch to Base
+  // Auto-switch to Base on connect / whenever the wallet lands on another
+  // chain. Use the async form and swallow rejections so a wallet that declines
+  // (or is slow) doesn't throw; the global "wrong network" banner is the manual
+  // fallback.
   useEffect(() => {
     if (isConnected && chainId !== base.id) {
-      switchChain({ chainId: base.id })
+      switchChainAsync({ chainId: base.id }).catch(() => {})
     }
-  }, [isConnected, chainId, switchChain])
+  }, [isConnected, chainId, switchChainAsync])
 
   // Load hidden posts from localStorage on mount
   useEffect(() => {
