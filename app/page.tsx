@@ -33,10 +33,10 @@ const B20_ACTIVATED: boolean = false
 
 const ADMIN_ADDRESS = '0xa77A5D4D37d6F39C20C2441295da9fA60Ab9fD69'
 const FLM_TOKEN_ADDRESS = '0xadead5e8ca2893be6e8239cbbae83049a701cb07'
-// Buy/trade link. Uniswap's web app chokes on this token's Uniswap-V4 / Clanker
-// pool (fails swaps, shows $0), so point buyers at DexScreener, which renders
-// the live pool and routes trades correctly for V4/Clanker tokens.
-const FLM_TRADE_URL = `https://dexscreener.com/base/${FLM_TOKEN_ADDRESS}`
+// Buy/trade link. Uniswap's web app shows this token as $0 and DexScreener
+// can't find its Uniswap-V4 / Clanker pool, so point buyers at the token's
+// native Clanker page, which renders it and its trade widget correctly.
+const FLM_TRADE_URL = `https://clanker.world/clanker/${FLM_TOKEN_ADDRESS}`
 
 interface Post {
   id: bigint
