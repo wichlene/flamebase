@@ -2197,6 +2197,17 @@ export default function Home() {
                 {soundOn ? '🔊' : '🔇'}
               </button>
             </div>
+            {/* Footer links, always reachable in the sidebar (no scrolling to
+                the bottom of the feed to find them) */}
+            <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 px-1 text-[10px] text-[#8A919E]">
+              <a href={`https://basescan.org/address/${CONTRACT_ADDRESS}`} target="_blank" rel="noopener noreferrer" className="hover:text-[#0052FF] transition-colors">{t('footerContract')}</a>
+              <span>·</span>
+              <a href="/privacy" className="hover:text-[#0052FF] transition-colors">{t('footerPrivacy')}</a>
+              <span>·</span>
+              <a href="/terms" className="hover:text-[#0052FF] transition-colors">{t('footerTerms')}</a>
+              <span>·</span>
+              <a href="/cookies" className="hover:text-[#0052FF] transition-colors">{t('footerCookies')}</a>
+            </div>
           </div>
         </aside>
 
