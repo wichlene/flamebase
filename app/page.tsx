@@ -2137,16 +2137,17 @@ export default function Home() {
               </button>
             ))}
 
-            {/* $WICK token */}
+            {/* $WICK token — prominent so it's always visible in the sidebar
+                without scrolling to the footer */}
             <a
               href={WICK_TRADE_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-2 w-full flex items-center gap-3 px-4 py-2.5 rounded-xl font-semibold text-left text-sm text-[#5B6271] hover:bg-[#F7F9FC] hover:text-[#0A0B0D] transition-all"
+              className="mt-2 w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl font-bold text-left text-sm text-white bg-gradient-to-r from-[#0052FF] to-[#4D8FFF] hover:opacity-95 shadow-sm transition-all"
             >
-              <img src="/icon.png" alt="WICK" className="w-5 h-5 rounded-full object-cover flex-shrink-0" />
+              <img src="/icon.png" alt="WICK" className="w-6 h-6 rounded-full object-cover flex-shrink-0 ring-2 ring-white/30" />
               <span className="flex-1">$WICK Token</span>
-              <span className="text-[10px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full font-bold border border-orange-200">BASE</span>
+              <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded-full font-black">BUY ↗</span>
             </a>
           </nav>
 
