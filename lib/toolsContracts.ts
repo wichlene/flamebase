@@ -1,4 +1,4 @@
-import { encodeAbiParameters, encodeFunctionData, parseAbiParameters } from 'viem'
+import { encodeAbiParameters, encodeFunctionData } from 'viem'
 
 export const TOOLS_ADDRESS = (process.env.NEXT_PUBLIC_TOOLS_CONTRACT || '') as `0x${string}`
 export const TOKEN_FACTORY_ADDRESS = (process.env.NEXT_PUBLIC_TOKEN_FACTORY || '') as `0x${string}`
@@ -89,12 +89,27 @@ const B20_BATCH_MINT_ABI = [
   },
 ] as const
 
-// Mirrors B20FactoryLib.encodeAssetCreateParams: abi.encode(version=1, name, symbol, initialAdmin, decimals).
+// Mirrors B20FactoryLib.encodeAssetCreateParams exactly: abi.encode(B20AssetCreateParams{...}).
+// CRITICAL: the native precompile rejects non-canonical calldata with AbiDecodeFailed. In Solidity,
+// abi.encode(struct) of a dynamic struct is encoded as a SINGLE tuple param — it carries a leading
+// 0x20 offset word. Encoding the fields as a flat 5-tuple omits that word and fails to decode. So we
+// must encode one tuple param, not five separate params.
+const B20_ASSET_PARAMS_TUPLE = [
+  {
+    type: 'tuple',
+    components: [
+      { name: 'version', type: 'uint8' },
+      { name: 'name', type: 'string' },
+      { name: 'symbol', type: 'string' },
+      { name: 'initialAdmin', type: 'address' },
+      { name: 'decimals', type: 'uint8' },
+    ],
+  },
+] as const
 export function encodeB20AssetCreateParams(name: string, symbol: string, initialAdmin: `0x${string}`, decimals: number) {
-  return encodeAbiParameters(
-    parseAbiParameters('uint8, string, string, address, uint8'),
-    [1, name, symbol, initialAdmin, decimals],
-  )
+  return encodeAbiParameters(B20_ASSET_PARAMS_TUPLE, [
+    { version: 1, name, symbol, initialAdmin, decimals },
+  ])
 }
 
 // Mirrors B20FactoryLib.encodeBatchMint — passed as a createB20 initCall to mint the initial
