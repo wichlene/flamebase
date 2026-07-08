@@ -203,7 +203,7 @@ export function describeAction(a: AgentAction): string {
     case 'comment_post':
       return `Comment "${args.text}" on post ${args.postId ?? '(latest)'}`
     case 'create_post':
-      return `Post: "${args.content}"`
+      return `Post: "${args.content}"${typeof args.ipfsHash === 'string' && args.ipfsHash.trim() ? ' · 🖼️ with media' : ''}`
     case 'create_profile':
       return `Create profile "${args.username}"`
     case 'check_in':
@@ -251,9 +251,17 @@ export function validateAction(a: AgentAction): string | null {
       if (!args.text || typeof args.text !== 'string' || !args.text.trim()) return 'Comment text is required.'
       return null
     }
-    case 'create_post':
-      if (!args.content || typeof args.content !== 'string' || !args.content.trim()) return 'Post content is required.'
+    case 'create_post': {
+      // IPFS CIDs are plain alphanumeric (v0 base58 / v1 base32); we also allow
+      // our own `vid_` prefix. Anything else is not something /api/upload produced.
+      if (args.ipfsHash != null && args.ipfsHash !== '' &&
+          (typeof args.ipfsHash !== 'string' || !/^(vid_)?[A-Za-z0-9]+$/.test(args.ipfsHash.trim())))
+        return 'Invalid media attachment.'
+      const hasMedia = typeof args.ipfsHash === 'string' && args.ipfsHash.trim() !== ''
+      // Media-only posts (empty text) are valid — the feed renders them fine.
+      if (!hasMedia && (!args.content || typeof args.content !== 'string' || !args.content.trim())) return 'Post content is required.'
       return null
+    }
     case 'create_profile':
       if (!args.username || typeof args.username !== 'string' || !args.username.trim()) return 'Username is required.'
       return null
@@ -338,7 +346,11 @@ export async function executeAction(a: AgentAction, wallet: WalletLike, publicCl
       if (!(await hasProfile(publicClient, wallet.account.address)))
         throw new AgentActionError('You need a FlameBase profile before posting — ask me to create one for you first.')
       const value = await effectiveFee(publicClient, 'postPrice', DEFAULT_POST_PRICE)
-      const data = encodeFunctionData({ abi: CONTRACT_ABI, functionName: 'createPost', args: [String(args.content), ''] })
+      // Strip any leaked "[attached media …]" marker from the text — the media
+      // travels in the dedicated ipfsHash field, never inside the content.
+      const content = String(args.content ?? '').replace(/\[attached media ipfs:[^\]]*\]/gi, '').trim()
+      const ipfsHash = typeof args.ipfsHash === 'string' ? args.ipfsHash.trim() : ''
+      const data = encodeFunctionData({ abi: CONTRACT_ABI, functionName: 'createPost', args: [content, ipfsHash] })
       return wallet.sendTransaction({ to: CONTRACT_ADDRESS, data, value })
     }
 

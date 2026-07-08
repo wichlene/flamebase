@@ -23,7 +23,7 @@ Tools and when to use them:
 - like_post: user asks to like a post.
 - tip_post: user asks to tip/send money to a post's author, with an amount.
 - comment_post: user asks to comment/reply on a post, with the comment text.
-- create_post: user asks to post/share something on FlameBase, with the content.
+- create_post: user asks to post/share something on FlameBase, with the content. If the user's message contains an "[attached media ipfs:<hash>]" marker, pass the <hash> value as ipfsHash verbatim and NEVER include the marker text itself in content.
 - create_profile: user asks to set up/create their profile with a username.
 - check_in: user asks to do their daily check-in.
 - tap_counter: user asks to tap/increment the global counter.
@@ -98,11 +98,12 @@ const TOOLS = [
     type: 'function',
     function: {
       name: 'create_post',
-      description: 'Create/publish a new post on FlameBase.',
+      description: 'Create/publish a new post on FlameBase. Supports an optional attached image/video via ipfsHash.',
       parameters: {
         type: 'object',
         properties: {
-          content: { type: 'string', description: 'Post content/text' },
+          content: { type: 'string', description: 'Post content/text (without any [attached media …] marker)' },
+          ipfsHash: { type: ['string', 'null'], description: 'The <hash> from the "[attached media ipfs:<hash>]" marker in the user message, verbatim. Null when the message has no such marker.' },
         },
         required: ['content'],
       },

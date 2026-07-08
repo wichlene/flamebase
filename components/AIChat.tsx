@@ -6,9 +6,12 @@ import { askPremium, type AgentReply } from '../lib/premiumAI'
 import { executeAction, describeAction, validateAction, AgentActionError, type AgentAction } from '../lib/agentExec'
 
 type ActionState = 'pending' | 'running' | 'done' | 'cancelled' | 'error'
+type Attachment = { hash: string; kind: 'image' | 'video'; name: string }
 type Message = {
   role: 'user' | 'assistant'
   content: string
+  wire?: string // what actually goes to the model (content + media marker); display uses `content`
+  attachment?: Attachment // shown as a chip on the user's bubble
   paymentTx?: string // premium $0.01 fee settlement tx
   action?: AgentAction
   actionState?: ActionState
@@ -36,11 +39,16 @@ export default function AIChat() {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
-      content: "Hey! I'm FlameBase Agent 🤖 I can answer questions AND do on-chain actions on Base — send ETH/USDC, like/tip/comment/post, check in, deploy a token, or run a DAO proposal/vote. Just tell me what to do!",
+      content: "Hey! I'm FlameBase Agent 🤖 I can answer questions AND do on-chain actions on Base — send ETH/USDC, like/tip/comment/post (📎 attach an image or video!), check in, deploy a token, or run a DAO proposal/vote. Just tell me what to do!",
     },
   ])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [attachment, setAttachment] = useState<Attachment | null>(null)
+  const [uploading, setUploading] = useState(false)
+  // Hash of the most recently sent attachment — used to guarantee the media
+  // lands on the create_post action even if the model forgets the ipfsHash arg.
+  const lastAttachRef = useRef<string | null>(null)
   const endRef = useRef<HTMLDivElement>(null)
   const { isConnected } = useAccount()
   const { data: walletClient } = useWalletClient()
@@ -58,7 +66,16 @@ export default function AIChat() {
     if (reply.type === 'error') {
       push({ role: 'assistant', content: reply.content || 'Sorry, something went wrong.', paymentTx })
     } else if (reply.type === 'action') {
-      const action: AgentAction = { tool: reply.tool, args: reply.args }
+      const args = { ...reply.args }
+      if (reply.tool === 'create_post') {
+        // Belt and suspenders: the user paid for this turn, so if they attached
+        // media, it ships — even when the model dropped the ipfsHash arg.
+        if (lastAttachRef.current && (typeof args.ipfsHash !== 'string' || !args.ipfsHash.trim()))
+          args.ipfsHash = lastAttachRef.current
+        if (typeof args.content === 'string')
+          args.content = args.content.replace(/\[attached media ipfs:[^\]]*\]/gi, '').trim()
+      }
+      const action: AgentAction = { tool: reply.tool, args }
       const err = validateAction(action)
       if (err) {
         push({ role: 'assistant', content: `${reply.note ? reply.note + '\n\n' : ''}⚠️ ${err}`, paymentTx })
@@ -76,21 +93,48 @@ export default function AIChat() {
     }
   }
 
+  const attach = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = '' // allow re-picking the same file
+    if (!file || uploading) return
+    setUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const res = await fetch('/api/upload', { method: 'POST', body: fd })
+      const data = await res.json().catch(() => null)
+      if (!res.ok || !data?.ipfsHash) throw new Error(data?.error || 'Upload failed')
+      const isVideo = file.type.startsWith('video/')
+      setAttachment({ hash: isVideo ? `vid_${data.ipfsHash}` : data.ipfsHash, kind: isVideo ? 'video' : 'image', name: file.name })
+    } catch (err) {
+      push({ role: 'assistant', content: `⚠️ Upload failed: ${err instanceof Error ? err.message : 'try again.'}` })
+    }
+    setUploading(false)
+  }
+
   const send = async (text?: string) => {
     const content = (text ?? input).trim()
-    if (!content || loading) return
+    if ((!content && !attachment) || loading || uploading) return
 
     if (!isConnected || !walletClient) {
       push({ role: 'assistant', content: '🔌 Connect your wallet first — the agent runs on x402 ($0.01 USDC per message on Base).' })
       return
     }
 
-    const next = [...messages, { role: 'user' as const, content }]
+    // The media hash rides in the message as a marker the model is trained on
+    // (see agentCore SYSTEM_PROMPT); the visible bubble shows a clean chip instead.
+    const att = attachment
+    if (att) lastAttachRef.current = att.hash
+    const wire = att ? `${content}\n\n[attached media ipfs:${att.hash}]` : content
+    const userMsg: Message = { role: 'user', content: content || '(media post)', wire, attachment: att ?? undefined }
+
+    const next = [...messages, userMsg]
     setMessages(next)
     setInput('')
+    setAttachment(null)
     setLoading(true)
     try {
-      const history = next.map(({ role, content }) => ({ role, content }))
+      const history = next.map(m => ({ role: m.role, content: m.wire ?? m.content }))
       const r = await askPremium(walletClient, history)
       if (r.reply) {
         handleReply(r.reply, r.paymentTx)
@@ -164,6 +208,14 @@ export default function AIChat() {
             }`}>
               {m.content}
 
+              {/* Attached media chip on the user's bubble */}
+              {m.attachment && (
+                <span className="mt-2 flex items-center gap-1.5 bg-white/20 rounded-lg px-2 py-1 text-[11px] font-semibold">
+                  <span>{m.attachment.kind === 'video' ? '🎬' : '🖼️'}</span>
+                  <span className="truncate max-w-[180px]">{m.attachment.name}</span>
+                </span>
+              )}
+
               {/* Premium fee receipt */}
               {m.paymentTx && (
                 <a href={`https://basescan.org/tx/${m.paymentTx}`} target="_blank" rel="noopener noreferrer"
@@ -236,18 +288,36 @@ export default function AIChat() {
       )}
 
       {/* Input */}
-      <div className="border-t border-[#EEF1F5] p-3 flex gap-2">
-        <input
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
-          placeholder="Ask or command ($0.01 USDC)…"
-          className="flex-1 bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#0052FF]"
-        />
-        <button onClick={() => send()} disabled={loading || !input.trim()}
-          className="text-white px-5 py-2 rounded-xl font-bold text-sm disabled:opacity-40 transition-colors bg-gradient-to-r from-[#7B3FE4] to-[#0052FF]">
-          Pay & Ask
-        </button>
+      <div className="border-t border-[#EEF1F5] p-3">
+        {attachment && (
+          <div className="flex items-center gap-2 mb-2 bg-[#F0F4FF] border border-[#D6E2FF] rounded-lg px-3 py-1.5 text-xs">
+            <span>{attachment.kind === 'video' ? '🎬' : '🖼️'}</span>
+            <span className="flex-1 truncate font-semibold text-[#0052FF]">{attachment.name}</span>
+            <span className="text-[#8A919E]">ready — will attach to your post</span>
+            <button onClick={() => setAttachment(null)} aria-label="Remove attachment"
+              className="text-[#8A919E] hover:text-red-500 font-bold px-1">✕</button>
+          </div>
+        )}
+        <div className="flex gap-2">
+          <label aria-label="Attach image or video"
+            className={`w-11 flex items-center justify-center rounded-xl border text-lg transition-colors ${
+              uploading ? 'bg-[#F0F2F5] border-[#E4E7EB] animate-pulse cursor-wait' : 'bg-[#F7F9FC] border-[#E4E7EB] hover:border-[#0052FF] cursor-pointer'
+            }`}>
+            {uploading ? '⏳' : '📎'}
+            <input type="file" accept="image/*,video/*" className="hidden" onChange={attach} disabled={uploading || loading} />
+          </label>
+          <input
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
+            placeholder={attachment ? 'Say something about it… ($0.01 USDC)' : 'Ask or command ($0.01 USDC)…'}
+            className="flex-1 bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#0052FF]"
+          />
+          <button onClick={() => send()} disabled={loading || uploading || (!input.trim() && !attachment)}
+            className="text-white px-5 py-2 rounded-xl font-bold text-sm disabled:opacity-40 transition-colors bg-gradient-to-r from-[#7B3FE4] to-[#0052FF]">
+            Pay & Ask
+          </button>
+        </div>
       </div>
     </div>
   )
