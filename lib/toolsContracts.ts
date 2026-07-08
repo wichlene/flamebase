@@ -5,6 +5,25 @@ export const TOKEN_FACTORY_ADDRESS = (process.env.NEXT_PUBLIC_TOKEN_FACTORY || '
 export const NFT_FACTORY_ADDRESS = (process.env.NEXT_PUBLIC_NFT_FACTORY || '') as `0x${string}`
 export const DAO_ADDRESS = (process.env.NEXT_PUBLIC_DAO_CONTRACT || '') as `0x${string}`
 export const FOLLOW_ADDRESS = (process.env.NEXT_PUBLIC_FOLLOW_CONTRACT || '') as `0x${string}`
+export const LAUNCHPAD_ADDRESS = (process.env.NEXT_PUBLIC_LAUNCHPAD || '') as `0x${string}`
+
+// FlameLaunch bonding-curve launchpad (contracts/FlameLaunch.sol).
+export const LAUNCHPAD_ABI = [
+  { name: 'launch', type: 'function', stateMutability: 'payable', inputs: [{ name: 'name_', type: 'string' }, { name: 'symbol_', type: 'string' }], outputs: [{ name: 'token', type: 'address' }] },
+  { name: 'buy', type: 'function', stateMutability: 'payable', inputs: [{ name: 'token', type: 'address' }, { name: 'minTokensOut', type: 'uint256' }], outputs: [] },
+  { name: 'sell', type: 'function', stateMutability: 'nonpayable', inputs: [{ name: 'token', type: 'address' }, { name: 'amount', type: 'uint256' }, { name: 'minEthOut', type: 'uint256' }], outputs: [] },
+  { name: 'quoteBuy', type: 'function', stateMutability: 'view', inputs: [{ name: 'token', type: 'address' }, { name: 'ethIn', type: 'uint256' }], outputs: [{ type: 'uint256' }] },
+  { name: 'quoteSell', type: 'function', stateMutability: 'view', inputs: [{ name: 'token', type: 'address' }, { name: 'amount', type: 'uint256' }], outputs: [{ type: 'uint256' }] },
+  { name: 'curves', type: 'function', stateMutability: 'view', inputs: [{ name: '', type: 'address' }], outputs: [{ name: 'ethReserve', type: 'uint256' }, { name: 'tokenReserve', type: 'uint256' }, { name: 'creator', type: 'address' }, { name: 'graduated', type: 'bool' }] },
+  { name: 'allTokens', type: 'function', stateMutability: 'view', inputs: [{ name: '', type: 'uint256' }], outputs: [{ type: 'address' }] },
+  { name: 'tokensCount', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
+  { name: 'GRADUATION_ETH', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
+  { name: 'VIRTUAL_ETH', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
+  { name: 'CURVE_SUPPLY', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
+  { anonymous: false, type: 'event', name: 'Launched', inputs: [{ indexed: true, name: 'token', type: 'address' }, { indexed: true, name: 'creator', type: 'address' }, { indexed: false, name: 'name', type: 'string' }, { indexed: false, name: 'symbol', type: 'string' }] },
+] as const
+
+export const LAUNCHPAD_DEPLOYED = LAUNCHPAD_ADDRESS.length > 0
 
 export const TOOLS_ABI = [
   { name: 'globalCounter', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },

@@ -18,6 +18,7 @@ import Avatar, { IPFS_GATEWAYS } from '../components/Avatar'
 const Messages = dynamic(() => import('../components/Messages'), { ssr: false, loading: () => <div className="p-8 text-center text-[#5B6271]">💬 Loading…</div> })
 const AIChat = dynamic(() => import('../components/AIChat'), { ssr: false, loading: () => <div className="p-8 text-center text-[#5B6271]">🤖 Loading AI…</div> })
 const Reels = dynamic(() => import('../components/Reels'), { ssr: false, loading: () => <div className="p-8 text-center text-[#5B6271]">🎬 Loading Reels…</div> })
+const Launchpad = dynamic(() => import('../components/Launchpad'), { ssr: false, loading: () => <div className="p-8 text-center text-[#5B6271]">🚀 Loading…</div> })
 const TokenAnalyzer = dynamic(() => import('../components/TokenAnalyzer'), { ssr: false, loading: () => <div className="p-8 text-center text-[#5B6271]">🔍 Loading…</div> })
 const WalletChecker = dynamic(() => import('../components/WalletChecker'), { ssr: false, loading: () => <div className="p-3 text-center text-[#5B6271] text-xs">Loading…</div> })
 
@@ -78,7 +79,7 @@ interface ProfileData {
   tips: bigint
 }
 
-type Tab = 'feed' | 'post' | 'activity' | 'messages' | 'profile' | 'ai' | 'reels' | 'tools'
+type Tab = 'feed' | 'post' | 'activity' | 'messages' | 'profile' | 'ai' | 'reels' | 'tools' | 'launch'
 
 function FlameLogo({ size = 32 }: { size?: number }) {
   return (
@@ -1902,6 +1903,7 @@ export default function Home() {
     { tab: 'activity', icon: '🔔', labelKey: 'navActivity' },
     { tab: 'messages', icon: '💬', labelKey: 'navMessages' },
     { tab: 'ai', icon: '🤖', labelKey: 'navAI' },
+    { tab: 'launch', icon: '🚀', labelKey: 'navLaunch' },
     { tab: 'profile', icon: '👤', labelKey: 'navProfile' },
     { tab: 'tools', icon: '🛠️', labelKey: 'navTools' },
   ]
@@ -2981,6 +2983,11 @@ export default function Home() {
                 </div>
                 <Reels />
               </div>
+            )}
+
+            {/* ══ LAUNCHPAD ══ */}
+            {activeTab === 'launch' && (
+              <Launchpad />
             )}
 
             {/* ══ PROFILE ══ */}
