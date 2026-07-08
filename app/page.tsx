@@ -27,9 +27,11 @@ const NFT_FACTORY_DEPLOYED = NFT_FACTORY_ADDRESS.length > 0
 const DAO_DEPLOYED = DAO_ADDRESS.length > 0
 const FOLLOW_DEPLOYED = FOLLOW_ADDRESS.length > 0
 const B20_FACTORY_DEPLOYED = B20_FACTORY_ADDRESS.length > 0
-// Base hasn't activated the B20 ASSET variant on mainnet yet (createB20 reverts
-// FeatureNotActivated 0xb9b2a425). Keep the deploy path gated until it goes live.
-const B20_ACTIVATED: boolean = false
+// B20 mainnet activation is scheduled for 2026-07-08 18:00 UTC. Instead of a
+// hardcoded flag, the app dry-runs the exact createB20 call on-chain (see the
+// b20Active probe below): before activation it reverts FeatureNotActivated
+// (0xb9b2a425), and the moment Base flips the Activation Registry the probe
+// passes and the deploy button unlocks by itself — no redeploy needed.
 
 const ADMIN_ADDRESS = '0xa77A5D4D37d6F39C20C2441295da9fA60Ab9fD69'
 
@@ -348,6 +350,32 @@ export default function Home() {
   const [showTerminal, setShowTerminal] = useState(false)
   const publicClient = usePublicClient()
   const { writeContractAsync: rawWriteContract } = useWriteContract()
+
+  // Live B20 activation probe: eth_call the exact createB20 we would send
+  // (ASSET variant, admin-less params, no initCalls). Reverts until Base
+  // activates the feature; passes the instant it goes live. Re-checked every
+  // minute so the button unlocks on its own during the activation window.
+  const [b20Active, setB20Active] = useState(false)
+  useEffect(() => {
+    if (!publicClient || b20Active) return
+    let cancelled = false
+    const probe = async () => {
+      try {
+        await publicClient.simulateContract({
+          address: B20_FACTORY_ADDRESS,
+          abi: B20_FACTORY_ABI,
+          functionName: 'createB20',
+          args: [0, keccak256(toHex('flamebase-b20-activation-probe')), encodeB20AssetCreateParams('Probe', 'PRB', '0x0000000000000000000000000000000000000000', 18), []],
+        })
+        if (!cancelled) setB20Active(true)
+      } catch {
+        // FeatureNotActivated (or a transient RPC error) — stay gated, retry.
+      }
+    }
+    probe()
+    const id = setInterval(probe, 60_000)
+    return () => { cancelled = true; clearInterval(id) }
+  }, [publicClient, b20Active])
 
   // Wrap writeContractAsync: auto-switch to Base if needed, then log tx
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1776,11 +1804,10 @@ export default function Home() {
   // own TokenFactory: no protocol fee (gas only), admin-less / fixed-supply forever.
   const deployB20 = async () => {
     if (!address) return
-    // B20 ASSET variant isn't activated on Base yet — the factory reverts with
-    // FeatureNotActivated (0xb9b2a425). Stop here with a clear message instead
-    // of letting the user sign a tx that's guaranteed to fail. Flip B20_ACTIVATED
-    // to true once Base turns the activation flag on.
-    if (!B20_ACTIVATED) { showToast('error', t('errB20NotActive')); return }
+    // Until the on-chain probe confirms activation, createB20 is guaranteed to
+    // revert FeatureNotActivated — stop with a clear message instead of letting
+    // the user sign a failing tx.
+    if (!b20Active) { showToast('error', t('errB20NotActive')); return }
     const decimals = 18
     const supply = BigInt(b20Supply || '1000000')
     const params = encodeB20AssetCreateParams(b20Name, b20Symbol, '0x0000000000000000000000000000000000000000', decimals)
@@ -3393,12 +3420,15 @@ export default function Home() {
                 {activeTool === 'b20' && (
                   <div className="space-y-1 pt-1">
                     <p className="text-[10px] text-[#0052FF] font-bold">Base native token — gas only, no FlameBase fee</p>
+                    <p className={`text-[10px] font-bold ${b20Active ? 'text-green-600' : 'text-[#8A919E]'}`}>
+                      {b20Active ? '🟢 B20 is LIVE on Base — ready to deploy' : '⏳ Waiting for Base activation — unlocks automatically'}
+                    </p>
                     <input value={b20Name} onChange={e => setB20Name(e.target.value)} placeholder="Token name" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
                     <input value={b20Symbol} onChange={e => setB20Symbol(e.target.value)} placeholder="Symbol" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
                     <input value={b20Supply} onChange={e => setB20Supply(e.target.value)} placeholder="Supply" type="number" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
                     <button onClick={() => { if (!B20_FACTORY_DEPLOYED || !b20Name || !b20Symbol || !b20Supply) return; toolAction(deployB20, setB20Loading) }}
-                      disabled={b20Loading || !b20Name || !b20Symbol || !b20Supply} className="w-full bg-[#0052FF] text-white text-xs py-2 rounded-lg font-bold disabled:opacity-40">
-                      {b20Loading ? 'Deploying…' : 'Deploy B20 Token'}
+                      disabled={b20Loading || !b20Active || !b20Name || !b20Symbol || !b20Supply} className="w-full bg-[#0052FF] text-white text-xs py-2 rounded-lg font-bold disabled:opacity-40">
+                      {b20Loading ? 'Deploying…' : b20Active ? 'Deploy B20 Token' : '⏳ Not active yet'}
                     </button>
                   </div>
                 )}
@@ -3654,8 +3684,8 @@ export default function Home() {
                 <input value={b20Symbol} onChange={e => setB20Symbol(e.target.value)} placeholder="Symbol" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
                 <input value={b20Supply} onChange={e => setB20Supply(e.target.value)} placeholder="Supply" type="number" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
                 <button onClick={() => { if (!B20_FACTORY_DEPLOYED || !b20Name || !b20Symbol || !b20Supply) return; toolAction(deployB20, setB20Loading) }}
-                  disabled={b20Loading || !b20Name || !b20Symbol || !b20Supply} className="w-full bg-[#0052FF] text-white text-xs py-2 rounded-lg font-bold disabled:opacity-40">
-                  {b20Loading ? 'Deploying…' : 'Deploy B20 Token'}
+                  disabled={b20Loading || !b20Active || !b20Name || !b20Symbol || !b20Supply} className="w-full bg-[#0052FF] text-white text-xs py-2 rounded-lg font-bold disabled:opacity-40">
+                  {b20Loading ? 'Deploying…' : b20Active ? 'Deploy B20 Token' : '⏳ Not active yet'}
                 </button>
               </div>
             )}
