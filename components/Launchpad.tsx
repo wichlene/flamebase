@@ -1,10 +1,13 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { useAccount, usePublicClient, useWriteContract } from 'wagmi'
+import { useAccount, usePublicClient, useWalletClient, useWriteContract } from 'wagmi'
 import { erc20Abi, formatEther, parseEther } from 'viem'
 import { base } from 'wagmi/chains'
 import { LAUNCHPAD_ABI, LAUNCHPAD_ADDRESS, LAUNCHPAD_DEPLOYED } from '../lib/toolsContracts'
+import { LAUNCHPAD_BYTECODE, LAUNCHPAD_CTOR_ABI } from '../lib/launchpadBytecode'
+
+const ADMIN = '0xa77A5D4D37d6F39C20C2441295da9fA60Ab9fD69'.toLowerCase()
 
 type TokenRow = {
   address: `0x${string}`
@@ -31,7 +34,34 @@ function fmtNum(v: bigint) {
 export default function Launchpad() {
   const { address, isConnected } = useAccount()
   const publicClient = usePublicClient()
+  const { data: walletClient } = useWalletClient()
   const { writeContractAsync } = useWriteContract()
+
+  // Admin-only one-time deploy of the launchpad contract from the owner wallet.
+  const [deploying, setDeploying] = useState(false)
+  const [deployedAddr, setDeployedAddr] = useState<string | null>(null)
+  const [deployErr, setDeployErr] = useState<string | null>(null)
+  const isAdmin = !!address && address.toLowerCase() === ADMIN
+
+  const deployLaunchpad = async () => {
+    if (!walletClient || !publicClient || !address || deploying) return
+    setDeploying(true); setDeployErr(null); setDeployedAddr(null)
+    try {
+      const hash = await walletClient.deployContract({
+        abi: LAUNCHPAD_CTOR_ABI,
+        bytecode: LAUNCHPAD_BYTECODE,
+        args: [address], // feeTo = admin (fees flow here)
+        chain: base,
+        account: address,
+      })
+      const receipt = await publicClient.waitForTransactionReceipt({ hash })
+      if (receipt.contractAddress) setDeployedAddr(receipt.contractAddress)
+      else setDeployErr('Deployed but no address in receipt — check the tx.')
+    } catch (e) {
+      setDeployErr(e instanceof Error && /reject|denied/i.test(e.message) ? 'Cancelled in wallet.' : 'Deploy failed — try again.')
+    }
+    setDeploying(false)
+  }
 
   const [tokens, setTokens] = useState<TokenRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -181,6 +211,27 @@ export default function Launchpad() {
         <p className="text-sm text-[#5B6271] mt-2 max-w-sm mx-auto">
           Launch a token that&apos;s instantly buyable and sellable right here — no Uniswap, no upfront liquidity. Coming online soon.
         </p>
+
+        {isAdmin && (
+          <div className="mt-6 max-w-sm mx-auto bg-[#F0F4FF] border border-[#D6E2FF] rounded-2xl p-4 text-left">
+            <p className="text-xs font-black text-[#0052FF] mb-1">Admin · one-time deploy</p>
+            <p className="text-[11px] text-[#5B6271] mb-3">Deploy the launchpad contract from your wallet. Fees go to your address. After it confirms, copy the address below and send it to set it live.</p>
+            {!deployedAddr ? (
+              <button onClick={deployLaunchpad} disabled={deploying}
+                className="w-full bg-[#0052FF] text-white font-black text-sm py-2.5 rounded-xl disabled:opacity-50">
+                {deploying ? 'Deploying…' : 'Deploy Launchpad 🚀'}
+              </button>
+            ) : (
+              <div className="bg-green-50 border border-green-200 rounded-xl p-3">
+                <p className="text-xs font-bold text-green-700 mb-1">✅ Deployed! Send me this address:</p>
+                <code className="block text-[11px] break-all bg-white rounded-lg p-2 border border-green-200 text-[#0A0B0D] select-all">{deployedAddr}</code>
+                <button onClick={() => navigator.clipboard?.writeText(deployedAddr)}
+                  className="mt-2 text-xs font-bold text-[#0052FF]">Copy address</button>
+              </div>
+            )}
+            {deployErr && <p className="text-xs text-red-600 mt-2">{deployErr}</p>}
+          </div>
+        )}
       </div>
     )
   }
