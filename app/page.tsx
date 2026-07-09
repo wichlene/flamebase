@@ -1903,7 +1903,6 @@ export default function Home() {
     { tab: 'activity', icon: '🔔', labelKey: 'navActivity' },
     { tab: 'messages', icon: '💬', labelKey: 'navMessages' },
     { tab: 'ai', icon: '🤖', labelKey: 'navAI' },
-    { tab: 'launch', icon: '🚀', labelKey: 'navLaunch' },
     { tab: 'profile', icon: '👤', labelKey: 'navProfile' },
     { tab: 'tools', icon: '🛠️', labelKey: 'navTools' },
   ]
