@@ -79,8 +79,8 @@ export default function Launchpad() {
       const ranges: [bigint, bigint][] = []
       for (let f = start; f <= latest; f += CHUNK + 1n) ranges.push([f, f + CHUNK > latest ? latest : f + CHUNK])
       const seen = new Set<string>(); const rows: Tok[] = []
-      for (let i = 0; i < ranges.length; i += 10) {
-        const res = await Promise.all(ranges.slice(i, i + 10).map(([f, t]) =>
+      for (let i = 0; i < ranges.length; i += 16) {
+        const res = await Promise.all(ranges.slice(i, i + 16).map(([f, t]) =>
           publicClient.getLogs({ address: FACTORY, event: B20_CREATED, fromBlock: f, toBlock: t }).catch(() => [])))
         for (const logs of res) for (const l of logs as { blockNumber?: bigint; args?: { token?: `0x${string}`; name?: string; symbol?: string; variant?: number } }[]) {
           const a = l.args?.token?.toLowerCase(); if (!a || seen.has(a)) continue; seen.add(a)
@@ -94,32 +94,37 @@ export default function Launchpad() {
     setLoading(false)
   }, [publicClient]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // live market data from DexScreener (only tokens with a pool return anything)
+  // live market data from DexScreener — parallel batches so it fills in fast.
+  // Only tokens with a real pool come back; we keep the most-liquid pair per token.
   const loadMkt = useCallback(async (addrs: `0x${string}`[]) => {
     setLoadingMkt(true)
     const out: Record<string, Mkt> = {}
-    for (let i = 0; i < addrs.length; i += 30) {
-      const chunk = addrs.slice(i, i + 30)
-      try {
-        const r = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${chunk.join(',')}`)
-        const d = await r.json()
-        for (const p of (d?.pairs || []) as Record<string, unknown>[]) {
-          if (p.chainId !== 'base') continue
-          const bt = p.baseToken as { address?: string } | undefined
-          const a = bt?.address?.toLowerCase(); if (!a) continue
-          const liq = Number((p.liquidity as { usd?: number })?.usd || 0)
-          if (out[a] && out[a].liq >= liq) continue
-          out[a] = {
-            price: Number(p.priceUsd || 0),
-            vol24: Number((p.volume as { h24?: number })?.h24 || 0),
-            fdv: Number(p.fdv || 0),
-            change24: Number((p.priceChange as { h24?: number })?.h24 ?? 0),
-            liq,
-            img: (p.info as { imageUrl?: string } | undefined)?.imageUrl,
+    const chunks: `0x${string}`[][] = []
+    for (let i = 0; i < addrs.length; i += 30) chunks.push(addrs.slice(i, i + 30))
+    const CONC = 12
+    for (let i = 0; i < chunks.length; i += CONC) {
+      await Promise.all(chunks.slice(i, i + CONC).map(async chunk => {
+        try {
+          const r = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${chunk.join(',')}`)
+          const d = await r.json()
+          for (const p of (d?.pairs || []) as Record<string, unknown>[]) {
+            if (p.chainId !== 'base') continue
+            const bt = p.baseToken as { address?: string } | undefined
+            const a = bt?.address?.toLowerCase(); if (!a) continue
+            const liq = Number((p.liquidity as { usd?: number })?.usd || 0)
+            if (out[a] && out[a].liq >= liq) continue
+            out[a] = {
+              price: Number(p.priceUsd || 0),
+              vol24: Number((p.volume as { h24?: number })?.h24 || 0),
+              fdv: Number(p.fdv || 0),
+              change24: Number((p.priceChange as { h24?: number })?.h24 ?? 0),
+              liq,
+              img: (p.info as { imageUrl?: string } | undefined)?.imageUrl,
+            }
           }
-        }
-        setMkt({ ...out })
-      } catch { /* rate limit / offline — skip */ }
+        } catch { /* rate limit / offline — skip */ }
+      }))
+      setMkt({ ...out }) // progressive fill
     }
     setLoadingMkt(false)
   }, [])
