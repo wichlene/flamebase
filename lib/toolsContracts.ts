@@ -21,6 +21,8 @@ export const LAUNCHPAD_ABI = [
   { name: 'VIRTUAL_ETH', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
   { name: 'CURVE_SUPPLY', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
   { anonymous: false, type: 'event', name: 'Launched', inputs: [{ indexed: true, name: 'token', type: 'address' }, { indexed: true, name: 'creator', type: 'address' }, { indexed: false, name: 'name', type: 'string' }, { indexed: false, name: 'symbol', type: 'string' }] },
+  { anonymous: false, type: 'event', name: 'Bought', inputs: [{ indexed: true, name: 'token', type: 'address' }, { indexed: true, name: 'buyer', type: 'address' }, { indexed: false, name: 'ethIn', type: 'uint256' }, { indexed: false, name: 'tokensOut', type: 'uint256' }, { indexed: false, name: 'fee', type: 'uint256' }] },
+  { anonymous: false, type: 'event', name: 'Sold', inputs: [{ indexed: true, name: 'token', type: 'address' }, { indexed: true, name: 'seller', type: 'address' }, { indexed: false, name: 'tokensIn', type: 'uint256' }, { indexed: false, name: 'ethOut', type: 'uint256' }, { indexed: false, name: 'fee', type: 'uint256' }] },
 ] as const
 
 export const LAUNCHPAD_DEPLOYED = LAUNCHPAD_ADDRESS.length > 0

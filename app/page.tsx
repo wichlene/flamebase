@@ -2160,6 +2160,16 @@ export default function Home() {
                 )}
               </button>
             ))}
+
+            {/* Prominent B20 DEX entry — opens the on-site launchpad/DEX */}
+            <button
+              onClick={() => setActiveTab('launch')}
+              className="mt-2 w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl font-bold text-left text-sm text-white bg-gradient-to-r from-[#0052FF] via-[#3D7BFF] to-[#7B61FF] hover:opacity-95 shadow-sm transition-all"
+            >
+              <span className="text-base">🚀</span>
+              <span className="flex-1">B20 DEX</span>
+              <span className="text-[9px] bg-white/20 px-1.5 py-0.5 rounded-full font-black">TRADE ↗</span>
+            </button>
           </nav>
 
           <div className="border-t border-[#EEF1F5] pt-4 mt-4 space-y-3">

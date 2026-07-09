@@ -17,9 +17,13 @@ type TokenRow = {
   tokenReserve: bigint
   creator: `0x${string}`
   graduated: boolean
-  realEth: bigint // ETH raised so far
+  realEth: bigint // ETH raised so far (liquidity)
   priceEth: number // ETH per token
+  volumeEth: number // cumulative buy+sell volume in ETH
+  mcapEth: number // fully-diluted market cap in ETH (price × total supply)
 }
+
+const TOTAL_SUPPLY = 1_000_000_000 // matches contract TOTAL_SUPPLY
 
 const SLIPPAGE_BPS = 500n // 5%
 const BPS = 10_000n
@@ -93,6 +97,22 @@ export default function Launchpad() {
       ])
       setGradEth(g as bigint); setVirtualEth(v as bigint)
       const n = Number(count as bigint)
+
+      // Cumulative volume per token from Bought/Sold events (DEX-style stat).
+      const vol: Record<string, bigint> = {}
+      try {
+        const [buys, sells] = await Promise.all([
+          publicClient.getLogs({ address: LAUNCHPAD_ADDRESS, event: LAUNCHPAD_ABI.find(x => x.type === 'event' && x.name === 'Bought') as never, fromBlock: 0n, toBlock: 'latest' }),
+          publicClient.getLogs({ address: LAUNCHPAD_ADDRESS, event: LAUNCHPAD_ABI.find(x => x.type === 'event' && x.name === 'Sold') as never, fromBlock: 0n, toBlock: 'latest' }),
+        ])
+        for (const l of buys as { args?: { token?: string; ethIn?: bigint } }[]) {
+          const k = l.args?.token?.toLowerCase() ?? ''; if (k) vol[k] = (vol[k] ?? 0n) + (l.args?.ethIn ?? 0n)
+        }
+        for (const l of sells as { args?: { token?: string; ethOut?: bigint } }[]) {
+          const k = l.args?.token?.toLowerCase() ?? ''; if (k) vol[k] = (vol[k] ?? 0n) + (l.args?.ethOut ?? 0n)
+        }
+      } catch { /* volume is best-effort */ }
+
       const rows: TokenRow[] = []
       for (let i = 0; i < n; i++) {
         const addr = await publicClient.readContract({ address: LAUNCHPAD_ADDRESS, abi: LAUNCHPAD_ABI, functionName: 'allTokens', args: [BigInt(i)] }) as `0x${string}`
@@ -102,15 +122,18 @@ export default function Launchpad() {
           publicClient.readContract({ address: addr, abi: erc20Abi, functionName: 'symbol' }).catch(() => '???'),
         ])
         const [ethReserve, tokenReserve, creator, graduated] = curve as [bigint, bigint, `0x${string}`, boolean]
+        const priceEth = tokenReserve > 0n ? Number(ethReserve) / Number(tokenReserve) : 0
         rows.push({
           address: addr, name: tname as string, symbol: tsym as string,
           ethReserve, tokenReserve, creator, graduated,
           realEth: ethReserve > (v as bigint) ? ethReserve - (v as bigint) : 0n,
-          priceEth: tokenReserve > 0n ? Number(ethReserve) / Number(tokenReserve) : 0,
+          priceEth,
+          volumeEth: Number(formatEther(vol[addr.toLowerCase()] ?? 0n)),
+          mcapEth: priceEth * TOTAL_SUPPLY,
         })
       }
-      // trending = most ETH raised first
-      rows.sort((a, b) => (b.realEth > a.realEth ? 1 : b.realEth < a.realEth ? -1 : 0))
+      // trending = highest volume first, then most ETH raised
+      rows.sort((a, b) => (b.volumeEth - a.volumeEth) || (b.realEth > a.realEth ? 1 : -1))
       setTokens(rows)
     } catch { /* keep last good state */ }
     setLoading(false)
@@ -291,7 +314,7 @@ export default function Launchpad() {
                         <span className="text-[10px] bg-[#F0F2F5] text-[#5B6271] px-1.5 py-0.5 rounded-full font-semibold">${t.symbol}</span>
                         {t.graduated && <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-bold">🎓 Graduated</span>}
                       </div>
-                      <p className="text-[11px] text-[#8A919E]">{t.priceEth.toExponential(2)} ETH · {fmtEth(t.realEth)} ETH raised</p>
+                      <p className="text-[11px] text-[#8A919E]">{t.priceEth.toExponential(2)} ETH</p>
                     </div>
                     {!t.graduated && (
                       <div className="flex gap-1.5 flex-shrink-0">
@@ -299,6 +322,19 @@ export default function Launchpad() {
                         <button onClick={() => openTrade(t, 'sell')} className="bg-[#F0F2F5] text-[#5B6271] text-xs font-bold px-3 py-1.5 rounded-lg">Sell</button>
                       </div>
                     )}
+                  </div>
+                  {/* DEX-style stats */}
+                  <div className="grid grid-cols-3 gap-1.5 mt-2">
+                    {[
+                      { k: 'MCap', v: `${t.mcapEth.toLocaleString('en', { maximumFractionDigits: 2 })} Ξ` },
+                      { k: 'Volume', v: `${t.volumeEth.toLocaleString('en', { maximumFractionDigits: 3 })} Ξ` },
+                      { k: 'Liquidity', v: `${fmtEth(t.realEth, 3)} Ξ` },
+                    ].map(s => (
+                      <div key={s.k} className="bg-[#F7F9FC] rounded-lg px-2 py-1">
+                        <p className="text-[9px] text-[#8A919E] uppercase tracking-wide">{s.k}</p>
+                        <p className="text-[11px] font-bold text-[#0A0B0D] truncate">{s.v}</p>
+                      </div>
+                    ))}
                   </div>
                   {/* graduation progress */}
                   <div className="mt-2">
