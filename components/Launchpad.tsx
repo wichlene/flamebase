@@ -72,6 +72,45 @@ export default function Launchpad() {
   const [gradEth, setGradEth] = useState<bigint>(parseEther('4'))
   const [virtualEth, setVirtualEth] = useState<bigint>(parseEther('1'))
 
+  // "All B20" explorer — every B20 token created on Base, from the factory's
+  // B20Created event (0xB20f… precompile is the singleton factory on all chains).
+  const [mode, setMode] = useState<'curve' | 'all'>('curve')
+  const [allB20, setAllB20] = useState<{ token: `0x${string}`; name: string; symbol: string; variant: number }[]>([])
+  const [loadingAll, setLoadingAll] = useState(false)
+  const loadAllB20 = useCallback(async () => {
+    if (!publicClient) return
+    setLoadingAll(true)
+    try {
+      const logs = await publicClient.getLogs({
+        address: '0xB20f000000000000000000000000000000000000',
+        event: {
+          type: 'event', name: 'B20Created',
+          inputs: [
+            { indexed: true, name: 'token', type: 'address' },
+            { indexed: true, name: 'variant', type: 'uint8' },
+            { indexed: false, name: 'name', type: 'string' },
+            { indexed: false, name: 'symbol', type: 'string' },
+            { indexed: false, name: 'decimals', type: 'uint8' },
+            { indexed: false, name: 'variantEventParams', type: 'bytes' },
+          ],
+        },
+        fromBlock: 0n, toBlock: 'latest',
+      })
+      const seen = new Set<string>()
+      const rows: { token: `0x${string}`; name: string; symbol: string; variant: number }[] = []
+      for (const l of logs as { args?: { token?: `0x${string}`; name?: string; symbol?: string; variant?: number } }[]) {
+        const t = l.args?.token?.toLowerCase()
+        if (!t || seen.has(t)) continue
+        seen.add(t)
+        rows.push({ token: l.args!.token!, name: l.args?.name || 'B20', symbol: l.args?.symbol || '???', variant: Number(l.args?.variant ?? 0) })
+      }
+      rows.reverse() // newest first
+      setAllB20(rows)
+    } catch { /* RPC getLogs range limits — best effort */ }
+    setLoadingAll(false)
+  }, [publicClient])
+  useEffect(() => { if (mode === 'all') loadAllB20() }, [mode, loadAllB20])
+
   // launch form
   const [name, setName] = useState('')
   const [symbol, setSymbol] = useState('')
@@ -262,9 +301,52 @@ export default function Launchpad() {
   return (
     <div className="p-4 space-y-5">
       <div>
-        <h2 className="font-black text-[#0A0B0D] text-lg flex items-center gap-2">🚀 Launchpad</h2>
-        <p className="text-xs text-[#5B6271] mt-0.5">Launch a token, trade it instantly on the curve — no Uniswap, no upfront liquidity.</p>
+        <h2 className="font-black text-[#0A0B0D] text-lg flex items-center gap-2">🚀 B20 DEX</h2>
+        <p className="text-xs text-[#5B6271] mt-0.5">Launch & trade on the curve, or browse every B20 token on Base.</p>
       </div>
+
+      {/* Mode switch */}
+      <div className="flex gap-1 bg-[#F0F2F5] rounded-xl p-1">
+        <button onClick={() => setMode('curve')} className={`flex-1 text-sm font-bold py-2 rounded-lg transition-colors ${mode === 'curve' ? 'bg-white text-[#0052FF] shadow-sm' : 'text-[#8A919E]'}`}>🔥 Launchpad</button>
+        <button onClick={() => setMode('all')} className={`flex-1 text-sm font-bold py-2 rounded-lg transition-colors ${mode === 'all' ? 'bg-white text-[#0052FF] shadow-sm' : 'text-[#8A919E]'}`}>🌐 All B20</button>
+      </div>
+
+      {/* ══ ALL B20 explorer ══ */}
+      {mode === 'all' && (
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <p className="font-black text-sm text-[#0A0B0D]">Every B20 on Base</p>
+            <button onClick={loadAllB20} className="text-xs text-[#0052FF] font-bold hover:underline">Refresh</button>
+          </div>
+          {loadingAll ? (
+            <div className="space-y-2">{[...Array(4)].map((_, i) => <div key={i} className="h-14 bg-[#F0F2F5] rounded-2xl animate-pulse" />)}</div>
+          ) : allB20.length === 0 ? (
+            <p className="text-sm text-[#8A919E] text-center py-6">No B20 tokens found yet (or the RPC limited the query). Try Refresh.</p>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-[11px] text-[#8A919E]">{allB20.length} B20 token{allB20.length > 1 ? 's' : ''} on Base</p>
+              {allB20.map(t => (
+                <div key={t.token} className="bg-white border border-[#E4E7EB] rounded-2xl p-3 flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#0052FF] to-[#7B61FF] flex items-center justify-center text-white font-black text-xs flex-shrink-0">{t.symbol.slice(0, 3)}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-bold text-sm text-[#0A0B0D] truncate">{t.name}</span>
+                      <span className="text-[10px] bg-[#F0F2F5] text-[#5B6271] px-1.5 py-0.5 rounded-full font-semibold">${t.symbol}</span>
+                      <span className="text-[10px] bg-[#E6EEFF] text-[#0052FF] px-1.5 py-0.5 rounded-full font-semibold">{t.variant === 1 ? 'Stablecoin' : 'Asset'}</span>
+                    </div>
+                    <p className="text-[10px] text-[#8A919E] font-mono truncate">{t.token}</p>
+                  </div>
+                  <a href={`https://basescan.org/token/${t.token}`} target="_blank" rel="noopener noreferrer" className="text-xs font-bold text-[#0052FF] flex-shrink-0">View ↗</a>
+                </div>
+              ))}
+            </div>
+          )}
+          <p className="text-[10px] text-[#C5CBD3] text-center mt-3">In-site buy/sell for external B20s (routing to their pools) is coming next. Tokens launched here trade instantly under 🔥 Launchpad.</p>
+        </div>
+      )}
+
+      {/* ══ Bonding-curve launchpad ══ */}
+      {mode === 'curve' && <>
 
       {/* Launch form */}
       <div className="bg-gradient-to-br from-[#0052FF] to-[#4D8FFF] rounded-2xl p-4 text-white">
@@ -349,6 +431,8 @@ export default function Launchpad() {
           </div>
         )}
       </div>
+
+      </>}
 
       {/* Trade modal */}
       {active && (
