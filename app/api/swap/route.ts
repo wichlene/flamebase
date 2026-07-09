@@ -10,6 +10,12 @@ const API = 'https://aggregator-api.kyberswap.com/base/api/v1'
 const H = { 'x-client-id': 'flamebase' }
 const NATIVE = '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'
 
+// Platform fee — a cut of every trade, taken via the aggregator's built-in fee
+// feature and paid to FEE_RECEIVER. Charged on the ETH leg (currency_in on a
+// buy, currency_out on a sell) so it always accrues as ETH.
+const FEE_BPS = 100 // 1%
+const FEE_RECEIVER = '0xa77A5D4D37d6F39C20C2441295da9fA60Ab9fD69'
+
 export async function POST(req: Request) {
   try {
     const body = await req.json()
@@ -24,8 +30,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'bad params' }, { status: 400 })
     }
 
-    // 1) get the best route across all Base DEXs
-    const routeRes = await fetch(`${API}/routes?tokenIn=${tokenIn}&tokenOut=${tokenOut}&amountIn=${amountIn}&gasInclude=true`, { headers: H })
+    // 1) get the best route across all Base DEXs (with our platform fee on the ETH leg)
+    const chargeFeeBy = tokenIn === NATIVE ? 'currency_in' : 'currency_out'
+    const feeQs = `&feeAmount=${FEE_BPS}&chargeFeeBy=${chargeFeeBy}&isInBps=true&feeReceiver=${FEE_RECEIVER}`
+    const routeRes = await fetch(`${API}/routes?tokenIn=${tokenIn}&tokenOut=${tokenOut}&amountIn=${amountIn}&gasInclude=true${feeQs}`, { headers: H })
     const route = await routeRes.json()
     const summary = route?.data?.routeSummary
     if (!summary) return NextResponse.json({ error: route?.message || 'No route for this token' }, { status: 404 })

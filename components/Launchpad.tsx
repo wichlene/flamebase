@@ -429,7 +429,7 @@ export default function Launchpad() {
                 className={`w-full mt-4 text-white font-black text-base py-3.5 rounded-2xl transition-colors disabled:opacity-50 ${side === 'buy' ? 'bg-[#0052FF] hover:bg-[#1652F0]' : 'bg-[#0A0B0D] hover:bg-black'}`}>
                 {busy ? 'Confirm in wallet…' : !isConnected ? 'Connect wallet' : quoting && Number(amount) > 0 ? 'Finding best price…' : !quote && Number(amount) > 0 ? 'No liquidity for this token' : side === 'buy' ? `Buy ${active.symbol}` : `Sell ${active.symbol}`}
               </button>
-              <p className="text-[10px] text-[#C5CBD3] text-center mt-2">Goes straight to your wallet · 10% max slippage · best route across Base DEXs</p>
+              <p className="text-[10px] text-[#C5CBD3] text-center mt-2">Goes straight to your wallet · 10% max slippage · 1% platform fee · best route across Base DEXs</p>
             </div>
           </div>
         )
