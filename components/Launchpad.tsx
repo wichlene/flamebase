@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useAccount, usePublicClient, useWalletClient, useWriteContract } from 'wagmi'
+import { useAccount, usePublicClient, useSendTransaction, useWriteContract } from 'wagmi'
 import { erc20Abi, formatEther, parseEther } from 'viem'
 import { base } from 'wagmi/chains'
 
@@ -53,7 +53,7 @@ export default function Launchpad() {
   const { address, isConnected } = useAccount()
   const publicClient = usePublicClient()
   const { writeContractAsync } = useWriteContract()
-  const { data: walletClient } = useWalletClient()
+  const { sendTransactionAsync } = useSendTransaction()
 
   const [toks, setToks] = useState<Tok[]>([])
   const [mkt, setMkt] = useState<Record<string, Mkt>>({})
@@ -186,7 +186,7 @@ export default function Launchpad() {
   const openTrade = (t: Tok, s: 'buy' | 'sell') => { setActive(t); setSide(s); setAmount(''); setQuote(null); setNote(null) }
 
   const doTrade = async () => {
-    if (!active || !isConnected || !walletClient || !publicClient || !amount || Number(amount) <= 0 || !quote || busy) return
+    if (!active || !isConnected || !publicClient || !amount || Number(amount) <= 0 || !quote || busy) return
     setBusy(true); setNote(null)
     try {
       // sell: approve the aggregator router to pull the token first
@@ -197,7 +197,7 @@ export default function Launchpad() {
           await writeContractAsync({ chainId: base.id, address: active.token, abi: erc20Abi, functionName: 'approve', args: [quote.router, amt] })
         }
       }
-      await walletClient.sendTransaction({ to: quote.to, data: quote.data, value: BigInt(quote.value || '0'), chain: base, account: address! })
+      await sendTransactionAsync({ chainId: base.id, to: quote.to, data: quote.data, value: BigInt(quote.value || '0') })
       setNote({ ok: true, t: `${side === 'buy' ? 'Bought' : 'Sold'} ✓ — check your wallet` }); setAmount(''); setQuote(null)
     } catch (e) {
       const m = e instanceof Error ? (e.message || String(e)) : String(e)
