@@ -5,7 +5,8 @@ export const TOKEN_FACTORY_ADDRESS = (process.env.NEXT_PUBLIC_TOKEN_FACTORY || '
 export const NFT_FACTORY_ADDRESS = (process.env.NEXT_PUBLIC_NFT_FACTORY || '') as `0x${string}`
 export const DAO_ADDRESS = (process.env.NEXT_PUBLIC_DAO_CONTRACT || '') as `0x${string}`
 export const FOLLOW_ADDRESS = (process.env.NEXT_PUBLIC_FOLLOW_CONTRACT || '') as `0x${string}`
-export const LAUNCHPAD_ADDRESS = (process.env.NEXT_PUBLIC_LAUNCHPAD || '') as `0x${string}`
+// Deployed FlameLaunch bonding-curve launchpad on Base mainnet.
+export const LAUNCHPAD_ADDRESS = (process.env.NEXT_PUBLIC_LAUNCHPAD || '0x56d19cbefd94f7fe54C80F9De1359aFE460Dd130') as `0x${string}`
 
 // FlameLaunch bonding-curve launchpad (contracts/FlameLaunch.sol).
 export const LAUNCHPAD_ABI = [
