@@ -1,23 +1,20 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useAccount, usePublicClient, useWriteContract } from 'wagmi'
-import { erc20Abi, encodeFunctionData, formatEther, parseEther } from 'viem'
+import { useAccount, usePublicClient, useWalletClient, useWriteContract } from 'wagmi'
+import { erc20Abi, formatEther, parseEther } from 'viem'
 import { base } from 'wagmi/chains'
 
 /*
   B20 DEX — a Uniswap-Explore-style table of every B20 token on Base, with
-  in-site buy/sell routed through Uniswap V3 (same router/quoter the app already
-  uses for ETH↔USDC). Tokens are discovered from the B20 factory's B20Created
-  event; live price/volume/FDV come from DexScreener for the ones with a pool.
+  in-site buy/sell. Tokens are discovered from the B20 factory's B20Created
+  event; live price/volume/FDV come from DexScreener. Trades are routed by the
+  KyberSwap aggregator (server proxy at /api/swap) across ALL Base DEXs —
+  Aerodrome, Uniswap V2/V3/V4, etc. — so any token with liquidity is tradeable.
 */
 
-const WETH = '0x4200000000000000000000000000000000000006' as const
-const SWAP_ROUTER = '0x2626664c2603336E57B271c5C0b26F421741e481' as const
-const QUOTER = '0x3d4e44Eb1374240CE5F1B871ab261CD16335B76a' as const
-const FEE_TIERS = [500, 3000, 10000] as const
 const FACTORY = '0xB20f000000000000000000000000000000000000' as const
-const SLIPPAGE_BPS = 300n // 3%
+const NATIVE = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE' as const // aggregator native-ETH sentinel
 
 const B20_CREATED = {
   type: 'event', name: 'B20Created',
@@ -31,24 +28,7 @@ const B20_CREATED = {
   ],
 } as const
 
-const QUOTER_ABI = [{
-  type: 'function', name: 'quoteExactInputSingle', stateMutability: 'nonpayable',
-  inputs: [{ name: 'params', type: 'tuple', components: [
-    { name: 'tokenIn', type: 'address' }, { name: 'tokenOut', type: 'address' },
-    { name: 'amountIn', type: 'uint256' }, { name: 'fee', type: 'uint24' },
-    { name: 'sqrtPriceLimitX96', type: 'uint160' },
-  ] }],
-  outputs: [{ name: 'amountOut', type: 'uint256' }, { name: 'a', type: 'uint160' }, { name: 'b', type: 'uint32' }, { name: 'c', type: 'uint256' }],
-}] as const
-
-const ROUTER_ABI = [
-  { type: 'function', name: 'exactInputSingle', stateMutability: 'payable', inputs: [{ name: 'params', type: 'tuple', components: [
-    { name: 'tokenIn', type: 'address' }, { name: 'tokenOut', type: 'address' }, { name: 'fee', type: 'uint24' },
-    { name: 'recipient', type: 'address' }, { name: 'amountIn', type: 'uint256' }, { name: 'amountOutMinimum', type: 'uint256' }, { name: 'sqrtPriceLimitX96', type: 'uint160' },
-  ] }], outputs: [{ name: 'amountOut', type: 'uint256' }] },
-  { type: 'function', name: 'unwrapWETH9', stateMutability: 'payable', inputs: [{ name: 'amountMinimum', type: 'uint256' }, { name: 'recipient', type: 'address' }], outputs: [] },
-  { type: 'function', name: 'multicall', stateMutability: 'payable', inputs: [{ name: 'data', type: 'bytes[]' }], outputs: [{ name: '', type: 'bytes[]' }] },
-] as const
+type SwapTx = { to: `0x${string}`; router: `0x${string}`; data: `0x${string}`; value: string; amountOut: bigint; needsApprove: boolean }
 
 type Tok = { token: `0x${string}`; name: string; symbol: string; variant: number; block: bigint }
 type Mkt = { price: number; vol24: number; fdv: number; change24: number; liq: number; img?: string }
@@ -73,6 +53,7 @@ export default function Launchpad() {
   const { address, isConnected } = useAccount()
   const publicClient = usePublicClient()
   const { writeContractAsync } = useWriteContract()
+  const { data: walletClient } = useWalletClient()
 
   const [toks, setToks] = useState<Tok[]>([])
   const [mkt, setMkt] = useState<Record<string, Mkt>>({})
@@ -160,35 +141,39 @@ export default function Launchpad() {
   const [active, setActive] = useState<Tok | null>(null)
   const [side, setSide] = useState<'buy' | 'sell'>('buy')
   const [amount, setAmount] = useState('')
-  const [quote, setQuote] = useState<{ out: bigint; fee: number } | null>(null)
+  const [quote, setQuote] = useState<SwapTx | null>(null)
+  const [quoting, setQuoting] = useState(false)
   const [bal, setBal] = useState<bigint>(0n)
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState<{ ok: boolean; t: string } | null>(null)
 
-  const bestQuote = useCallback(async (tokenIn: `0x${string}`, tokenOut: `0x${string}`, amountIn: bigint) => {
-    if (!publicClient) return null
-    let best: { out: bigint; fee: number } | null = null
-    for (const fee of FEE_TIERS) {
-      try {
-        const res = await publicClient.readContract({ address: QUOTER, abi: QUOTER_ABI, functionName: 'quoteExactInputSingle', args: [{ tokenIn, tokenOut, amountIn, fee, sqrtPriceLimitX96: 0n }] }) as readonly [bigint, bigint, number, bigint]
-        if (!best || res[0] > best.out) best = { out: res[0], fee }
-      } catch { /* no pool at this tier */ }
-    }
-    return best
-  }, [publicClient])
+  // Ask the aggregator (all Base DEXs) for a route + executable tx.
+  const fetchSwap = useCallback(async (tokenIn: string, tokenOut: string, amountIn: bigint): Promise<SwapTx | null> => {
+    if (!address) return null
+    const r = await fetch('/api/swap', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ tokenIn, tokenOut, amountIn: amountIn.toString(), sender: address, recipient: address, slippageBps: 300 }),
+    })
+    const d = await r.json()
+    if (!r.ok || !d?.to) return null
+    return { to: d.to, router: d.router, data: d.data, value: d.value, amountOut: BigInt(d.amountOut || '0'), needsApprove: !!d.needsApprove }
+  }, [address])
 
+  // debounced live quote
   useEffect(() => {
     let stop = false
-    const run = async () => {
-      if (!active || !amount || Number(amount) <= 0) { setQuote(null); return }
-      const amt = parseEther(amount)
-      const res = side === 'buy'
-        ? await bestQuote(WETH, active.token, amt)
-        : await bestQuote(active.token, WETH, amt)
-      if (!stop) setQuote(res)
-    }
-    run(); return () => { stop = true }
-  }, [active, amount, side, bestQuote])
+    if (!active || !amount || Number(amount) <= 0) { setQuote(null); setQuoting(false); return }
+    setQuoting(true)
+    const id = setTimeout(async () => {
+      try {
+        const amt = parseEther(amount)
+        const res = side === 'buy' ? await fetchSwap(NATIVE, active.token, amt) : await fetchSwap(active.token, NATIVE, amt)
+        if (!stop) setQuote(res)
+      } catch { if (!stop) setQuote(null) }
+      if (!stop) setQuoting(false)
+    }, 550)
+    return () => { stop = true; clearTimeout(id) }
+  }, [active, amount, side, fetchSwap])
 
   useEffect(() => {
     const run = async () => {
@@ -201,25 +186,26 @@ export default function Launchpad() {
   const openTrade = (t: Tok, s: 'buy' | 'sell') => { setActive(t); setSide(s); setAmount(''); setQuote(null); setNote(null) }
 
   const doTrade = async () => {
-    if (!active || !isConnected || !publicClient || !amount || Number(amount) <= 0 || !quote || busy) return
+    if (!active || !isConnected || !walletClient || !publicClient || !amount || Number(amount) <= 0 || !quote || busy) return
     setBusy(true); setNote(null)
     try {
-      const amt = parseEther(amount)
-      const minOut = quote.out - (quote.out * SLIPPAGE_BPS) / 10000n
-      if (side === 'buy') {
-        await writeContractAsync({ chainId: base.id, address: SWAP_ROUTER, abi: ROUTER_ABI, functionName: 'exactInputSingle',
-          args: [{ tokenIn: WETH, tokenOut: active.token, fee: quote.fee, recipient: address!, amountIn: amt, amountOutMinimum: minOut, sqrtPriceLimitX96: 0n }], value: amt })
-      } else {
-        const allowance = await publicClient.readContract({ address: active.token, abi: erc20Abi, functionName: 'allowance', args: [address!, SWAP_ROUTER] }) as bigint
-        if (allowance < amt) await writeContractAsync({ chainId: base.id, address: active.token, abi: erc20Abi, functionName: 'approve', args: [SWAP_ROUTER, amt] })
-        const swap = encodeFunctionData({ abi: ROUTER_ABI, functionName: 'exactInputSingle', args: [{ tokenIn: active.token, tokenOut: WETH, fee: quote.fee, recipient: SWAP_ROUTER, amountIn: amt, amountOutMinimum: minOut, sqrtPriceLimitX96: 0n }] })
-        const unwrap = encodeFunctionData({ abi: ROUTER_ABI, functionName: 'unwrapWETH9', args: [minOut, address!] })
-        await writeContractAsync({ chainId: base.id, address: SWAP_ROUTER, abi: ROUTER_ABI, functionName: 'multicall', args: [[swap, unwrap]] })
+      // sell: approve the aggregator router to pull the token first
+      if (side === 'sell' && quote.needsApprove) {
+        const amt = parseEther(amount)
+        const allowance = await publicClient.readContract({ address: active.token, abi: erc20Abi, functionName: 'allowance', args: [address!, quote.router] }) as bigint
+        if (allowance < amt) {
+          await writeContractAsync({ chainId: base.id, address: active.token, abi: erc20Abi, functionName: 'approve', args: [quote.router, amt] })
+        }
       }
-      setNote({ ok: true, t: `${side === 'buy' ? 'Bought' : 'Sold'} ✓` }); setAmount(''); setQuote(null)
+      // fresh quote right before sending (price/route may have moved)
+      const amt = parseEther(amount)
+      const fresh = side === 'buy' ? await fetchSwap(NATIVE, active.token, amt) : await fetchSwap(active.token, NATIVE, amt)
+      const tx = fresh || quote
+      await walletClient.sendTransaction({ to: tx.to, data: tx.data, value: BigInt(tx.value || '0'), chain: base, account: address! })
+      setNote({ ok: true, t: `${side === 'buy' ? 'Bought' : 'Sold'} ✓ — check your wallet` }); setAmount(''); setQuote(null)
     } catch (e) {
       const m = e instanceof Error ? e.message : ''
-      setNote({ ok: false, t: /reject|denied/i.test(m) ? 'Cancelled in wallet.' : /insufficient|exceeds|balance/i.test(m) ? 'Not enough balance.' : 'Trade failed — this token may have no pool.' })
+      setNote({ ok: false, t: /reject|denied/i.test(m) ? 'Cancelled in wallet.' : /insufficient|exceeds|balance/i.test(m) ? 'Not enough balance.' : 'Trade failed — try a different amount.' })
     }
     setBusy(false)
   }
@@ -346,15 +332,15 @@ export default function Launchpad() {
               {quote && Number(amount) > 0 && (
                 <div className="mt-3 bg-[#F0F4FF] rounded-2xl px-4 py-3 flex items-center justify-between">
                   <span className="text-xs text-[#5B6271]">You receive →</span>
-                  <span className="font-black text-[#0A0B0D] text-right">{side === 'buy' ? `${Number(formatEther(quote.out)).toLocaleString('en', { maximumFractionDigits: 2 })} ${active.symbol}` : `${Number(formatEther(quote.out)).toFixed(6)} ETH`}</span>
+                  <span className="font-black text-[#0A0B0D] text-right">{side === 'buy' ? `${Number(formatEther(quote.amountOut)).toLocaleString('en', { maximumFractionDigits: 2 })} ${active.symbol}` : `${Number(formatEther(quote.amountOut)).toFixed(6)} ETH`}</span>
                 </div>
               )}
 
               {note && <div className={`text-sm rounded-xl px-3 py-2 mt-3 ${note.ok ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'}`}>{note.t}</div>}
 
-              <button onClick={doTrade} disabled={!isConnected || busy || !amount || Number(amount) <= 0 || !quote}
+              <button onClick={doTrade} disabled={!isConnected || busy || quoting || !amount || Number(amount) <= 0 || !quote}
                 className={`w-full mt-4 text-white font-black text-base py-3.5 rounded-2xl transition-colors disabled:opacity-50 ${side === 'buy' ? 'bg-[#0052FF] hover:bg-[#1652F0]' : 'bg-[#0A0B0D] hover:bg-black'}`}>
-                {busy ? 'Confirm in wallet…' : !isConnected ? 'Connect wallet' : !quote && Number(amount) > 0 ? 'No pool for this token' : side === 'buy' ? `Buy ${active.symbol}` : `Sell ${active.symbol}`}
+                {busy ? 'Confirm in wallet…' : !isConnected ? 'Connect wallet' : quoting && Number(amount) > 0 ? 'Finding best price…' : !quote && Number(amount) > 0 ? 'No liquidity for this token' : side === 'buy' ? `Buy ${active.symbol}` : `Sell ${active.symbol}`}
               </button>
               <p className="text-[10px] text-[#C5CBD3] text-center mt-2">Goes straight to your wallet · 3% max slippage · Uniswap V3</p>
             </div>
