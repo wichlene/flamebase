@@ -1903,6 +1903,7 @@ export default function Home() {
     { tab: 'activity', icon: '🔔', labelKey: 'navActivity' },
     { tab: 'messages', icon: '💬', labelKey: 'navMessages' },
     { tab: 'ai', icon: '🤖', labelKey: 'navAI' },
+    { tab: 'launch', icon: '🚀', labelKey: 'navLaunch' },
     { tab: 'profile', icon: '👤', labelKey: 'navProfile' },
     { tab: 'tools', icon: '🛠️', labelKey: 'navTools' },
   ]
@@ -2128,7 +2129,7 @@ export default function Home() {
             <span className="text-lg font-black text-[#0A0B0D]">FlameBase</span>
           </div>
           <nav className="flex-1 space-y-1">
-            {navItems.map(({ tab, icon, labelKey }) => (
+            {navItems.filter(n => n.tab !== 'launch').map(({ tab, icon, labelKey }) => (
               <button key={tab} onClick={() => {
                 setActiveTab(tab)
                 if (tab === 'reels') setReelsEverOpened(true)
