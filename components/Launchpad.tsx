@@ -72,6 +72,12 @@ export default function Launchpad() {
   const [loading, setLoading] = useState(true)
   const [loadingMkt, setLoadingMkt] = useState(false)
   const [q, setQ] = useState('')
+  const [sortKey, setSortKey] = useState<'vol24' | 'fdv' | 'price' | 'change24'>('vol24')
+  const [sortDir, setSortDir] = useState<'desc' | 'asc'>('desc')
+  const toggleSort = (k: 'vol24' | 'fdv' | 'price' | 'change24') => {
+    if (sortKey === k) setSortDir(d => (d === 'desc' ? 'asc' : 'desc'))
+    else { setSortKey(k); setSortDir('desc') }
+  }
 
   // discover every B20 from the factory (chunked — public RPCs reject wide ranges)
   const loadToks = useCallback(async () => {
@@ -136,10 +142,11 @@ export default function Launchpad() {
     const filtered = needle
       ? toks.filter(t => t.name.toLowerCase().includes(needle) || t.symbol.toLowerCase().includes(needle) || t.token.toLowerCase().includes(needle))
       : toks
-    return [...filtered].sort((a, b) => (mkt[b.token.toLowerCase()]?.vol24 || 0) - (mkt[a.token.toLowerCase()]?.vol24 || 0))
-  }, [toks, mkt, q])
+    const val = (t: Tok) => { const m = mkt[t.token.toLowerCase()]; return m ? (m[sortKey] || 0) : -1 }
+    return [...filtered].sort((a, b) => (sortDir === 'desc' ? val(b) - val(a) : val(a) - val(b)))
+  }, [toks, mkt, q, sortKey, sortDir])
 
-  const tradeable = useMemo(() => Object.values(mkt).filter(m => m.liq > 0).length, [mkt])
+  const tradeable = useMemo(() => Object.keys(mkt).length, [mkt])
 
   // ── trade modal ──
   const [active, setActive] = useState<Tok | null>(null)
@@ -233,10 +240,11 @@ export default function Launchpad() {
           <thead>
             <tr className="text-[10px] uppercase tracking-wide text-[#8A919E] border-b border-[#EEF1F5]">
               <th className="text-left font-semibold py-2 pl-1">Token</th>
-              <th className="text-right font-semibold py-2 px-2">Price</th>
-              <th className="text-right font-semibold py-2 px-2 hidden sm:table-cell">24h</th>
-              <th className="text-right font-semibold py-2 px-2 hidden sm:table-cell">Volume</th>
-              <th className="text-right font-semibold py-2 px-2 hidden md:table-cell">FDV</th>
+              {([['price', 'Price', ''], ['change24', '24h', 'hidden sm:table-cell'], ['vol24', 'Volume', 'hidden sm:table-cell'], ['fdv', 'FDV', 'hidden md:table-cell']] as const).map(([k, label, cls]) => (
+                <th key={k} onClick={() => toggleSort(k)} className={`text-right font-semibold py-2 px-2 cursor-pointer select-none hover:text-[#0052FF] ${cls} ${sortKey === k ? 'text-[#0052FF]' : ''}`}>
+                  {label}{sortKey === k ? (sortDir === 'desc' ? ' ↓' : ' ↑') : ''}
+                </th>
+              ))}
               <th className="py-2 pr-1"></th>
             </tr>
           </thead>
@@ -247,8 +255,9 @@ export default function Launchpad() {
             {rows.slice(0, 200).map((t, i) => {
               const m = mkt[t.token.toLowerCase()]
               const up = (m?.change24 ?? 0) >= 0
+              const canTrade = !!m
               return (
-                <tr key={t.token} className="border-b border-[#F5F7FA] hover:bg-[#FAFBFD]">
+                <tr key={t.token} onClick={() => canTrade && openTrade(t, 'buy')} className={`border-b border-[#F5F7FA] hover:bg-[#F0F4FF] ${canTrade ? 'cursor-pointer' : ''}`}>
                   <td className="py-2.5 pl-1">
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] text-[#C5CBD3] w-4 text-right">{i + 1}</span>
@@ -264,13 +273,13 @@ export default function Launchpad() {
                   <td className="text-right px-2 text-[12px] hidden sm:table-cell">{m?.vol24 ? fmtUsd(m.vol24) : '-'}</td>
                   <td className="text-right px-2 text-[12px] hidden md:table-cell">{m?.fdv ? fmtUsd(m.fdv) : '-'}</td>
                   <td className="text-right pr-1">
-                    {m?.liq ? (
+                    {canTrade ? (
                       <div className="flex gap-1 justify-end">
-                        <button onClick={() => openTrade(t, 'buy')} className="bg-[#0052FF] text-white text-[11px] font-bold px-2.5 py-1 rounded-lg">Buy</button>
-                        <button onClick={() => openTrade(t, 'sell')} className="bg-[#F0F2F5] text-[#5B6271] text-[11px] font-bold px-2.5 py-1 rounded-lg">Sell</button>
+                        <button onClick={e => { e.stopPropagation(); openTrade(t, 'buy') }} className="bg-[#0052FF] text-white text-[11px] font-bold px-2.5 py-1 rounded-lg">Buy</button>
+                        <button onClick={e => { e.stopPropagation(); openTrade(t, 'sell') }} className="bg-[#F0F2F5] text-[#5B6271] text-[11px] font-bold px-2.5 py-1 rounded-lg hidden sm:inline-block">Sell</button>
                       </div>
                     ) : (
-                      <a href={`https://basescan.org/token/${t.token}`} target="_blank" rel="noopener noreferrer" className="text-[11px] text-[#8A919E] font-bold">View ↗</a>
+                      <a href={`https://basescan.org/token/${t.token}`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-[11px] text-[#8A919E] font-bold">View ↗</a>
                     )}
                   </td>
                 </tr>
