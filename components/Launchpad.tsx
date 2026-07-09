@@ -31,7 +31,7 @@ const B20_CREATED = {
 type SwapTx = { to: `0x${string}`; router: `0x${string}`; data: `0x${string}`; value: string; amountOut: bigint; needsApprove: boolean }
 
 type Tok = { token: `0x${string}`; name: string; symbol: string; variant: number; block: bigint }
-type Mkt = { price: number; vol24: number; fdv: number; change24: number; liq: number; img?: string }
+type Mkt = { price: number; vol24: number; fdv: number; change24: number; liq: number; img?: string; pair?: string }
 
 function fmtUsd(n: number) {
   if (!n) return '-'
@@ -120,6 +120,7 @@ export default function Launchpad() {
               change24: Number((p.priceChange as { h24?: number })?.h24 ?? 0),
               liq,
               img: (p.info as { imageUrl?: string } | undefined)?.imageUrl,
+              pair: typeof p.pairAddress === 'string' ? p.pairAddress : undefined,
             }
           }
         } catch { /* rate limit / offline — skip */ }
@@ -142,6 +143,9 @@ export default function Launchpad() {
   }, [toks, mkt, q, sortKey, sortDir])
 
   const tradeable = useMemo(() => Object.keys(mkt).length, [mkt])
+
+  // ── detail view ──
+  const [detail, setDetail] = useState<Tok | null>(null)
 
   // ── trade modal ──
   const [active, setActive] = useState<Tok | null>(null)
@@ -261,7 +265,7 @@ export default function Launchpad() {
               const up = (m?.change24 ?? 0) >= 0
               const canTrade = !!m
               return (
-                <tr key={t.token} onClick={() => canTrade && openTrade(t, 'buy')} className={`border-b border-[#F5F7FA] last:border-0 transition-colors ${canTrade ? 'cursor-pointer hover:bg-[#F0F4FF]' : ''}`}>
+                <tr key={t.token} onClick={() => canTrade && setDetail(t)} className={`border-b border-[#F5F7FA] last:border-0 transition-colors ${canTrade ? 'cursor-pointer hover:bg-[#F0F4FF]' : ''}`}>
                   <td className="py-2 pl-3">
                     <div className="flex items-center gap-2.5 min-w-0">
                       <span className="text-[10px] text-[#C5CBD3] w-3.5 text-right flex-shrink-0">{i + 1}</span>
@@ -296,6 +300,68 @@ export default function Launchpad() {
       {rows.length > 150 && <p className="text-[10px] text-[#C5CBD3] text-center">Showing top 150 — use search to find more.</p>}
 
       <p className="text-[10px] text-[#C5CBD3] text-center">Trades route across all Base DEXs (Aerodrome, Uniswap V2–V4) and settle on-chain into your wallet. Only spend what you can afford to lose.</p>
+
+      {/* token detail (chart + stats) */}
+      {detail && (() => {
+        const m = mkt[detail.token.toLowerCase()]
+        const up = (m?.change24 ?? 0) >= 0
+        const stats: [string, string][] = [
+          ['Price', m?.price ? fmtUsd(m.price) : '-'],
+          ['24h', m ? `${up ? '▲' : '▼'} ${Math.abs(m.change24).toFixed(1)}%` : '-'],
+          ['Volume 24h', m?.vol24 ? fmtUsd(m.vol24) : '-'],
+          ['Liquidity', m?.liq ? fmtUsd(m.liq) : '-'],
+          ['FDV', m?.fdv ? fmtUsd(m.fdv) : '-'],
+          ['Variant', detail.variant === 1 ? 'Stablecoin' : 'Asset'],
+        ]
+        return (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4" onClick={() => setDetail(null)}>
+            <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-lg max-h-[92vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+              {/* header */}
+              <div className="flex items-center gap-3 p-4 border-b border-[#F0F2F5] sticky top-0 bg-white z-10">
+                <TokenLogo img={m?.img} symbol={detail.symbol} size={40} />
+                <div className="flex-1 min-w-0">
+                  <div className="font-black text-[#0A0B0D] truncate">{detail.name}</div>
+                  <div className="text-xs text-[#8A919E]">${detail.symbol}</div>
+                </div>
+                <div className="text-right">
+                  <div className="font-black text-[#0A0B0D]">{m?.price ? fmtUsd(m.price) : '-'}</div>
+                  <div className={`text-xs font-bold ${up ? 'text-green-600' : 'text-red-500'}`}>{m ? `${up ? '▲' : '▼'} ${Math.abs(m.change24).toFixed(1)}%` : ''}</div>
+                </div>
+                <button onClick={() => setDetail(null)} className="text-[#8A919E] hover:text-[#0A0B0D] text-xl leading-none ml-1">✕</button>
+              </div>
+
+              {/* candlestick chart via DexScreener embed */}
+              {m?.pair ? (
+                <iframe
+                  title="chart"
+                  src={`https://dexscreener.com/base/${m.pair}?embed=1&theme=light&info=0&trades=0&chartTheme=light&chartStyle=1&interval=15`}
+                  className="w-full h-[300px] sm:h-[360px] border-0 bg-[#FAFBFD]"
+                  loading="lazy"
+                />
+              ) : (
+                <div className="h-[160px] flex items-center justify-center text-sm text-[#8A919E]">No chart — this token has no indexed pool yet.</div>
+              )}
+
+              {/* stats */}
+              <div className="grid grid-cols-3 gap-2 p-4">
+                {stats.map(([k, v]) => (
+                  <div key={k} className="bg-[#F7F9FC] rounded-xl px-3 py-2">
+                    <p className="text-[10px] text-[#8A919E] uppercase tracking-wide">{k}</p>
+                    <p className="text-sm font-bold text-[#0A0B0D] truncate">{v}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* actions */}
+              <div className="flex gap-2 px-4 pb-4">
+                <button onClick={() => { const d = detail; setDetail(null); openTrade(d, 'buy') }} className="flex-1 bg-[#0052FF] hover:bg-[#1652F0] text-white font-black py-3 rounded-2xl transition-colors">Buy</button>
+                <button onClick={() => { const d = detail; setDetail(null); openTrade(d, 'sell') }} className="flex-1 bg-[#0A0B0D] hover:bg-black text-white font-black py-3 rounded-2xl transition-colors">Sell</button>
+              </div>
+              <a href={`https://basescan.org/token/${detail.token}`} target="_blank" rel="noopener noreferrer" className="block text-center text-[11px] text-[#8A919E] pb-4 hover:text-[#0052FF]">View contract on Basescan ↗</a>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* trade modal */}
       {active && (() => {
