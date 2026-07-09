@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useAccount, usePublicClient, useSendTransaction, useWriteContract } from 'wagmi'
+import { useAccount, usePublicClient, useSendTransaction, useWatchAsset, useWriteContract } from 'wagmi'
 import { erc20Abi, formatEther, parseEther } from 'viem'
 import { base } from 'wagmi/chains'
 
@@ -54,6 +54,7 @@ export default function Launchpad() {
   const publicClient = usePublicClient()
   const { writeContractAsync } = useWriteContract()
   const { sendTransactionAsync } = useSendTransaction()
+  const { watchAssetAsync } = useWatchAsset()
 
   const [toks, setToks] = useState<Tok[]>([])
   const [mkt, setMkt] = useState<Record<string, Mkt>>({})
@@ -146,6 +147,7 @@ export default function Launchpad() {
   const [bal, setBal] = useState<bigint>(0n)
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState<{ ok: boolean; t: string } | null>(null)
+  const [bought, setBought] = useState(false) // show "add token to wallet" after a buy
 
   // Ask the aggregator (all Base DEXs) for a route + executable tx.
   const fetchSwap = useCallback(async (tokenIn: string, tokenOut: string, amountIn: bigint): Promise<SwapTx | null> => {
@@ -183,7 +185,12 @@ export default function Launchpad() {
     run()
   }, [active, address, publicClient, busy])
 
-  const openTrade = (t: Tok, s: 'buy' | 'sell') => { setActive(t); setSide(s); setAmount(''); setQuote(null); setNote(null) }
+  const openTrade = (t: Tok, s: 'buy' | 'sell') => { setActive(t); setSide(s); setAmount(''); setQuote(null); setNote(null); setBought(false) }
+
+  const addToWallet = async () => {
+    if (!active) return
+    try { await watchAssetAsync({ type: 'ERC20', options: { address: active.token, symbol: active.symbol.slice(0, 11) || 'B20', decimals: 18 } }) } catch { /* user declined */ }
+  }
 
   const doTrade = async () => {
     if (!active || !isConnected || !publicClient || !amount || Number(amount) <= 0 || !quote || busy) return
@@ -199,6 +206,7 @@ export default function Launchpad() {
       }
       await sendTransactionAsync({ chainId: base.id, to: quote.to, data: quote.data, value: BigInt(quote.value || '0') })
       setNote({ ok: true, t: `${side === 'buy' ? 'Bought' : 'Sold'} ✓ — check your wallet` }); setAmount(''); setQuote(null)
+      if (side === 'buy') setBought(true)
     } catch (e) {
       const m = e instanceof Error ? (e.message || String(e)) : String(e)
       const short = m.split('\n')[0].slice(0, 140)
@@ -334,6 +342,12 @@ export default function Launchpad() {
               )}
 
               {note && <div className={`text-sm rounded-xl px-3 py-2 mt-3 ${note.ok ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'}`}>{note.t}</div>}
+
+              {bought && (
+                <button onClick={addToWallet} className="w-full mt-3 bg-[#F0F4FF] text-[#0052FF] font-bold text-sm py-2.5 rounded-xl hover:bg-[#E6EEFF]">
+                  ➕ Add {active.symbol} to your wallet
+                </button>
+              )}
 
               <button onClick={doTrade} disabled={!isConnected || busy || quoting || !amount || Number(amount) <= 0 || !quote}
                 className={`w-full mt-4 text-white font-black text-base py-3.5 rounded-2xl transition-colors disabled:opacity-50 ${side === 'buy' ? 'bg-[#0052FF] hover:bg-[#1652F0]' : 'bg-[#0A0B0D] hover:bg-black'}`}>
