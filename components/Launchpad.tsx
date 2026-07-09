@@ -42,6 +42,14 @@ function fmtUsd(n: number) {
   return `$${n.toPrecision(3)}`
 }
 
+// Token amount: keep small amounts meaningful (0.0000333 shows, not "0").
+function fmtTok(n: number) {
+  if (!n) return '0'
+  if (n >= 1000) return n.toLocaleString('en', { maximumFractionDigits: 2 })
+  if (n >= 1) return n.toLocaleString('en', { maximumFractionDigits: 4 })
+  return Number(n.toPrecision(4)).toString() // 4 significant figures, trimmed
+}
+
 function TokenLogo({ img, symbol, size = 30 }: { img?: string; symbol: string; size?: number }) {
   const [err, setErr] = useState(false)
   const s = { width: size, height: size }
@@ -327,12 +335,14 @@ export default function Launchpad() {
 
               {/* candlestick chart via DexScreener embed */}
               {m?.pair ? (
-                <iframe
-                  title="chart"
-                  src={`https://dexscreener.com/base/${m.pair}?embed=1&theme=light&info=0&trades=0&chartTheme=light&chartStyle=1&interval=15`}
-                  className="w-full h-[44vh] sm:h-[360px] border-0 bg-[#FAFBFD]"
-                  loading="lazy"
-                />
+                <div className="w-full h-[44vh] sm:h-[360px] overflow-hidden bg-[#FAFBFD]">
+                  <iframe
+                    title="chart"
+                    src={`https://dexscreener.com/base/${m.pair}?embed=1&theme=light&info=0&trades=0&chartTheme=light&chartStyle=1&interval=15`}
+                    className="w-full h-[calc(44vh+38px)] sm:h-[398px] border-0"
+                    loading="lazy"
+                  />
+                </div>
               ) : (
                 <div className="h-[160px] flex items-center justify-center text-sm text-[#8A919E]">No chart — this token has no indexed pool yet.</div>
               )}
@@ -397,13 +407,13 @@ export default function Launchpad() {
                   : [['25%', 0.25], ['50%', 0.5], ['Max', 1]].map(([lbl, f]) => <button key={lbl as string} onClick={() => setAmount(formatEther(BigInt(Math.floor(Number(bal) * (f as number)))))} className="flex-1 text-xs font-bold bg-[#F0F4FF] text-[#0052FF] rounded-lg py-1.5 hover:bg-[#E6EEFF]">{lbl}</button>)}
               </div>
 
-              {side === 'sell' && <p className="text-[11px] text-[#8A919E] mt-2">Balance: {Number(formatEther(bal)).toLocaleString('en', { maximumFractionDigits: 2 })} {active.symbol}</p>}
+              {side === 'sell' && <p className="text-[11px] text-[#8A919E] mt-2">Balance: {fmtTok(Number(formatEther(bal)))} {active.symbol}</p>}
 
               {/* quote */}
               {quote && Number(amount) > 0 && (
                 <div className="mt-3 bg-[#F0F4FF] rounded-2xl px-4 py-3 flex items-center justify-between">
                   <span className="text-xs text-[#5B6271]">You receive →</span>
-                  <span className="font-black text-[#0A0B0D] text-right">{side === 'buy' ? `${Number(formatEther(quote.amountOut)).toLocaleString('en', { maximumFractionDigits: 2 })} ${active.symbol}` : `${Number(formatEther(quote.amountOut)).toFixed(6)} ETH`}</span>
+                  <span className="font-black text-[#0A0B0D] text-right">{side === 'buy' ? `${fmtTok(Number(formatEther(quote.amountOut)))} ${active.symbol}` : `${fmtTok(Number(formatEther(quote.amountOut)))} ETH`}</span>
                 </div>
               )}
 
