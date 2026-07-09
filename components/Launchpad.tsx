@@ -51,7 +51,7 @@ const ROUTER_ABI = [
 ] as const
 
 type Tok = { token: `0x${string}`; name: string; symbol: string; variant: number; block: bigint }
-type Mkt = { price: number; vol24: number; fdv: number; change24: number; liq: number }
+type Mkt = { price: number; vol24: number; fdv: number; change24: number; liq: number; img?: string }
 
 function fmtUsd(n: number) {
   if (!n) return '-'
@@ -60,6 +60,13 @@ function fmtUsd(n: number) {
   if (n >= 1e3) return `$${(n / 1e3).toFixed(1)}K`
   if (n >= 1) return `$${n.toFixed(2)}`
   return `$${n.toPrecision(3)}`
+}
+
+function TokenLogo({ img, symbol, size = 30 }: { img?: string; symbol: string; size?: number }) {
+  const [err, setErr] = useState(false)
+  const s = { width: size, height: size }
+  if (img && !err) return <img src={img} alt={symbol} onError={() => setErr(true)} style={s} className="rounded-full object-cover flex-shrink-0 bg-[#F0F2F5]" />
+  return <div style={s} className="rounded-full bg-gradient-to-br from-[#0052FF] to-[#7B61FF] flex items-center justify-center text-white font-black flex-shrink-0" ><span style={{ fontSize: size * 0.32 }}>{symbol.slice(0, 3)}</span></div>
 }
 
 export default function Launchpad() {
@@ -126,6 +133,7 @@ export default function Launchpad() {
             fdv: Number(p.fdv || 0),
             change24: Number((p.priceChange as { h24?: number })?.h24 ?? 0),
             liq,
+            img: (p.info as { imageUrl?: string } | undefined)?.imageUrl,
           }
         }
         setMkt({ ...out })
@@ -235,51 +243,51 @@ export default function Launchpad() {
       </p>
 
       {/* table */}
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+      <div className="border border-[#EEF1F5] rounded-2xl overflow-hidden">
+        <table className="w-full text-sm table-fixed">
           <thead>
-            <tr className="text-[10px] uppercase tracking-wide text-[#8A919E] border-b border-[#EEF1F5]">
-              <th className="text-left font-semibold py-2 pl-1">Token</th>
-              {([['price', 'Price', ''], ['change24', '24h', 'hidden sm:table-cell'], ['vol24', 'Volume', 'hidden sm:table-cell'], ['fdv', 'FDV', 'hidden md:table-cell']] as const).map(([k, label, cls]) => (
-                <th key={k} onClick={() => toggleSort(k)} className={`text-right font-semibold py-2 px-2 cursor-pointer select-none hover:text-[#0052FF] ${cls} ${sortKey === k ? 'text-[#0052FF]' : ''}`}>
+            <tr className="text-[10px] uppercase tracking-wide text-[#8A919E] bg-[#FAFBFD] border-b border-[#EEF1F5]">
+              <th className="text-left font-semibold py-2.5 pl-3">Token</th>
+              {([['price', 'Price', 'w-[84px]'], ['change24', '24h', 'w-[62px]'], ['vol24', 'Volume', 'w-[78px] hidden sm:table-cell'], ['fdv', 'FDV', 'w-[70px] hidden md:table-cell']] as const).map(([k, label, cls]) => (
+                <th key={k} onClick={() => toggleSort(k)} className={`text-right font-semibold py-2.5 px-2 cursor-pointer select-none hover:text-[#0052FF] ${cls} ${sortKey === k ? 'text-[#0052FF]' : ''}`}>
                   {label}{sortKey === k ? (sortDir === 'desc' ? ' ↓' : ' ↑') : ''}
                 </th>
               ))}
-              <th className="py-2 pr-1"></th>
+              <th className="w-[62px] sm:w-[104px] pr-2"></th>
             </tr>
           </thead>
           <tbody>
-            {loading && toks.length === 0 && [...Array(6)].map((_, i) => (
-              <tr key={i}><td colSpan={6} className="py-2"><div className="h-9 bg-[#F0F2F5] rounded-lg animate-pulse" /></td></tr>
+            {loading && toks.length === 0 && [...Array(8)].map((_, i) => (
+              <tr key={i}><td colSpan={6} className="p-2"><div className="h-8 bg-[#F5F7FA] rounded-lg animate-pulse" /></td></tr>
             ))}
-            {rows.slice(0, 200).map((t, i) => {
+            {rows.slice(0, 150).map((t, i) => {
               const m = mkt[t.token.toLowerCase()]
               const up = (m?.change24 ?? 0) >= 0
               const canTrade = !!m
               return (
-                <tr key={t.token} onClick={() => canTrade && openTrade(t, 'buy')} className={`border-b border-[#F5F7FA] hover:bg-[#F0F4FF] ${canTrade ? 'cursor-pointer' : ''}`}>
-                  <td className="py-2.5 pl-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] text-[#C5CBD3] w-4 text-right">{i + 1}</span>
-                      <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#0052FF] to-[#7B61FF] flex items-center justify-center text-white font-black text-[9px] flex-shrink-0">{t.symbol.slice(0, 3)}</div>
+                <tr key={t.token} onClick={() => canTrade && openTrade(t, 'buy')} className={`border-b border-[#F5F7FA] last:border-0 transition-colors ${canTrade ? 'cursor-pointer hover:bg-[#F0F4FF]' : ''}`}>
+                  <td className="py-2 pl-3">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="text-[10px] text-[#C5CBD3] w-3.5 text-right flex-shrink-0">{i + 1}</span>
+                      <TokenLogo img={m?.img} symbol={t.symbol} size={30} />
                       <div className="min-w-0">
-                        <div className="font-bold text-[#0A0B0D] text-[13px] truncate max-w-[130px]">{t.name}</div>
-                        <div className="text-[10px] text-[#8A919E]">${t.symbol}</div>
+                        <div className="font-bold text-[#0A0B0D] text-[13px] truncate">{t.name}</div>
+                        <div className="text-[10px] text-[#8A919E] truncate">${t.symbol}</div>
                       </div>
                     </div>
                   </td>
-                  <td className="text-right px-2 font-mono text-[12px]">{m?.price ? fmtUsd(m.price) : '-'}</td>
-                  <td className={`text-right px-2 text-[12px] font-semibold hidden sm:table-cell ${!m ? 'text-[#C5CBD3]' : up ? 'text-green-600' : 'text-red-500'}`}>{m ? `${up ? '▲' : '▼'} ${Math.abs(m.change24).toFixed(1)}%` : '-'}</td>
-                  <td className="text-right px-2 text-[12px] hidden sm:table-cell">{m?.vol24 ? fmtUsd(m.vol24) : '-'}</td>
-                  <td className="text-right px-2 text-[12px] hidden md:table-cell">{m?.fdv ? fmtUsd(m.fdv) : '-'}</td>
-                  <td className="text-right pr-1">
+                  <td className="text-right px-2 font-mono text-[12px] text-[#0A0B0D]">{m?.price ? fmtUsd(m.price) : '·'}</td>
+                  <td className={`text-right px-2 text-[12px] font-bold ${!m ? 'text-[#C5CBD3]' : up ? 'text-green-600' : 'text-red-500'}`}>{m ? `${Math.abs(m.change24) < 0.05 ? '' : up ? '▲' : '▼'} ${Math.abs(m.change24).toFixed(1)}%` : '·'}</td>
+                  <td className="text-right px-2 text-[12px] text-[#5B6271] hidden sm:table-cell">{m?.vol24 ? fmtUsd(m.vol24) : '·'}</td>
+                  <td className="text-right px-2 text-[12px] text-[#5B6271] hidden md:table-cell">{m?.fdv ? fmtUsd(m.fdv) : '·'}</td>
+                  <td className="text-right pr-2">
                     {canTrade ? (
                       <div className="flex gap-1 justify-end">
-                        <button onClick={e => { e.stopPropagation(); openTrade(t, 'buy') }} className="bg-[#0052FF] text-white text-[11px] font-bold px-2.5 py-1 rounded-lg">Buy</button>
-                        <button onClick={e => { e.stopPropagation(); openTrade(t, 'sell') }} className="bg-[#F0F2F5] text-[#5B6271] text-[11px] font-bold px-2.5 py-1 rounded-lg hidden sm:inline-block">Sell</button>
+                        <button onClick={e => { e.stopPropagation(); openTrade(t, 'buy') }} className="bg-[#0052FF] hover:bg-[#1652F0] text-white text-[11px] font-bold px-3 py-1.5 rounded-lg transition-colors">Buy</button>
+                        <button onClick={e => { e.stopPropagation(); openTrade(t, 'sell') }} className="bg-[#F0F2F5] hover:bg-[#E4E7EB] text-[#5B6271] text-[11px] font-bold px-3 py-1.5 rounded-lg transition-colors hidden sm:inline-block">Sell</button>
                       </div>
                     ) : (
-                      <a href={`https://basescan.org/token/${t.token}`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-[11px] text-[#8A919E] font-bold">View ↗</a>
+                      <a href={`https://basescan.org/token/${t.token}`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-[11px] text-[#B0B7C3] font-bold hover:text-[#0052FF]">↗</a>
                     )}
                   </td>
                 </tr>
@@ -287,42 +295,72 @@ export default function Launchpad() {
             })}
           </tbody>
         </table>
-        {!loading && rows.length === 0 && <p className="text-sm text-[#8A919E] text-center py-6">No matches.</p>}
-        {rows.length > 200 && <p className="text-[10px] text-[#C5CBD3] text-center mt-2">Showing top 200 — search to narrow down.</p>}
+        {!loading && rows.length === 0 && <p className="text-sm text-[#8A919E] text-center py-8">No matches.</p>}
       </div>
+      {rows.length > 150 && <p className="text-[10px] text-[#C5CBD3] text-center">Showing top 150 — use search to find more.</p>}
 
-      <p className="text-[10px] text-[#C5CBD3] text-center">Trades route through Uniswap V3 on Base. Tokens without a pool show “View”. Only spend what you can afford to lose.</p>
+      <p className="text-[10px] text-[#C5CBD3] text-center">Trades settle on-chain via Uniswap V3 — the token lands straight in your wallet. Tokens with no pool aren&apos;t tradeable yet. Only spend what you can afford to lose.</p>
 
       {/* trade modal */}
-      {active && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 p-4" onClick={() => setActive(null)}>
-          <div className="bg-white rounded-2xl w-full max-w-sm p-4" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-3">
-              <span className="font-black text-[#0A0B0D]">{active.name} <span className="text-[#8A919E] font-bold">${active.symbol}</span></span>
-              <button onClick={() => setActive(null)} className="text-[#8A919E] font-bold">✕</button>
+      {active && (() => {
+        const m = mkt[active.token.toLowerCase()]
+        const quick = side === 'buy' ? ['0.005', '0.01', '0.05', '0.1'] : null
+        return (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-3" onClick={() => setActive(null)}>
+            <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-sm p-5 shadow-2xl" onClick={e => e.stopPropagation()}>
+              {/* header */}
+              <div className="flex items-center gap-3 mb-4">
+                <TokenLogo img={m?.img} symbol={active.symbol} size={44} />
+                <div className="flex-1 min-w-0">
+                  <div className="font-black text-[#0A0B0D] truncate">{active.name}</div>
+                  <div className="text-xs text-[#8A919E]">${active.symbol}{m?.price ? ` · ${fmtUsd(m.price)}` : ''}</div>
+                </div>
+                <button onClick={() => setActive(null)} className="text-[#8A919E] hover:text-[#0A0B0D] text-xl leading-none">✕</button>
+              </div>
+
+              {/* buy / sell toggle */}
+              <div className="flex gap-1 bg-[#F0F2F5] rounded-xl p-1 mb-3">
+                <button onClick={() => { setSide('buy'); setAmount(''); setQuote(null); setNote(null) }} className={`flex-1 text-sm font-black py-2 rounded-lg transition-colors ${side === 'buy' ? 'bg-white text-[#0052FF] shadow-sm' : 'text-[#8A919E]'}`}>Buy</button>
+                <button onClick={() => { setSide('sell'); setAmount(''); setQuote(null); setNote(null) }} className={`flex-1 text-sm font-black py-2 rounded-lg transition-colors ${side === 'sell' ? 'bg-white text-[#0052FF] shadow-sm' : 'text-[#8A919E]'}`}>Sell</button>
+              </div>
+
+              {/* amount */}
+              <div className="bg-[#F7F9FC] border border-[#E4E7EB] rounded-2xl px-4 py-3 focus-within:border-[#0052FF]">
+                <div className="flex items-center justify-between">
+                  <input value={amount} onChange={e => setAmount(e.target.value)} type="number" min="0" step={side === 'buy' ? '0.001' : '1'} placeholder="0"
+                    className="w-full bg-transparent text-2xl font-black focus:outline-none" />
+                  <span className="font-bold text-[#5B6271] text-sm flex-shrink-0 ml-2">{side === 'buy' ? 'ETH' : active.symbol}</span>
+                </div>
+              </div>
+
+              {/* quick amounts */}
+              <div className="flex gap-1.5 mt-2">
+                {side === 'buy'
+                  ? quick!.map(v => <button key={v} onClick={() => setAmount(v)} className="flex-1 text-xs font-bold bg-[#F0F4FF] text-[#0052FF] rounded-lg py-1.5 hover:bg-[#E6EEFF]">{v}</button>)
+                  : [['25%', 0.25], ['50%', 0.5], ['Max', 1]].map(([lbl, f]) => <button key={lbl as string} onClick={() => setAmount(formatEther(BigInt(Math.floor(Number(bal) * (f as number)))))} className="flex-1 text-xs font-bold bg-[#F0F4FF] text-[#0052FF] rounded-lg py-1.5 hover:bg-[#E6EEFF]">{lbl}</button>)}
+              </div>
+
+              {side === 'sell' && <p className="text-[11px] text-[#8A919E] mt-2">Balance: {Number(formatEther(bal)).toLocaleString('en', { maximumFractionDigits: 2 })} {active.symbol}</p>}
+
+              {/* quote */}
+              {quote && Number(amount) > 0 && (
+                <div className="mt-3 bg-[#F0F4FF] rounded-2xl px-4 py-3 flex items-center justify-between">
+                  <span className="text-xs text-[#5B6271]">You receive →</span>
+                  <span className="font-black text-[#0A0B0D] text-right">{side === 'buy' ? `${Number(formatEther(quote.out)).toLocaleString('en', { maximumFractionDigits: 2 })} ${active.symbol}` : `${Number(formatEther(quote.out)).toFixed(6)} ETH`}</span>
+                </div>
+              )}
+
+              {note && <div className={`text-sm rounded-xl px-3 py-2 mt-3 ${note.ok ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'}`}>{note.t}</div>}
+
+              <button onClick={doTrade} disabled={!isConnected || busy || !amount || Number(amount) <= 0 || !quote}
+                className={`w-full mt-4 text-white font-black text-base py-3.5 rounded-2xl transition-colors disabled:opacity-50 ${side === 'buy' ? 'bg-[#0052FF] hover:bg-[#1652F0]' : 'bg-[#0A0B0D] hover:bg-black'}`}>
+                {busy ? 'Confirm in wallet…' : !isConnected ? 'Connect wallet' : !quote && Number(amount) > 0 ? 'No pool for this token' : side === 'buy' ? `Buy ${active.symbol}` : `Sell ${active.symbol}`}
+              </button>
+              <p className="text-[10px] text-[#C5CBD3] text-center mt-2">Goes straight to your wallet · 3% max slippage · Uniswap V3</p>
             </div>
-            <div className="flex gap-1 bg-[#F0F2F5] rounded-lg p-1 mb-3">
-              <button onClick={() => { setSide('buy'); setAmount(''); setQuote(null) }} className={`flex-1 text-sm font-bold py-1.5 rounded-md ${side === 'buy' ? 'bg-white text-[#0052FF] shadow-sm' : 'text-[#8A919E]'}`}>Buy</button>
-              <button onClick={() => { setSide('sell'); setAmount(''); setQuote(null) }} className={`flex-1 text-sm font-bold py-1.5 rounded-md ${side === 'sell' ? 'bg-white text-[#0052FF] shadow-sm' : 'text-[#8A919E]'}`}>Sell</button>
-            </div>
-            <input value={amount} onChange={e => setAmount(e.target.value)} type="number" min="0" step={side === 'buy' ? '0.001' : '1000'}
-              placeholder={side === 'buy' ? 'ETH amount' : `${active.symbol} amount`}
-              className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#0052FF]" />
-            {side === 'sell' && (
-              <p className="text-[11px] text-[#8A919E] mt-1">Balance: {Number(formatEther(bal)).toLocaleString('en', { maximumFractionDigits: 0 })} {active.symbol}
-                <button onClick={() => setAmount(formatEther(bal))} className="ml-1 text-[#0052FF] font-bold">Max</button></p>
-            )}
-            {quote && Number(amount) > 0 && (
-              <p className="text-sm text-[#0A0B0D] mt-2 bg-[#F0F4FF] rounded-lg px-3 py-2">≈ You get <b>{side === 'buy' ? `${Number(formatEther(quote.out)).toLocaleString('en', { maximumFractionDigits: 0 })} ${active.symbol}` : `${Number(formatEther(quote.out)).toFixed(6)} ETH`}</b><span className="text-[11px] text-[#8A919E] block">3% max slippage · Uniswap V3</span></p>
-            )}
-            {note && <div className={`text-sm rounded-xl px-3 py-2 mt-2 ${note.ok ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'}`}>{note.t}</div>}
-            <button onClick={doTrade} disabled={!isConnected || busy || !amount || Number(amount) <= 0 || !quote}
-              className="w-full mt-3 bg-[#0052FF] text-white font-black text-sm py-2.5 rounded-xl disabled:opacity-50">
-              {busy ? 'Processing…' : !quote && Number(amount) > 0 ? 'No pool for this amount' : side === 'buy' ? `Buy ${active.symbol}` : `Sell ${active.symbol}`}
-            </button>
           </div>
-        </div>
-      )}
+        )
+      })()}
     </div>
   )
 }

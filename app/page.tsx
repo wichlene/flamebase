@@ -2379,7 +2379,7 @@ export default function Home() {
             </>
           )}
 
-          <div className="pb-24 md:pb-10 max-w-2xl mx-auto">
+          <div className={`pb-24 md:pb-10 mx-auto ${activeTab === 'launch' ? 'max-w-4xl' : 'max-w-2xl'}`}>
 
             {/* ══ FEED ══ */}
             {activeTab === 'feed' && (
