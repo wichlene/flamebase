@@ -32,7 +32,8 @@ Tools and when to use them:
 - deploy_token: user asks to deploy/create their own token, with name, symbol and supply.
 - create_proposal: user asks to create a DAO proposal, with a title (and optional description).
 - vote_proposal: user asks to vote for/against a DAO proposal, with the proposal's numeric ID and their stance.
-- swap_token: user asks to swap/convert/exchange ETH for USDC or USDC for ETH, with an amount.`
+- swap_token: user asks to swap/convert/exchange ETH for USDC or USDC for ETH, with an amount.
+- trade_token: user asks to BUY or SELL a specific token on the DEX by its contract address (any B20 / ERC-20 on Base). Buy takes an ETH amount; sell takes a token amount. Requires the 0x contract address in the message — if they name a token by ticker/name without an address, ask them for the contract address instead of guessing.`
 
 const TOOLS = [
   {
@@ -222,6 +223,22 @@ const TOOLS = [
           amount: { type: 'string', description: 'Human-readable amount of fromToken to swap, e.g. "0.01"' },
         },
         required: ['fromToken', 'toToken', 'amount'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'trade_token',
+      description: 'Buy or sell any token on Base by its contract address, via the DEX aggregator (routes across all Base DEXs). Use when the user gives a 0x token address and asks to buy (ETH amount) or sell (token amount).',
+      parameters: {
+        type: 'object',
+        properties: {
+          side: { type: 'string', enum: ['buy', 'sell'], description: 'buy = spend ETH to get the token; sell = give the token to get ETH' },
+          tokenAddress: { type: 'string', description: 'The 0x contract address of the token to trade' },
+          amount: { type: 'string', description: 'ETH amount to spend when buying, or token amount to sell' },
+        },
+        required: ['side', 'tokenAddress', 'amount'],
       },
     },
   },

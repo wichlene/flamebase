@@ -222,6 +222,8 @@ export function describeAction(a: AgentAction): string {
       return `Vote ${args.support ? 'FOR' : 'AGAINST'} proposal ${args.proposalId}`
     case 'swap_token':
       return `Swap ${args.amount} ${args.fromToken} → ${args.toToken} (Uniswap V3)`
+    case 'trade_token':
+      return `${args.side === 'buy' ? 'Buy' : 'Sell'} ${args.amount} ${args.side === 'buy' ? 'ETH of' : 'of'} ${String(args.tokenAddress).slice(0, 10)}… (DEX)`
     default:
       return `Run ${a.tool}`
   }
@@ -300,6 +302,12 @@ export function validateAction(a: AgentAction): string | null {
       if (toToken !== 'ETH' && toToken !== 'USDC') return 'Unsupported token (ETH or USDC only).'
       if (fromToken === toToken) return 'From and to token must be different.'
       if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) return 'Invalid amount.'
+      return null
+    }
+    case 'trade_token': {
+      if (args.side !== 'buy' && args.side !== 'sell') return 'Side must be buy or sell.'
+      if (!args.tokenAddress || !isAddress(String(args.tokenAddress))) return 'Give me the token contract address (0x…).'
+      if (!args.amount || isNaN(Number(args.amount)) || Number(args.amount) <= 0) return 'Invalid amount.'
       return null
     }
     default:
@@ -466,6 +474,44 @@ export async function executeAction(a: AgentAction, wallet: WalletLike, publicCl
         args: [{ tokenIn, tokenOut, fee, recipient: wallet.account.address, amountIn, amountOutMinimum, sqrtPriceLimitX96: 0n }],
       })
       return wallet.sendTransaction({ to: SWAP_ROUTER_ADDRESS, data, value })
+    }
+
+    case 'trade_token': {
+      // Buy/sell ANY token by contract address via the DEX aggregator (all Base
+      // DEXs). Same /api/swap route the B20 DEX uses, so it inherits routing +
+      // the platform fee. Buy: ETH→token; sell: token→ETH (approve first).
+      const side = args.side as 'buy' | 'sell'
+      const token = String(args.tokenAddress) as `0x${string}`
+      const amount = String(args.amount)
+      const NATIVE = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE'
+      const sender = wallet.account.address
+
+      let dec = 18
+      if (side === 'sell') {
+        try { dec = Number(await publicClient.readContract({ address: token, abi: erc20Abi, functionName: 'decimals' })) } catch {}
+      }
+      const amountIn = side === 'buy' ? parseEther(amount) : parseUnits(amount, dec)
+
+      const res = await fetch('/api/swap', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          tokenIn: side === 'buy' ? NATIVE : token,
+          tokenOut: side === 'buy' ? token : NATIVE,
+          amountIn: amountIn.toString(), sender, recipient: sender, slippageBps: 1000,
+        }),
+      })
+      const d = await res.json()
+      if (!res.ok || !d?.to) throw new AgentActionError(d?.error || 'No liquidity route for this token.')
+
+      if (side === 'sell' && d.needsApprove) {
+        const allowance = (await publicClient.readContract({ address: token, abi: erc20Abi, functionName: 'allowance', args: [sender, d.router] })) as bigint
+        if (allowance < amountIn) {
+          const approveData = encodeFunctionData({ abi: erc20Abi, functionName: 'approve', args: [d.router, amountIn] })
+          const approveHash = await wallet.sendTransaction({ to: token, data: approveData })
+          if (publicClient.waitForTransactionReceipt) await publicClient.waitForTransactionReceipt({ hash: approveHash })
+        }
+      }
+      return wallet.sendTransaction({ to: d.to, data: d.data, value: BigInt(d.value || '0') })
     }
 
     default:
