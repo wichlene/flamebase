@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAccount, usePublicClient, useSendTransaction, useWatchAsset, useWriteContract } from 'wagmi'
-import { erc20Abi, formatEther, parseEther } from 'viem'
+import { erc20Abi, formatEther, formatUnits, parseEther, parseUnits } from 'viem'
 import { base } from 'wagmi/chains'
 
 /*
@@ -30,7 +30,7 @@ const B20_CREATED = {
 
 type SwapTx = { to: `0x${string}`; router: `0x${string}`; data: `0x${string}`; value: string; amountOut: bigint; needsApprove: boolean }
 
-type Tok = { token: `0x${string}`; name: string; symbol: string; variant: number; block: bigint }
+type Tok = { token: `0x${string}`; name: string; symbol: string; variant: number; block: bigint; dec: number }
 type Mkt = { price: number; vol24: number; fdv: number; change24: number; liq: number; img?: string; pair?: string }
 
 function fmtUsd(n: number) {
@@ -90,9 +90,10 @@ export default function Launchpad() {
       for (let i = 0; i < ranges.length; i += 16) {
         const res = await Promise.all(ranges.slice(i, i + 16).map(([f, t]) =>
           publicClient.getLogs({ address: FACTORY, event: B20_CREATED, fromBlock: f, toBlock: t }).catch(() => [])))
-        for (const logs of res) for (const l of logs as { blockNumber?: bigint; args?: { token?: `0x${string}`; name?: string; symbol?: string; variant?: number } }[]) {
+        for (const logs of res) for (const l of logs as { blockNumber?: bigint; args?: { token?: `0x${string}`; name?: string; symbol?: string; variant?: number; decimals?: number } }[]) {
           const a = l.args?.token?.toLowerCase(); if (!a || seen.has(a)) continue; seen.add(a)
-          rows.push({ token: l.args!.token!, name: l.args?.name || 'B20', symbol: l.args?.symbol || '???', variant: Number(l.args?.variant ?? 0), block: l.blockNumber ?? 0n })
+          const d = Number(l.args?.decimals ?? 18)
+          rows.push({ token: l.args!.token!, name: l.args?.name || 'B20', symbol: l.args?.symbol || '???', variant: Number(l.args?.variant ?? 0), block: l.blockNumber ?? 0n, dec: d >= 1 && d <= 18 ? d : 18 })
         }
         rows.sort((a, b) => (b.block > a.block ? 1 : -1))
         setToks([...rows]) // stream in
@@ -185,7 +186,8 @@ export default function Launchpad() {
     setQuoting(true)
     const id = setTimeout(async () => {
       try {
-        const amt = parseEther(amount)
+        // buy: amountIn is ETH (18 dec); sell: amountIn is the token (its own decimals)
+        const amt = side === 'buy' ? parseEther(amount) : parseUnits(amount, active.dec)
         const res = side === 'buy' ? await fetchSwap(NATIVE, active.token, amt) : await fetchSwap(active.token, NATIVE, amt)
         if (!stop) setQuote(res)
       } catch { if (!stop) setQuote(null) }
@@ -206,16 +208,16 @@ export default function Launchpad() {
 
   const addToWallet = async () => {
     if (!active) return
-    try { await watchAssetAsync({ type: 'ERC20', options: { address: active.token, symbol: active.symbol.slice(0, 11) || 'B20', decimals: 18 } }) } catch { /* user declined */ }
+    try { await watchAssetAsync({ type: 'ERC20', options: { address: active.token, symbol: active.symbol.slice(0, 11) || 'B20', decimals: active.dec } }) } catch { /* user declined */ }
   }
 
   const doTrade = async () => {
     if (!active || !isConnected || !publicClient || !amount || Number(amount) <= 0 || !quote || busy) return
     setBusy(true); setNote(null)
     try {
-      // sell: approve the aggregator router to pull the token first
+      // sell: approve the aggregator router to pull the token first (exact amount, token decimals)
       if (side === 'sell' && quote.needsApprove) {
-        const amt = parseEther(amount)
+        const amt = parseUnits(amount, active.dec)
         const allowance = await publicClient.readContract({ address: active.token, abi: erc20Abi, functionName: 'allowance', args: [address!, quote.router] }) as bigint
         if (allowance < amt) {
           await writeContractAsync({ chainId: base.id, address: active.token, abi: erc20Abi, functionName: 'approve', args: [quote.router, amt] })
@@ -404,10 +406,10 @@ export default function Launchpad() {
               <div className="flex gap-1.5 mt-2">
                 {side === 'buy'
                   ? quick!.map(v => <button key={v} onClick={() => setAmount(v)} className="flex-1 text-xs font-bold bg-[#F0F4FF] text-[#0052FF] rounded-lg py-1.5 hover:bg-[#E6EEFF]">{v}</button>)
-                  : [['25%', 0.25], ['50%', 0.5], ['Max', 1]].map(([lbl, f]) => <button key={lbl as string} onClick={() => setAmount(formatEther(BigInt(Math.floor(Number(bal) * (f as number)))))} className="flex-1 text-xs font-bold bg-[#F0F4FF] text-[#0052FF] rounded-lg py-1.5 hover:bg-[#E6EEFF]">{lbl}</button>)}
+                  : [['25%', 0.25], ['50%', 0.5], ['Max', 1]].map(([lbl, f]) => <button key={lbl as string} onClick={() => setAmount(formatUnits((bal * BigInt(Math.round((f as number) * 1000))) / 1000n, active.dec))} className="flex-1 text-xs font-bold bg-[#F0F4FF] text-[#0052FF] rounded-lg py-1.5 hover:bg-[#E6EEFF]">{lbl}</button>)}
               </div>
 
-              {side === 'sell' && <p className="text-[11px] text-[#8A919E] mt-2">Balance: {fmtTok(Number(formatEther(bal)))} {active.symbol}</p>}
+              {side === 'sell' && <p className="text-[11px] text-[#8A919E] mt-2">Balance: {fmtTok(Number(formatUnits(bal, active.dec)))} {active.symbol}</p>}
 
               {/* quote */}
               {quote && Number(amount) > 0 && (
