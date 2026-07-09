@@ -253,7 +253,7 @@ export default function Launchpad() {
                   {label}{sortKey === k ? (sortDir === 'desc' ? ' ↓' : ' ↑') : ''}
                 </th>
               ))}
-              <th className="w-[62px] sm:w-[104px] pr-2"></th>
+              <th className="w-[30px] pr-3"></th>
             </tr>
           </thead>
           <tbody>
@@ -280,15 +280,10 @@ export default function Launchpad() {
                   <td className={`text-right px-2 text-[12px] font-bold ${!m ? 'text-[#C5CBD3]' : up ? 'text-green-600' : 'text-red-500'}`}>{m ? `${Math.abs(m.change24) < 0.05 ? '' : up ? '▲' : '▼'} ${Math.abs(m.change24).toFixed(1)}%` : '·'}</td>
                   <td className="text-right px-2 text-[12px] text-[#5B6271] hidden sm:table-cell">{m?.vol24 ? fmtUsd(m.vol24) : '·'}</td>
                   <td className="text-right px-2 text-[12px] text-[#5B6271] hidden md:table-cell">{m?.fdv ? fmtUsd(m.fdv) : '·'}</td>
-                  <td className="text-right pr-2">
-                    {canTrade ? (
-                      <div className="flex gap-1 justify-end">
-                        <button onClick={e => { e.stopPropagation(); openTrade(t, 'buy') }} className="bg-[#0052FF] hover:bg-[#1652F0] text-white text-[11px] font-bold px-3 py-1.5 rounded-lg transition-colors">Buy</button>
-                        <button onClick={e => { e.stopPropagation(); openTrade(t, 'sell') }} className="bg-[#F0F2F5] hover:bg-[#E4E7EB] text-[#5B6271] text-[11px] font-bold px-3 py-1.5 rounded-lg transition-colors hidden sm:inline-block">Sell</button>
-                      </div>
-                    ) : (
-                      <a href={`https://basescan.org/token/${t.token}`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-[11px] text-[#B0B7C3] font-bold hover:text-[#0052FF]">↗</a>
-                    )}
+                  <td className="text-right pr-3">
+                    {canTrade
+                      ? <span className="text-[#C5CBD3] text-lg leading-none">›</span>
+                      : <a href={`https://basescan.org/token/${t.token}`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-[11px] text-[#B0B7C3] font-bold hover:text-[#0052FF]">↗</a>}
                   </td>
                 </tr>
               )
@@ -314,8 +309,8 @@ export default function Launchpad() {
           ['Variant', detail.variant === 1 ? 'Stablecoin' : 'Asset'],
         ]
         return (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4" onClick={() => setDetail(null)}>
-            <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-lg max-h-[92vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-stretch sm:items-center justify-center z-50 p-0 sm:p-4" onClick={() => setDetail(null)}>
+            <div className="bg-white sm:rounded-3xl w-full max-w-lg h-[100dvh] sm:h-auto sm:max-h-[92vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
               {/* header */}
               <div className="flex items-center gap-3 p-4 border-b border-[#F0F2F5] sticky top-0 bg-white z-10">
                 <TokenLogo img={m?.img} symbol={detail.symbol} size={40} />
@@ -335,7 +330,7 @@ export default function Launchpad() {
                 <iframe
                   title="chart"
                   src={`https://dexscreener.com/base/${m.pair}?embed=1&theme=light&info=0&trades=0&chartTheme=light&chartStyle=1&interval=15`}
-                  className="w-full h-[300px] sm:h-[360px] border-0 bg-[#FAFBFD]"
+                  className="w-full h-[44vh] sm:h-[360px] border-0 bg-[#FAFBFD]"
                   loading="lazy"
                 />
               ) : (
