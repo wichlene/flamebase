@@ -80,33 +80,49 @@ export default function Launchpad() {
   const loadAllB20 = useCallback(async () => {
     if (!publicClient) return
     setLoadingAll(true)
+    const B20_CREATED = {
+      type: 'event', name: 'B20Created',
+      inputs: [
+        { indexed: true, name: 'token', type: 'address' },
+        { indexed: true, name: 'variant', type: 'uint8' },
+        { indexed: false, name: 'name', type: 'string' },
+        { indexed: false, name: 'symbol', type: 'string' },
+        { indexed: false, name: 'decimals', type: 'uint8' },
+        { indexed: false, name: 'variantEventParams', type: 'bytes' },
+      ],
+    } as const
+    const FACTORY = '0xB20f000000000000000000000000000000000000' as const
     try {
-      const logs = await publicClient.getLogs({
-        address: '0xB20f000000000000000000000000000000000000',
-        event: {
-          type: 'event', name: 'B20Created',
-          inputs: [
-            { indexed: true, name: 'token', type: 'address' },
-            { indexed: true, name: 'variant', type: 'uint8' },
-            { indexed: false, name: 'name', type: 'string' },
-            { indexed: false, name: 'symbol', type: 'string' },
-            { indexed: false, name: 'decimals', type: 'uint8' },
-            { indexed: false, name: 'variantEventParams', type: 'bytes' },
-          ],
-        },
-        fromBlock: 0n, toBlock: 'latest',
-      })
-      const seen = new Set<string>()
-      const rows: { token: `0x${string}`; name: string; symbol: string; variant: number }[] = []
-      for (const l of logs as { args?: { token?: `0x${string}`; name?: string; symbol?: string; variant?: number } }[]) {
-        const t = l.args?.token?.toLowerCase()
-        if (!t || seen.has(t)) continue
-        seen.add(t)
-        rows.push({ token: l.args!.token!, name: l.args?.name || 'B20', symbol: l.args?.symbol || '???', variant: Number(l.args?.variant ?? 0) })
+      // Public RPCs reject getLogs over huge ranges, so scan back from the tip
+      // in bounded chunks (B20 only activated recently, so a few weeks covers it).
+      const latest = await publicClient.getBlockNumber()
+      const CHUNK = 9000n
+      const MAX_BACK = 800_000n // ~18 days of Base 2s blocks — comfortably covers B20's mainnet era
+      const start = latest > MAX_BACK ? latest - MAX_BACK : 0n
+      const ranges: [bigint, bigint][] = []
+      for (let from = start; from <= latest; from += CHUNK + 1n) {
+        ranges.push([from, from + CHUNK > latest ? latest : from + CHUNK])
       }
-      rows.reverse() // newest first
-      setAllB20(rows)
-    } catch { /* RPC getLogs range limits — best effort */ }
+      const seen = new Set<string>()
+      const rows: { token: `0x${string}`; name: string; symbol: string; variant: number; block: bigint }[] = []
+      // Run chunks in concurrent batches to keep it fast.
+      for (let i = 0; i < ranges.length; i += 10) {
+        const batch = ranges.slice(i, i + 10)
+        const results = await Promise.all(batch.map(([f, t]) =>
+          publicClient.getLogs({ address: FACTORY, event: B20_CREATED, fromBlock: f, toBlock: t }).catch(() => [])
+        ))
+        for (const logs of results) {
+          for (const l of logs as { blockNumber?: bigint; args?: { token?: `0x${string}`; name?: string; symbol?: string; variant?: number } }[]) {
+            const t = l.args?.token?.toLowerCase()
+            if (!t || seen.has(t)) continue
+            seen.add(t)
+            rows.push({ token: l.args!.token!, name: l.args?.name || 'B20', symbol: l.args?.symbol || '???', variant: Number(l.args?.variant ?? 0), block: l.blockNumber ?? 0n })
+          }
+        }
+      }
+      rows.sort((a, b) => (b.block > a.block ? 1 : -1)) // newest first
+      setAllB20(rows.map(({ token, name, symbol, variant }) => ({ token, name, symbol, variant })))
+    } catch { /* best effort */ }
     setLoadingAll(false)
   }, [publicClient])
   useEffect(() => { if (mode === 'all') loadAllB20() }, [mode, loadAllB20])
