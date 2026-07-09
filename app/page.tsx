@@ -3687,6 +3687,9 @@ export default function Home() {
             {activeTool === 'b20' && (
               <div className="mt-2 space-y-1">
                 <p className="text-[10px] text-[#0052FF] font-bold">Base native token — gas only, no FlameBase fee</p>
+                <p className={`text-[10px] font-bold ${b20Active ? 'text-green-600' : 'text-[#8A919E]'}`}>
+                  {b20Active ? '🟢 B20 is LIVE on Base — ready to deploy' : '⏳ Waiting for Base activation — unlocks automatically'}
+                </p>
                 <input value={b20Name} onChange={e => setB20Name(e.target.value)} placeholder="Token name" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
                 <input value={b20Symbol} onChange={e => setB20Symbol(e.target.value)} placeholder="Symbol" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
                 <input value={b20Supply} onChange={e => setB20Supply(e.target.value)} placeholder="Supply" type="number" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
