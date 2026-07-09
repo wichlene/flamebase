@@ -152,7 +152,7 @@ export default function Launchpad() {
     if (!address) return null
     const r = await fetch('/api/swap', {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ tokenIn, tokenOut, amountIn: amountIn.toString(), sender: address, recipient: address, slippageBps: 300 }),
+      body: JSON.stringify({ tokenIn, tokenOut, amountIn: amountIn.toString(), sender: address, recipient: address, slippageBps: 1000 }),
     })
     const d = await r.json()
     if (!r.ok || !d?.to) return null
@@ -197,15 +197,12 @@ export default function Launchpad() {
           await writeContractAsync({ chainId: base.id, address: active.token, abi: erc20Abi, functionName: 'approve', args: [quote.router, amt] })
         }
       }
-      // fresh quote right before sending (price/route may have moved)
-      const amt = parseEther(amount)
-      const fresh = side === 'buy' ? await fetchSwap(NATIVE, active.token, amt) : await fetchSwap(active.token, NATIVE, amt)
-      const tx = fresh || quote
-      await walletClient.sendTransaction({ to: tx.to, data: tx.data, value: BigInt(tx.value || '0'), chain: base, account: address! })
+      await walletClient.sendTransaction({ to: quote.to, data: quote.data, value: BigInt(quote.value || '0'), chain: base, account: address! })
       setNote({ ok: true, t: `${side === 'buy' ? 'Bought' : 'Sold'} ✓ — check your wallet` }); setAmount(''); setQuote(null)
     } catch (e) {
-      const m = e instanceof Error ? e.message : ''
-      setNote({ ok: false, t: /reject|denied/i.test(m) ? 'Cancelled in wallet.' : /insufficient|exceeds|balance/i.test(m) ? 'Not enough balance.' : 'Trade failed — try a different amount.' })
+      const m = e instanceof Error ? (e.message || String(e)) : String(e)
+      const short = m.split('\n')[0].slice(0, 140)
+      setNote({ ok: false, t: /reject|denied|rejected/i.test(m) ? 'Cancelled in wallet.' : /insufficient funds|exceeds balance/i.test(m) ? 'Not enough ETH/balance.' : short })
     }
     setBusy(false)
   }
@@ -285,7 +282,7 @@ export default function Launchpad() {
       </div>
       {rows.length > 150 && <p className="text-[10px] text-[#C5CBD3] text-center">Showing top 150 — use search to find more.</p>}
 
-      <p className="text-[10px] text-[#C5CBD3] text-center">Trades settle on-chain via Uniswap V3 — the token lands straight in your wallet. Tokens with no pool aren&apos;t tradeable yet. Only spend what you can afford to lose.</p>
+      <p className="text-[10px] text-[#C5CBD3] text-center">Trades route across all Base DEXs (Aerodrome, Uniswap V2–V4) and settle on-chain into your wallet. Only spend what you can afford to lose.</p>
 
       {/* trade modal */}
       {active && (() => {
@@ -342,7 +339,7 @@ export default function Launchpad() {
                 className={`w-full mt-4 text-white font-black text-base py-3.5 rounded-2xl transition-colors disabled:opacity-50 ${side === 'buy' ? 'bg-[#0052FF] hover:bg-[#1652F0]' : 'bg-[#0A0B0D] hover:bg-black'}`}>
                 {busy ? 'Confirm in wallet…' : !isConnected ? 'Connect wallet' : quoting && Number(amount) > 0 ? 'Finding best price…' : !quote && Number(amount) > 0 ? 'No liquidity for this token' : side === 'buy' ? `Buy ${active.symbol}` : `Sell ${active.symbol}`}
               </button>
-              <p className="text-[10px] text-[#C5CBD3] text-center mt-2">Goes straight to your wallet · 3% max slippage · Uniswap V3</p>
+              <p className="text-[10px] text-[#C5CBD3] text-center mt-2">Goes straight to your wallet · 10% max slippage · best route across Base DEXs</p>
             </div>
           </div>
         )
