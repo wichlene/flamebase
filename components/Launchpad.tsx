@@ -273,9 +273,8 @@ export default function Launchpad() {
             {rows.slice(0, 150).map((t, i) => {
               const m = mkt[t.token.toLowerCase()]
               const up = (m?.change24 ?? 0) >= 0
-              const canTrade = !!m
               return (
-                <tr key={t.token} onClick={() => canTrade && setDetail(t)} className={`border-b border-[#F5F7FA] last:border-0 transition-colors ${canTrade ? 'cursor-pointer hover:bg-[#F0F4FF]' : ''}`}>
+                <tr key={t.token} onClick={() => setDetail(t)} className="border-b border-[#F5F7FA] last:border-0 transition-colors cursor-pointer hover:bg-[#F0F4FF]">
                   <td className="py-2 pl-3">
                     <div className="flex items-center gap-2.5 min-w-0">
                       <span className="text-[10px] text-[#C5CBD3] w-3.5 text-right flex-shrink-0">{i + 1}</span>
@@ -291,9 +290,7 @@ export default function Launchpad() {
                   <td className="text-right px-2 text-[12px] text-[#5B6271] hidden sm:table-cell">{m?.vol24 ? fmtUsd(m.vol24) : '·'}</td>
                   <td className="text-right px-2 text-[12px] text-[#5B6271] hidden md:table-cell">{m?.fdv ? fmtUsd(m.fdv) : '·'}</td>
                   <td className="text-right pr-3">
-                    {canTrade
-                      ? <span className="text-[#C5CBD3] text-lg leading-none">›</span>
-                      : <a href={`https://basescan.org/token/${t.token}`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-[11px] text-[#B0B7C3] font-bold hover:text-[#0052FF]">↗</a>}
+                    <span className="text-[#C5CBD3] text-lg leading-none">›</span>
                   </td>
                 </tr>
               )
@@ -346,7 +343,11 @@ export default function Launchpad() {
                   />
                 </div>
               ) : (
-                <div className="h-[160px] flex items-center justify-center text-sm text-[#8A919E]">No chart — this token has no indexed pool yet.</div>
+                <div className="h-[140px] flex flex-col items-center justify-center gap-1 text-center px-6">
+                  <span className="text-2xl">📉</span>
+                  <p className="text-sm text-[#8A919E]">No chart yet — thin or no liquidity.</p>
+                  <p className="text-[11px] text-[#C5CBD3]">You can still try to buy below; it works only if a pool exists.</p>
+                </div>
               )}
 
               {/* stats */}
