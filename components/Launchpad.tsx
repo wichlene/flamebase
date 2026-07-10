@@ -15,6 +15,20 @@ import { base } from 'wagmi/chains'
 
 const FACTORY = '0xB20f000000000000000000000000000000000000' as const
 const NATIVE = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE' as const // aggregator native-ETH sentinel
+const ADMIN = '0xa77A5D4D37d6F39C20C2441295da9fA60Ab9fD69'.toLowerCase()
+
+// Aerodrome (Base) — used by the admin-only "add liquidity" flow to open a
+// market for a token (verified addresses + IRouter.addLiquidityETH signature).
+const AERO_ROUTER = '0xcF77a3Ba9A5CA399B7c97c74d54e5b1Beb874E43' as const
+const AERO_ROUTER_ABI = [{
+  type: 'function', name: 'addLiquidityETH', stateMutability: 'payable',
+  inputs: [
+    { name: 'token', type: 'address' }, { name: 'stable', type: 'bool' },
+    { name: 'amountTokenDesired', type: 'uint256' }, { name: 'amountTokenMin', type: 'uint256' },
+    { name: 'amountETHMin', type: 'uint256' }, { name: 'to', type: 'address' }, { name: 'deadline', type: 'uint256' },
+  ],
+  outputs: [{ name: 'amountToken', type: 'uint256' }, { name: 'amountETH', type: 'uint256' }, { name: 'liquidity', type: 'uint256' }],
+}] as const
 
 const B20_CREATED = {
   type: 'event', name: 'B20Created',
@@ -49,6 +63,8 @@ function fmtTok(n: number) {
   if (n >= 1) return n.toLocaleString('en', { maximumFractionDigits: 4 })
   return Number(n.toPrecision(4)).toString() // 4 significant figures, trimmed
 }
+
+function isAddressLike(s: string) { return /^0x[0-9a-fA-F]{40}$/.test(s.trim()) }
 
 function TokenLogo({ img, symbol, size = 30 }: { img?: string; symbol: string; size?: number }) {
   const [err, setErr] = useState(false)
@@ -167,6 +183,45 @@ export default function Launchpad() {
   const [note, setNote] = useState<{ ok: boolean; t: string } | null>(null)
   const [bought, setBought] = useState(false) // show "add token to wallet" after a buy
 
+  // admin-only "add liquidity" (opens a market for a token via Aerodrome)
+  const isAdmin = !!address && address.toLowerCase() === ADMIN
+  const [showLiq, setShowLiq] = useState(false)
+  const [liqToken, setLiqToken] = useState('')
+  const [liqTok, setLiqTok] = useState('')
+  const [liqEth, setLiqEth] = useState('')
+  const [liqBusy, setLiqBusy] = useState(false)
+  const [liqNote, setLiqNote] = useState<{ ok: boolean; t: string } | null>(null)
+
+  const addLiquidity = async () => {
+    if (!isAddressLike(liqToken) || !liqTok || !liqEth || !address || !publicClient || liqBusy) return
+    if (Number(liqTok) <= 0 || Number(liqEth) <= 0) return
+    setLiqBusy(true); setLiqNote(null)
+    try {
+      const token = liqToken.trim() as `0x${string}`
+      let dec = 18
+      try { dec = Number(await publicClient.readContract({ address: token, abi: erc20Abi, functionName: 'decimals' })) } catch {}
+      const amtTok = parseUnits(liqTok, dec)
+      const amtEth = parseEther(liqEth)
+      // approve exact token amount to the router
+      const allowance = await publicClient.readContract({ address: token, abi: erc20Abi, functionName: 'allowance', args: [address, AERO_ROUTER] }) as bigint
+      if (allowance < amtTok) {
+        await writeContractAsync({ chainId: base.id, address: token, abi: erc20Abi, functionName: 'approve', args: [AERO_ROUTER, amtTok] })
+      }
+      const deadline = BigInt(Math.floor(Date.now() / 1000) + 1200)
+      await writeContractAsync({
+        chainId: base.id, address: AERO_ROUTER, abi: AERO_ROUTER_ABI, functionName: 'addLiquidityETH',
+        args: [token, false, amtTok, 0n, 0n, address, deadline], value: amtEth,
+      })
+      setLiqNote({ ok: true, t: 'Liquidity added ✓ — trading is now open for everyone. It shows in the DEX in a few minutes.' })
+      setLiqTok(''); setLiqEth('')
+      setTimeout(loadToks, 4000)
+    } catch (e) {
+      const m = e instanceof Error ? e.message : ''
+      setLiqNote({ ok: false, t: /reject|denied/i.test(m) ? 'Cancelled in wallet.' : /insufficient|exceeds|balance/i.test(m) ? 'Not enough token or ETH balance.' : (m.split('\n')[0].slice(0, 140) || 'Failed — try again.') })
+    }
+    setLiqBusy(false)
+  }
+
   // Ask the aggregator (all Base DEXs) for a route + executable tx.
   const fetchSwap = useCallback(async (tokenIn: string, tokenOut: string, amountIn: bigint): Promise<SwapTx | null> => {
     if (!address) return null
@@ -248,6 +303,13 @@ export default function Launchpad() {
         <button onClick={() => { loadToks() }} className="text-xs text-[#0052FF] font-bold">Refresh</button>
       </div>
 
+      {/* admin: open a market for a token */}
+      {isAdmin && (
+        <button onClick={() => { setShowLiq(true); setLiqNote(null) }} className="w-full text-xs font-bold text-[#0052FF] bg-[#F0F4FF] border border-[#D6E2FF] rounded-xl py-2 hover:bg-[#E6EEFF]">
+          ➕ Add liquidity (admin) — open a market for your token
+        </button>
+      )}
+
       <p className="text-[11px] text-[#8A919E]">
         {loading ? 'Scanning Base…' : `${toks.length.toLocaleString('en')} B20 tokens`}{tradeable > 0 && ` · ${tradeable} tradeable`}{loadingMkt && ' · loading prices…'}
       </p>
@@ -302,6 +364,30 @@ export default function Launchpad() {
       {rows.length > 150 && <p className="text-[10px] text-[#C5CBD3] text-center">Showing top 150 — use search to find more.</p>}
 
       <p className="text-[10px] text-[#C5CBD3] text-center">Trades route across all Base DEXs (Aerodrome, Uniswap V2–V4) and settle on-chain into your wallet. Only spend what you can afford to lose.</p>
+
+      {/* admin: add-liquidity modal */}
+      {showLiq && isAdmin && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-3" onClick={() => setShowLiq(false)}>
+          <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-sm p-5 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <span className="font-black text-[#0A0B0D]">➕ Add Liquidity</span>
+              <button onClick={() => setShowLiq(false)} className="text-[#8A919E] hover:text-[#0A0B0D] text-xl leading-none">✕</button>
+            </div>
+            <p className="text-[11px] text-[#5B6271] mb-3">Pair your token with ETH to open a market. The token↔ETH ratio you enter sets the starting price. Once added, everyone can buy &amp; sell it.</p>
+            <input value={liqToken} onChange={e => setLiqToken(e.target.value)} placeholder="Token contract address (0x…)" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-3 py-2.5 text-sm font-mono focus:outline-none focus:border-[#0052FF] mb-2" />
+            <div className="flex gap-2 mb-2">
+              <input value={liqTok} onChange={e => setLiqTok(e.target.value)} type="number" min="0" placeholder="Token amount" className="flex-1 bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#0052FF]" />
+              <input value={liqEth} onChange={e => setLiqEth(e.target.value)} type="number" min="0" step="0.001" placeholder="ETH amount" className="w-28 bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#0052FF]" />
+            </div>
+            {liqNote && <div className={`text-sm rounded-xl px-3 py-2 mb-2 ${liqNote.ok ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'}`}>{liqNote.t}</div>}
+            <button onClick={addLiquidity} disabled={liqBusy || !isAddressLike(liqToken) || !(Number(liqTok) > 0) || !(Number(liqEth) > 0)}
+              className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white font-black py-3 rounded-2xl transition-colors disabled:opacity-50">
+              {liqBusy ? 'Adding…' : 'Add Liquidity'}
+            </button>
+            <p className="text-[10px] text-[#C5CBD3] text-center mt-2">Aerodrome volatile pool · you receive LP tokens · low ETH = high slippage for buyers</p>
+          </div>
+        </div>
+      )}
 
       {/* token detail (chart + stats) */}
       {detail && (() => {
