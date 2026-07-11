@@ -202,10 +202,14 @@ export default function Launchpad() {
       try { dec = Number(await publicClient.readContract({ address: token, abi: erc20Abi, functionName: 'decimals' })) } catch {}
       const amtTok = parseUnits(liqTok, dec)
       const amtEth = parseEther(liqEth)
-      // approve exact token amount to the router
+      // must actually hold the token
+      const bal = await publicClient.readContract({ address: token, abi: erc20Abi, functionName: 'balanceOf', args: [address] }) as bigint
+      if (bal < amtTok) { setLiqNote({ ok: false, t: `You only hold ${fmtTok(Number(formatUnits(bal, dec)))} of this token.` }); setLiqBusy(false); return }
+      // approve exact token amount to the router — WAIT for it to confirm before adding
       const allowance = await publicClient.readContract({ address: token, abi: erc20Abi, functionName: 'allowance', args: [address, AERO_ROUTER] }) as bigint
       if (allowance < amtTok) {
-        await writeContractAsync({ chainId: base.id, address: token, abi: erc20Abi, functionName: 'approve', args: [AERO_ROUTER, amtTok] })
+        const approveHash = await writeContractAsync({ chainId: base.id, address: token, abi: erc20Abi, functionName: 'approve', args: [AERO_ROUTER, amtTok] })
+        await publicClient.waitForTransactionReceipt({ hash: approveHash })
       }
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 1200)
       await writeContractAsync({
