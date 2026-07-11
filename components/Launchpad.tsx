@@ -295,12 +295,15 @@ export default function Launchpad() {
     if (!active || !isConnected || !publicClient || !amount || Number(amount) <= 0 || !quote || busy) return
     setBusy(true); setNote(null)
     try {
-      // sell: approve the aggregator router to pull the token first (exact amount, token decimals)
+      // sell: approve the aggregator router to pull the token first (exact amount,
+      // token decimals) — and WAIT for it to confirm, or the swap's transferFrom
+      // reverts with TRANSFER_FROM_FAILED.
       if (side === 'sell' && quote.needsApprove) {
         const amt = parseUnits(amount, active.dec)
         const allowance = await publicClient.readContract({ address: active.token, abi: erc20Abi, functionName: 'allowance', args: [address!, quote.router] }) as bigint
         if (allowance < amt) {
-          await writeContractAsync({ chainId: base.id, address: active.token, abi: erc20Abi, functionName: 'approve', args: [quote.router, amt] })
+          const approveHash = await writeContractAsync({ chainId: base.id, address: active.token, abi: erc20Abi, functionName: 'approve', args: [quote.router, amt] })
+          await publicClient.waitForTransactionReceipt({ hash: approveHash })
         }
       }
       await sendTransactionAsync({ chainId: base.id, to: quote.to, data: quote.data, value: BigInt(quote.value || '0') })
