@@ -20,15 +20,26 @@ const ADMIN = '0xa77A5D4D37d6F39C20C2441295da9fA60Ab9fD69'.toLowerCase()
 // Aerodrome (Base) — used by the admin-only "add liquidity" flow to open a
 // market for a token (verified addresses + IRouter.addLiquidityETH signature).
 const AERO_ROUTER = '0xcF77a3Ba9A5CA399B7c97c74d54e5b1Beb874E43' as const
-const AERO_ROUTER_ABI = [{
-  type: 'function', name: 'addLiquidityETH', stateMutability: 'payable',
-  inputs: [
-    { name: 'token', type: 'address' }, { name: 'stable', type: 'bool' },
-    { name: 'amountTokenDesired', type: 'uint256' }, { name: 'amountTokenMin', type: 'uint256' },
-    { name: 'amountETHMin', type: 'uint256' }, { name: 'to', type: 'address' }, { name: 'deadline', type: 'uint256' },
-  ],
-  outputs: [{ name: 'amountToken', type: 'uint256' }, { name: 'amountETH', type: 'uint256' }, { name: 'liquidity', type: 'uint256' }],
-}] as const
+const AERO_FACTORY = '0x420DD381b31aEf6683db6B902084cB0FFECe40Da' as const
+const WETH = '0x4200000000000000000000000000000000000006' as const
+const ROUTE_COMPONENTS = [
+  { name: 'from', type: 'address' }, { name: 'to', type: 'address' },
+  { name: 'stable', type: 'bool' }, { name: 'factory', type: 'address' },
+] as const
+const AERO_ROUTER_ABI = [
+  {
+    type: 'function', name: 'addLiquidityETH', stateMutability: 'payable',
+    inputs: [
+      { name: 'token', type: 'address' }, { name: 'stable', type: 'bool' },
+      { name: 'amountTokenDesired', type: 'uint256' }, { name: 'amountTokenMin', type: 'uint256' },
+      { name: 'amountETHMin', type: 'uint256' }, { name: 'to', type: 'address' }, { name: 'deadline', type: 'uint256' },
+    ],
+    outputs: [{ name: 'amountToken', type: 'uint256' }, { name: 'amountETH', type: 'uint256' }, { name: 'liquidity', type: 'uint256' }],
+  },
+  { type: 'function', name: 'getAmountsOut', stateMutability: 'view', inputs: [{ name: 'amountIn', type: 'uint256' }, { name: 'routes', type: 'tuple[]', components: ROUTE_COMPONENTS }], outputs: [{ name: 'amounts', type: 'uint256[]' }] },
+  { type: 'function', name: 'swapExactETHForTokens', stateMutability: 'payable', inputs: [{ name: 'amountOutMin', type: 'uint256' }, { name: 'routes', type: 'tuple[]', components: ROUTE_COMPONENTS }, { name: 'to', type: 'address' }, { name: 'deadline', type: 'uint256' }], outputs: [{ name: 'amounts', type: 'uint256[]' }] },
+  { type: 'function', name: 'swapExactTokensForETH', stateMutability: 'nonpayable', inputs: [{ name: 'amountIn', type: 'uint256' }, { name: 'amountOutMin', type: 'uint256' }, { name: 'routes', type: 'tuple[]', components: ROUTE_COMPONENTS }, { name: 'to', type: 'address' }, { name: 'deadline', type: 'uint256' }], outputs: [{ name: 'amounts', type: 'uint256[]' }] },
+] as const
 
 const B20_CREATED = {
   type: 'event', name: 'B20Created',
@@ -42,7 +53,13 @@ const B20_CREATED = {
   ],
 } as const
 
-type SwapTx = { to: `0x${string}`; router: `0x${string}`; data: `0x${string}`; value: string; amountOut: bigint; needsApprove: boolean }
+type SwapTx = {
+  venue: 'kyber' | 'aero'
+  amountOut: bigint
+  needsApprove: boolean
+  // kyber (pre-built aggregator tx):
+  to?: `0x${string}`; router?: `0x${string}`; data?: `0x${string}`; value?: string
+}
 
 type Tok = { token: `0x${string}`; name: string; symbol: string; variant: number; block: bigint; dec: number }
 type Mkt = { price: number; vol24: number; fdv: number; change24: number; liq: number; img?: string; pair?: string }
@@ -247,17 +264,32 @@ export default function Launchpad() {
     setLiqBusy(false)
   }
 
-  // Ask the aggregator (all Base DEXs) for a route + executable tx.
-  const fetchSwap = useCallback(async (tokenIn: string, tokenOut: string, amountIn: bigint): Promise<SwapTx | null> => {
+  // Quote a trade: try the KyberSwap aggregator (best price across all Base
+  // DEXs); if it has no route yet (e.g. a brand-new Aerodrome pool it hasn't
+  // indexed), fall back to routing directly through Aerodrome.
+  const fetchSwap = useCallback(async (side: 'buy' | 'sell', token: `0x${string}`, amountIn: bigint): Promise<SwapTx | null> => {
     if (!address) return null
-    const r = await fetch('/api/swap', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ tokenIn, tokenOut, amountIn: amountIn.toString(), sender: address, recipient: address, slippageBps: 1000 }),
-    })
-    const d = await r.json()
-    if (!r.ok || !d?.to) return null
-    return { to: d.to, router: d.router, data: d.data, value: d.value, amountOut: BigInt(d.amountOut || '0'), needsApprove: !!d.needsApprove }
-  }, [address])
+    const tokenIn = side === 'buy' ? NATIVE : token
+    const tokenOut = side === 'buy' ? token : NATIVE
+    // 1) KyberSwap
+    try {
+      const r = await fetch('/api/swap', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ tokenIn, tokenOut, amountIn: amountIn.toString(), sender: address, recipient: address, slippageBps: 1000 }),
+      })
+      const d = await r.json()
+      if (r.ok && d?.to) return { venue: 'kyber', to: d.to, router: d.router, data: d.data, value: d.value, amountOut: BigInt(d.amountOut || '0'), needsApprove: !!d.needsApprove }
+    } catch { /* fall through to Aerodrome */ }
+    // 2) Aerodrome direct (our own pools) — volatile pair with WETH
+    if (!publicClient) return null
+    try {
+      const routes = [{ from: (side === 'buy' ? WETH : token), to: (side === 'buy' ? token : WETH), stable: false, factory: AERO_FACTORY }]
+      const amounts = await publicClient.readContract({ address: AERO_ROUTER, abi: AERO_ROUTER_ABI, functionName: 'getAmountsOut', args: [amountIn, routes] }) as bigint[]
+      const out = amounts?.[amounts.length - 1] ?? 0n
+      if (out > 0n) return { venue: 'aero', amountOut: out, needsApprove: side === 'sell' }
+    } catch { /* no aero pool either */ }
+    return null
+  }, [address, publicClient])
 
   // debounced live quote
   useEffect(() => {
@@ -268,7 +300,7 @@ export default function Launchpad() {
       try {
         // buy: amountIn is ETH (18 dec); sell: amountIn is the token (its own decimals)
         const amt = side === 'buy' ? parseEther(amount) : parseUnits(amount, active.dec)
-        const res = side === 'buy' ? await fetchSwap(NATIVE, active.token, amt) : await fetchSwap(active.token, NATIVE, amt)
+        const res = await fetchSwap(side, active.token, amt)
         if (!stop) setQuote(res)
       } catch { if (!stop) setQuote(null) }
       if (!stop) setQuoting(false)
@@ -295,18 +327,31 @@ export default function Launchpad() {
     if (!active || !isConnected || !publicClient || !amount || Number(amount) <= 0 || !quote || busy) return
     setBusy(true); setNote(null)
     try {
-      // sell: approve the aggregator router to pull the token first (exact amount,
-      // token decimals) — and WAIT for it to confirm, or the swap's transferFrom
-      // reverts with TRANSFER_FROM_FAILED.
+      const spender = quote.venue === 'aero' ? AERO_ROUTER : quote.router!
+      // sell: approve the router to pull the token first (exact amount, token
+      // decimals) — WAIT for it to confirm, or transferFrom reverts.
       if (side === 'sell' && quote.needsApprove) {
         const amt = parseUnits(amount, active.dec)
-        const allowance = await publicClient.readContract({ address: active.token, abi: erc20Abi, functionName: 'allowance', args: [address!, quote.router] }) as bigint
+        const allowance = await publicClient.readContract({ address: active.token, abi: erc20Abi, functionName: 'allowance', args: [address!, spender] }) as bigint
         if (allowance < amt) {
-          const approveHash = await writeContractAsync({ chainId: base.id, address: active.token, abi: erc20Abi, functionName: 'approve', args: [quote.router, amt] })
+          const approveHash = await writeContractAsync({ chainId: base.id, address: active.token, abi: erc20Abi, functionName: 'approve', args: [spender, amt] })
           await publicClient.waitForTransactionReceipt({ hash: approveHash })
         }
       }
-      await sendTransactionAsync({ chainId: base.id, to: quote.to, data: quote.data, value: BigInt(quote.value || '0') })
+
+      if (quote.venue === 'kyber') {
+        await sendTransactionAsync({ chainId: base.id, to: quote.to!, data: quote.data!, value: BigInt(quote.value || '0') })
+      } else {
+        // Aerodrome direct: our own volatile WETH pool
+        const minOut = quote.amountOut - (quote.amountOut * 1000n) / 10000n // 10% slippage
+        const deadline = BigInt(Math.floor(Date.now() / 1000) + 1200)
+        const routes = [{ from: (side === 'buy' ? WETH : active.token), to: (side === 'buy' ? active.token : WETH), stable: false, factory: AERO_FACTORY }]
+        if (side === 'buy') {
+          await writeContractAsync({ chainId: base.id, address: AERO_ROUTER, abi: AERO_ROUTER_ABI, functionName: 'swapExactETHForTokens', args: [minOut, routes, address!, deadline], value: parseEther(amount) })
+        } else {
+          await writeContractAsync({ chainId: base.id, address: AERO_ROUTER, abi: AERO_ROUTER_ABI, functionName: 'swapExactTokensForETH', args: [parseUnits(amount, active.dec), minOut, routes, address!, deadline] })
+        }
+      }
       setNote({ ok: true, t: `${side === 'buy' ? 'Bought' : 'Sold'} ✓ — check your wallet` }); setAmount(''); setQuote(null)
       if (side === 'buy') setBought(true)
     } catch (e) {
