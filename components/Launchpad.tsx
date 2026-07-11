@@ -231,11 +231,13 @@ export default function Launchpad() {
         await publicClient.waitForTransactionReceipt({ hash: approveHash })
       }
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 1200)
-      await writeContractAsync({
+      const hash = await writeContractAsync({
         chainId: base.id, address: AERO_ROUTER, abi: AERO_ROUTER_ABI, functionName: 'addLiquidityETH',
         args: [token, false, amtTok, 0n, 0n, address, deadline], value: amtEth,
       })
-      setLiqNote({ ok: true, t: 'Liquidity added ✓ — trading is now open for everyone. It shows in the DEX in a few minutes.' })
+      const receipt = await publicClient.waitForTransactionReceipt({ hash })
+      if (receipt.status !== 'success') throw new Error('Add-liquidity transaction reverted on-chain — no pool was created.')
+      setLiqNote({ ok: true, t: 'Liquidity added ✓ — pool created. Aggregator indexing takes a few minutes before buys route to it.' })
       setLiqTok(''); setLiqEth('')
       setTimeout(loadToks, 4000)
     } catch (e) {
