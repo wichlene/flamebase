@@ -191,6 +191,25 @@ export default function Launchpad() {
   const [liqEth, setLiqEth] = useState('')
   const [liqBusy, setLiqBusy] = useState(false)
   const [liqNote, setLiqNote] = useState<{ ok: boolean; t: string } | null>(null)
+  const [liqBal, setLiqBal] = useState<{ bal: bigint; dec: number; sym: string } | null>(null)
+
+  // live balance of the pasted token so the admin sees if they actually hold it
+  useEffect(() => {
+    let stop = false
+    if (!isAddressLike(liqToken) || !publicClient || !address) { setLiqBal(null); return }
+    const t = liqToken.trim() as `0x${string}`
+    ;(async () => {
+      try {
+        const [bal, dec, sym] = await Promise.all([
+          publicClient.readContract({ address: t, abi: erc20Abi, functionName: 'balanceOf', args: [address] }),
+          publicClient.readContract({ address: t, abi: erc20Abi, functionName: 'decimals' }).catch(() => 18),
+          publicClient.readContract({ address: t, abi: erc20Abi, functionName: 'symbol' }).catch(() => ''),
+        ])
+        if (!stop) setLiqBal({ bal: bal as bigint, dec: Number(dec), sym: String(sym) })
+      } catch { if (!stop) setLiqBal(null) }
+    })()
+    return () => { stop = true }
+  }, [liqToken, publicClient, address])
 
   const addLiquidity = async () => {
     if (!isAddressLike(liqToken) || !liqTok || !liqEth || !address || !publicClient || liqBusy) return
@@ -378,7 +397,13 @@ export default function Launchpad() {
               <button onClick={() => setShowLiq(false)} className="text-[#8A919E] hover:text-[#0A0B0D] text-xl leading-none">✕</button>
             </div>
             <p className="text-[11px] text-[#5B6271] mb-3">Pair your token with ETH to open a market. The token↔ETH ratio you enter sets the starting price. Once added, everyone can buy &amp; sell it.</p>
-            <input value={liqToken} onChange={e => setLiqToken(e.target.value)} placeholder="Token contract address (0x…)" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-3 py-2.5 text-sm font-mono focus:outline-none focus:border-[#0052FF] mb-2" />
+            <input value={liqToken} onChange={e => setLiqToken(e.target.value)} placeholder="Token contract address (0x…)" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-3 py-2.5 text-sm font-mono focus:outline-none focus:border-[#0052FF] mb-1" />
+            {liqBal && (
+              <p className={`text-[11px] mb-2 ${liqBal.bal > 0n ? 'text-green-600' : 'text-red-500'}`}>
+                You hold: {fmtTok(Number(formatUnits(liqBal.bal, liqBal.dec)))} {liqBal.sym}
+                {liqBal.bal > 0n && <button onClick={() => setLiqTok(formatUnits(liqBal.bal, liqBal.dec))} className="ml-1 text-[#0052FF] font-bold">Max</button>}
+              </p>
+            )}
             <div className="flex gap-2 mb-2">
               <input value={liqTok} onChange={e => setLiqTok(e.target.value)} type="number" min="0" placeholder="Token amount" className="flex-1 bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#0052FF]" />
               <input value={liqEth} onChange={e => setLiqEth(e.target.value)} type="number" min="0" step="0.001" placeholder="ETH amount" className="w-28 bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#0052FF]" />
