@@ -13,6 +13,8 @@
 - 🗳️ **DAO** — onchain proposals and voting
 - 🔥 **Daily check-in streaks** — onchain activity streaks
 - 🤖 **AI agent integration (MCP)** — Claude and other agents can post, like and tip through the [Model Context Protocol](https://modelcontextprotocol.io); transactions are approved by the user's own wallet via `/approve`
+- 💱 **Token DEX** — buy and sell any Base token from the feed; swaps are routed across every Base DEX (Aerodrome, Uniswap V2/V3/V4, …) via the [KyberSwap](https://kyberswap.com) aggregator, with admin tools to open a market for a freshly-deployed token
+- 🧠 **x402 pay-per-use AI** — an onchain AI agent you pay per message ($0.01 USDC via [x402](https://x402.org) on Base); settlement is attributed to FlameBase's Base Builder Code
 
 ## Contracts (Base Mainnet)
 
