@@ -64,4 +64,20 @@ export async function getPushSubs(addrRaw: string): Promise<PushSub[]> {
     .filter(Boolean) as PushSub[]
 }
 
+// ── Watcher cursor (last on-chain block scanned for notifiable events) ──
+export async function getCursor(): Promise<bigint | null> {
+  let v: string | null = null
+  if (useRedis) v = await redis(['GET', 'fb:notif:cursor'])
+  else v = memCursor
+  return v ? BigInt(v) : null
+}
+
+export async function setCursor(block: bigint): Promise<void> {
+  const v = block.toString()
+  if (useRedis) await redis(['SET', 'fb:notif:cursor', v])
+  else memCursor = v
+}
+
+let memCursor: string | null = null
+
 export { isAddr }

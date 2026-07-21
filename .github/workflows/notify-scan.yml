@@ -1,0 +1,25 @@
+name: notify-scan
+
+# Pings the on-chain notification watcher every ~5 minutes so likes / comments /
+# tips trigger a push even when nobody has the app open. Free and works on any
+# Vercel plan (unlike Vercel Cron, which is once-a-day on Hobby).
+#
+# Setup: add repo secret NOTIFY_SECRET (Settings → Secrets and variables →
+# Actions) matching the NOTIFY_SECRET env var on Vercel.
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger notification scan
+        run: |
+          code=$(curl -sS -o /tmp/out.json -w '%{http_code}' -X POST \
+            "https://flamebase.xyz/api/notifications/scan" \
+            -H "x-notify-secret: ${{ secrets.NOTIFY_SECRET }}")
+          echo "HTTP $code"; cat /tmp/out.json || true
+          test "$code" = "200"
