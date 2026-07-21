@@ -22,6 +22,7 @@ import { http, fallback } from 'wagmi'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import '@rainbow-me/rainbowkit/styles.css'
 import { farcasterConnector } from '../lib/farcasterConnector'
+import EnableNotifications from '../components/EnableNotifications'
 
 export { BUILDER_CODE_DATA_SUFFIX } from '../lib/builderCode'
 
@@ -142,6 +143,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         >
           <FarcasterAutoConnect />
           {children}
+          <EnableNotifications />
         </RainbowKitProvider>
       </QueryClientProvider>
     </WagmiProvider>

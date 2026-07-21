@@ -1,0 +1,59 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useAccount } from 'wagmi'
+import { enablePush, notifPermission } from '../lib/pushClient'
+
+// Small floating opt-in pill. Shows only when the user is connected and hasn't
+// decided on notifications yet. Once granted, it silently keeps the server copy
+// of the subscription fresh and renders nothing.
+export default function EnableNotifications() {
+  const { address, isConnected } = useAccount()
+  const [perm, setPerm] = useState<NotificationPermission | 'unsupported'>('default')
+  const [busy, setBusy] = useState(false)
+  const [dismissed, setDismissed] = useState(false)
+
+  useEffect(() => { setPerm(notifPermission()) }, [])
+
+  // Already granted → refresh the subscription on the server (endpoints rotate).
+  useEffect(() => {
+    if (perm === 'granted' && isConnected && address) enablePush(address).catch(() => {})
+  }, [perm, isConnected, address])
+
+  if (dismissed) return null
+  if (!isConnected || !address) return null
+  if (perm === 'unsupported' || perm === 'granted' || perm === 'denied') return null
+
+  return (
+    <div style={{ position: 'fixed', right: 16, bottom: 16, zIndex: 9999, display: 'flex', gap: 8, alignItems: 'center' }}>
+      <button
+        onClick={async () => {
+          setBusy(true)
+          const r = await enablePush(address)
+          setBusy(false)
+          setPerm(notifPermission())
+          if (r.ok) setDismissed(true)
+        }}
+        disabled={busy}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          background: '#0052FF', color: '#fff', border: 'none',
+          borderRadius: 9999, padding: '10px 16px', fontSize: 14, fontWeight: 600,
+          boxShadow: '0 4px 14px rgba(0,82,255,.4)', cursor: busy ? 'default' : 'pointer',
+        }}
+      >
+        🔔 {busy ? 'Enabling…' : 'Enable notifications'}
+      </button>
+      <button
+        onClick={() => setDismissed(true)}
+        aria-label="Dismiss"
+        style={{
+          background: 'rgba(0,0,0,.55)', color: '#fff', border: 'none',
+          borderRadius: 9999, width: 28, height: 28, fontSize: 16, cursor: 'pointer', lineHeight: 1,
+        }}
+      >
+        ×
+      </button>
+    </div>
+  )
+}
