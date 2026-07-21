@@ -3,7 +3,7 @@ import { createPublicClient, http, fallback, parseAbiItem, formatEther, getAddre
 import { base } from 'viem/chains'
 import { CONTRACT_ADDRESS, CONTRACT_ABI } from '../../../../lib/contract'
 import { getCursor, setCursor } from '../../../../lib/notifyStore'
-import { sendPushTo, type Notif } from '../../../../lib/notifySend'
+import { sendPushTo, sendFarcasterTo, type Notif } from '../../../../lib/notifySend'
 
 // On-chain watcher. A cron hits this; it reads the Social contract's Liked /
 // Commented / TipSent events since the last scanned block and pushes a
@@ -122,8 +122,13 @@ async function handle(req: NextRequest) {
     jobs.push({ to, n: { title: '💸 You got tipped', body: `${await nameOf(from)} tipped you ${formatEther(amount)} ETH`, url: `/post/${postId}`, tag: `tip-${postId}-${from}` } })
   }
 
-  let delivered = 0
-  await Promise.all(jobs.map(async (j) => { delivered += await sendPushTo(j.to, j.n) }))
+  let push = 0
+  let farcaster = 0
+  await Promise.all(jobs.map(async (j) => {
+    const [p, f] = await Promise.all([sendPushTo(j.to, j.n), sendFarcasterTo(j.to, j.n)])
+    push += p
+    farcaster += f
+  }))
 
   await setCursor(toBlock)
 
@@ -133,7 +138,7 @@ async function handle(req: NextRequest) {
     to: toBlock.toString(),
     events: { likes: likes.length, comments: comments.length, tips: tips.length },
     jobs: jobs.length,
-    delivered,
+    delivered: { push, farcaster },
   })
 }
 

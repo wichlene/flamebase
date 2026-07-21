@@ -64,6 +64,53 @@ export async function getPushSubs(addrRaw: string): Promise<PushSub[]> {
     .filter(Boolean) as PushSub[]
 }
 
+// ── Farcaster (Base App) notification tokens ───────────────────────────────
+// A user's per-app notification token+url arrives via the manifest webhook when
+// they add FlameBase / enable notifications. Keyed by FID. Separately we map
+// wallet address → FID (captured client-side from the mini-app context) so the
+// on-chain watcher, which only knows addresses, can reach the right FID.
+export type FcToken = { url: string; token: string }
+
+export async function saveFcToken(fid: number, t: FcToken): Promise<void> {
+  if (!fid || !t?.url || !t?.token) return
+  const v = JSON.stringify(t)
+  if (useRedis) await redis(['SET', `fb:fctok:${fid}`, v])
+  else memFc[`${fid}`] = v
+}
+
+export async function removeFcToken(fid: number): Promise<void> {
+  if (!fid) return
+  if (useRedis) await redis(['DEL', `fb:fctok:${fid}`])
+  else delete memFc[`${fid}`]
+}
+
+export async function getFcToken(fid: number): Promise<FcToken | null> {
+  let v: string | null = null
+  if (useRedis) v = await redis(['GET', `fb:fctok:${fid}`])
+  else v = memFc[`${fid}`] || null
+  if (!v) return null
+  try { return JSON.parse(v) as FcToken } catch { return null }
+}
+
+export async function linkAddrFid(addrRaw: string, fid: number): Promise<void> {
+  const addr = addrRaw.toLowerCase()
+  if (!isAddr(addr) || !fid) return
+  if (useRedis) await redis(['SET', `fb:addr2fid:${addr}`, String(fid)])
+  else memAddr2Fid[addr] = fid
+}
+
+export async function getFidForAddr(addrRaw: string): Promise<number | null> {
+  const addr = addrRaw.toLowerCase()
+  if (!isAddr(addr)) return null
+  let v: string | null = null
+  if (useRedis) v = await redis(['GET', `fb:addr2fid:${addr}`])
+  else v = memAddr2Fid[addr] != null ? String(memAddr2Fid[addr]) : null
+  return v ? Number(v) : null
+}
+
+const memFc: Record<string, string> = {}
+const memAddr2Fid: Record<string, number> = {}
+
 // ── Watcher cursor (last on-chain block scanned for notifiable events) ──
 export async function getCursor(): Promise<bigint | null> {
   let v: string | null = null

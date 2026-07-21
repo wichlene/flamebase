@@ -9,6 +9,9 @@ const miniapp = {
   name: 'FlameBase',
   iconUrl: 'https://flamebase.xyz/icon.png',
   homeUrl: 'https://flamebase.xyz',
+  // Where Base App / Farcaster POST notification events (app added, notifications
+  // enabled/disabled) — carries the per-user token we push in-app notifications with.
+  webhookUrl: 'https://flamebase.xyz/api/farcaster/webhook',
   // Embed card image MUST be 3:2 — a portrait/square image makes Base App
   // reject the launchable card and fall back to opening the URL as a website.
   imageUrl: 'https://flamebase.xyz/embed-card.png',
