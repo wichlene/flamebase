@@ -29,12 +29,37 @@ export default function FarcasterNotifySetup() {
           }).catch(() => {})
         }
 
-        // Prompt to add the app once (enables notifications). Skip if already added.
+        // If the app is already added with notifications on, the token lives in
+        // the context — capture it directly (the webhook won't re-fire for
+        // already-added users).
+        const nd = (ctx?.client as { notificationDetails?: { url?: string; token?: string } })?.notificationDetails
+        if (nd?.url && nd?.token) {
+          fetch('/api/farcaster/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fid, url: nd.url, token: nd.token }),
+          }).catch(() => {})
+        }
+
+        // Not added yet → prompt once. addMiniApp returns notificationDetails on
+        // success, so capture that too (covers first-time adders).
         const already = ctx?.client?.added
         const promptedKey = 'fb_addminiapp_prompted'
         if (!already && typeof window !== 'undefined' && !sessionStorage.getItem(promptedKey)) {
           sessionStorage.setItem(promptedKey, '1')
-          sdk.actions.addMiniApp().catch(() => {})
+          try {
+            const r = (await sdk.actions.addMiniApp()) as {
+              notificationDetails?: { url?: string; token?: string }
+            }
+            const d = r?.notificationDetails
+            if (d?.url && d?.token) {
+              fetch('/api/farcaster/token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fid, url: d.url, token: d.token }),
+              }).catch(() => {})
+            }
+          } catch { /* user declined / already added */ }
         }
       } catch {
         // Not in a mini app / SDK unavailable — no-op.
