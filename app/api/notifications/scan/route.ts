@@ -35,7 +35,7 @@ const MAX_RANGE = 2000n
 function authorized(req: NextRequest): boolean {
   const auth = req.headers.get('authorization') || ''
   if (process.env.CRON_SECRET && auth === `Bearer ${process.env.CRON_SECRET}`) return true
-  const s = req.headers.get('x-notify-secret')
+  const s = req.headers.get('x-notify-secret') || req.nextUrl.searchParams.get('key') || ''
   if (process.env.NOTIFY_SECRET && s === process.env.NOTIFY_SECRET) return true
   return false
 }

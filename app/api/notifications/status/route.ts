@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getFidForAddr, getFcToken, getPushSubs, getCursor } from '../../../../lib/notifyStore'
+import { getFidForAddr, getFcToken, getPushSubs, getCursor, debugDump } from '../../../../lib/notifyStore'
 
 // Debug endpoint: shows exactly what's registered for an address so we can see
 // where the pipeline breaks. Secret-protected.
@@ -13,6 +13,11 @@ export async function GET(req: NextRequest) {
   if (!process.env.NOTIFY_SECRET || key !== process.env.NOTIFY_SECRET) {
     return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   }
+  // ?dump=1 → show everything registered (which address/FID it landed under).
+  if (req.nextUrl.searchParams.get('dump') === '1') {
+    return NextResponse.json({ ok: true, ...(await debugDump()) })
+  }
+
   const address = req.nextUrl.searchParams.get('address') || ''
   const fid = await getFidForAddr(address)
   const fcToken = fid ? await getFcToken(fid) : null

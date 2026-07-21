@@ -111,6 +111,35 @@ export async function getFidForAddr(addrRaw: string): Promise<number | null> {
 const memFc: Record<string, string> = {}
 const memAddr2Fid: Record<string, number> = {}
 
+// Debug: dump everything that's registered, so we can see which address/FID a
+// user's notifications actually landed under (users have multiple wallets).
+export async function debugDump(): Promise<{
+  addrLinks: { addr: string; fid: number }[]
+  fcTokenFids: number[]
+  pushAddrs: string[]
+}> {
+  if (!useRedis) {
+    return {
+      addrLinks: Object.entries(memAddr2Fid).map(([addr, fid]) => ({ addr, fid })),
+      fcTokenFids: Object.keys(memFc).map(Number),
+      pushAddrs: Object.keys(memSubs).map(k => k.replace('fb:push:', '')),
+    }
+  }
+  const linkKeys: string[] = (await redis(['KEYS', 'fb:addr2fid:*'])) || []
+  const addrLinks: { addr: string; fid: number }[] = []
+  for (const k of linkKeys) {
+    const fid = await redis(['GET', k])
+    addrLinks.push({ addr: k.replace('fb:addr2fid:', ''), fid: Number(fid) })
+  }
+  const fcKeys: string[] = (await redis(['KEYS', 'fb:fctok:*'])) || []
+  const pushKeys: string[] = (await redis(['KEYS', 'fb:push:*'])) || []
+  return {
+    addrLinks,
+    fcTokenFids: fcKeys.map(k => Number(k.replace('fb:fctok:', ''))),
+    pushAddrs: pushKeys.map(k => k.replace('fb:push:', '')),
+  }
+}
+
 // ── Watcher cursor (last on-chain block scanned for notifiable events) ──
 export async function getCursor(): Promise<bigint | null> {
   let v: string | null = null
