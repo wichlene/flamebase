@@ -7,7 +7,10 @@ import { getFidForAddr, getFcToken, getPushSubs, getCursor } from '../../../../l
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
-  if (!process.env.NOTIFY_SECRET || req.headers.get('x-notify-secret') !== process.env.NOTIFY_SECRET) {
+  // Accept the secret via header OR ?key= so it can be checked by just opening a
+  // URL in the browser (no terminal needed).
+  const key = req.headers.get('x-notify-secret') || req.nextUrl.searchParams.get('key') || ''
+  if (!process.env.NOTIFY_SECRET || key !== process.env.NOTIFY_SECRET) {
     return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   }
   const address = req.nextUrl.searchParams.get('address') || ''
