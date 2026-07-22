@@ -165,6 +165,11 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
       })
       if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'Send failed') }
       await loadThread(activeId)
+      // Mark the conversation seen as of now — otherwise your own just-sent
+      // message reads as "unread to yourself" until you re-open the thread.
+      const seen = getSeenMap()
+      seen[activeId] = Date.now()
+      saveSeenMap(seen)
       refreshConversations()
     } catch (e: any) {
       setMessages(prev => prev.filter(m => m.id !== optimistic.id))

@@ -1133,29 +1133,31 @@ export default function Home() {
     const tipsRaw = localStorage.getItem('flamebase_last_tips')
     const lastLikes: Record<string, string> = likesRaw ? JSON.parse(likesRaw) : {}
     const lastTips: Record<string, string> = tipsRaw ? JSON.parse(tipsRaw) : {}
-    const firstSeen = !likesRaw && !tipsRaw  // skip notifs on initial load
-
     const newNotifs: Array<{type: 'like' | 'tip'; postId: string; delta: string; preview: string; timestamp: number}> = []
     const nextLikes: Record<string, string> = {}
     const nextTips: Record<string, string> = {}
 
     for (const post of myPosts) {
       const key = post.id.toString()
-      const prevLikes = BigInt(lastLikes[key] || '0')
-      const prevTips = BigInt(lastTips[key] || '0')
+      // A post is diffed only once we've already recorded a count for it. A post
+      // seen for the first time — on initial load OR when it scrolls into view
+      // later — is just seeded, so its pre-existing likes/tips never fire a
+      // bogus "+N new flames" alert (this was spamming false push notifications).
+      const seenLikes = lastLikes[key]
+      const seenTips = lastTips[key]
       const preview = post.content ? post.content.slice(0, 60) : (post.ipfsHash ? '📎 media post' : '')
 
-      if (!firstSeen && post.likes > prevLikes) {
+      if (seenLikes !== undefined && post.likes > BigInt(seenLikes)) {
         newNotifs.push({
           type: 'like', postId: key,
-          delta: (post.likes - prevLikes).toString(),
+          delta: (post.likes - BigInt(seenLikes)).toString(),
           preview, timestamp: Date.now(),
         })
       }
-      if (!firstSeen && post.tips > prevTips) {
+      if (seenTips !== undefined && post.tips > BigInt(seenTips)) {
         newNotifs.push({
           type: 'tip', postId: key,
-          delta: parseFloat(formatEther(post.tips - prevTips)).toFixed(4),
+          delta: parseFloat(formatEther(post.tips - BigInt(seenTips))).toFixed(4),
           preview, timestamp: Date.now(),
         })
       }
@@ -1166,8 +1168,10 @@ export default function Home() {
     if (newNotifs.length > 0) {
       setNotifications(prev => [...newNotifs, ...prev].slice(0, 30))
     }
-    localStorage.setItem('flamebase_last_likes', JSON.stringify(nextLikes))
-    localStorage.setItem('flamebase_last_tips', JSON.stringify(nextTips))
+    // Merge, don't replace — so a post that scrolls out of the loaded set stays
+    // "seen" and isn't re-treated as brand new when it comes back.
+    localStorage.setItem('flamebase_last_likes', JSON.stringify({ ...lastLikes, ...nextLikes }))
+    localStorage.setItem('flamebase_last_tips', JSON.stringify({ ...lastTips, ...nextTips }))
   }, [posts, address])
 
   useEffect(() => {
@@ -1390,7 +1394,9 @@ export default function Home() {
   }
 
   const createPost = async () => {
-    if (!newPost) return
+    // Allow media-only posts (image/video with no caption) — the feed and the
+    // AI agent path both support them; only the composer used to block it.
+    if (!newPost.trim() && !selectedFile) return
     setLoading(true)
     try {
       let ipfsHash = ''
@@ -2654,6 +2660,7 @@ export default function Home() {
                                 <span className="text-lg">🔁</span>
                               </button>
 
+                              {!isOwnPost && (
                               <div className="flex items-center gap-1 ml-auto">
                                 {[0.5, 1, 5].map(amt => (
                                   <button key={amt} onClick={() => handleTip(post.id, amt)} disabled={isTipping || !isConnected}
@@ -2675,6 +2682,7 @@ export default function Home() {
                                   {isTipping ? '…' : '💸'}
                                 </button>
                               </div>
+                              )}
                             </div>
 
                             {post.tips > 0n && (
@@ -2921,7 +2929,7 @@ export default function Home() {
                         <span className="text-[#8A919E] text-xs ml-auto">{newPost.length}/500</span>
                       </div>
                       <div className="px-4 pb-3">
-                        <button onClick={createPost} disabled={loading || !newPost}
+                        <button onClick={createPost} disabled={loading || (!newPost.trim() && !selectedFile)}
                           className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white py-3 rounded-xl font-bold disabled:opacity-40 transition-colors shadow-sm">
                           {loading ? t('posting') : t('post')}
                         </button>
@@ -3404,7 +3412,7 @@ export default function Home() {
                   <div className="space-y-1 pt-1">
                     <input value={tokenName} onChange={e => setTokenName(e.target.value)} placeholder="Token name" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
                     <input value={tokenSymbol} onChange={e => setTokenSymbol(e.target.value)} placeholder="Symbol" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
-                    <input value={tokenSupply} onChange={e => setTokenSupply(e.target.value)} placeholder="Supply" type="number" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
+                    <input value={tokenSupply} onChange={e => setTokenSupply(e.target.value.replace(/[^0-9]/g, ""))} placeholder="Supply" type="number" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
                     <button onClick={() => { if (!TOKEN_FACTORY_DEPLOYED || !tokenName || !tokenSymbol || !tokenSupply) return; toolAction(async () => { await writeContractAsync({ address: TOKEN_FACTORY_ADDRESS, abi: TOKEN_FACTORY_ABI, functionName: 'deployToken', args: [tokenName, tokenSymbol, BigInt(tokenSupply)], value: fixedFee }); setTokenName('FlameBase'); setTokenSymbol('FLAME'); setTokenSupply('1000000') }, setTokenLoading) }}
                       disabled={tokenLoading || !tokenName || !tokenSymbol || !tokenSupply} className="w-full bg-[#0052FF] text-white text-xs py-2 rounded-lg font-bold disabled:opacity-40">
                       {tokenLoading ? 'Deploying…' : 'Deploy Token'}
@@ -3415,7 +3423,7 @@ export default function Home() {
                   <div className="space-y-1 pt-1">
                     <input value={nftName} onChange={e => setNftName(e.target.value)} placeholder="Collection name" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
                     <input value={nftSymbol} onChange={e => setNftSymbol(e.target.value)} placeholder="Symbol" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
-                    <input value={nftMaxSupply} onChange={e => setNftMaxSupply(e.target.value)} placeholder="Max supply" type="number" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
+                    <input value={nftMaxSupply} onChange={e => setNftMaxSupply(e.target.value.replace(/[^0-9]/g, ""))} placeholder="Max supply" type="number" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
                     <p className="text-[10px] text-[#0052FF] font-bold">Mint price: $0.50 fixed</p>
                     <button onClick={() => { if (!NFT_FACTORY_DEPLOYED || !nftName || !nftSymbol || !nftMaxSupply) return; toolAction(async () => { await writeContractAsync({ address: NFT_FACTORY_ADDRESS, abi: NFT_FACTORY_ABI, functionName: 'deployNFT', args: [nftName, nftSymbol, BigInt(nftMaxSupply), nftMintPriceWei, ''], value: fixedFee }); setNftName('FlameBase NFT'); setNftSymbol('FNFT'); setNftMaxSupply('1000') }, setNftLoading) }}
                       disabled={nftLoading || !nftName || !nftSymbol || !nftMaxSupply} className="w-full bg-[#0052FF] text-white text-xs py-2 rounded-lg font-bold disabled:opacity-40">
@@ -3664,7 +3672,7 @@ export default function Home() {
               <div className="mt-2 space-y-1">
                 <input value={tokenName} onChange={e => setTokenName(e.target.value)} placeholder="Token name" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
                 <input value={tokenSymbol} onChange={e => setTokenSymbol(e.target.value)} placeholder="Symbol" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
-                <input value={tokenSupply} onChange={e => setTokenSupply(e.target.value)} placeholder="Supply" type="number" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
+                <input value={tokenSupply} onChange={e => setTokenSupply(e.target.value.replace(/[^0-9]/g, ""))} placeholder="Supply" type="number" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
                 <button onClick={() => { if (!TOKEN_FACTORY_DEPLOYED || !tokenName || !tokenSymbol || !tokenSupply) return; toolAction(async () => { await writeContractAsync({ address: TOKEN_FACTORY_ADDRESS, abi: TOKEN_FACTORY_ABI, functionName: 'deployToken', args: [tokenName, tokenSymbol, BigInt(tokenSupply)], value: fixedFee }); setTokenName('FlameBase'); setTokenSymbol('FLAME'); setTokenSupply('1000000') }, setTokenLoading) }}
                   disabled={tokenLoading || !tokenName || !tokenSymbol || !tokenSupply} className="w-full bg-[#0052FF] text-white text-xs py-2 rounded-lg font-bold disabled:opacity-40">
                   {tokenLoading ? 'Deploying…' : 'Deploy Token'}
@@ -3675,7 +3683,7 @@ export default function Home() {
               <div className="mt-2 space-y-1">
                 <input value={nftName} onChange={e => setNftName(e.target.value)} placeholder="Collection name" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
                 <input value={nftSymbol} onChange={e => setNftSymbol(e.target.value)} placeholder="Symbol" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
-                <input value={nftMaxSupply} onChange={e => setNftMaxSupply(e.target.value)} placeholder="Max supply" type="number" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
+                <input value={nftMaxSupply} onChange={e => setNftMaxSupply(e.target.value.replace(/[^0-9]/g, ""))} placeholder="Max supply" type="number" className="w-full bg-[#F7F9FC] border border-[#E4E7EB] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#0052FF]" />
                 <p className="text-[10px] text-[#0052FF] font-bold">Mint price: $0.50 fixed</p>
                 <button onClick={() => { if (!NFT_FACTORY_DEPLOYED || !nftName || !nftSymbol || !nftMaxSupply) return; toolAction(async () => { await writeContractAsync({ address: NFT_FACTORY_ADDRESS, abi: NFT_FACTORY_ABI, functionName: 'deployNFT', args: [nftName, nftSymbol, BigInt(nftMaxSupply), nftMintPriceWei, ''], value: fixedFee }); setNftName('FlameBase NFT'); setNftSymbol('FNFT'); setNftMaxSupply('1000') }, setNftLoading) }}
                   disabled={nftLoading || !nftName || !nftSymbol || !nftMaxSupply} className="w-full bg-[#0052FF] text-white text-xs py-2 rounded-lg font-bold disabled:opacity-40">

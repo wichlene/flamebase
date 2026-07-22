@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getAddress } from 'viem'
 
 const COINBASE_ATTESTER = '0x357458739F90461b99789350868CD7CF330Dd7EE'
 const VERIFIED_ACCOUNT_SCHEMA = '0xf8b05c79f090979bf4a80270aba232dff11a10d9ca55c4f88de95317970f0de9'
@@ -27,7 +28,9 @@ export async function GET(req: NextRequest) {
           ) { id }
         }`,
         variables: {
-          recipient: address.toLowerCase(),
+          // EAS stores `recipient` checksummed and filters case-sensitively —
+          // a lowercased address never matches, so the badge never showed.
+          recipient: getAddress(address),
           attester: COINBASE_ATTESTER,
           schema: VERIFIED_ACCOUNT_SCHEMA,
         },
