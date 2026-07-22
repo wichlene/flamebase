@@ -134,7 +134,7 @@ function IpfsVideo({ hash, className }: { hash: string; className?: string }) {
   )
 }
 
-function EmojiPicker({ onSelect }: { onSelect: (emoji: string) => void }) {
+function EmojiPicker({ onSelect, align = 'left' }: { onSelect: (emoji: string) => void; align?: 'left' | 'right' }) {
   const [open, setOpen] = useState(false)
   const emojis = [
     '😀','😂','😍','🥰','😊','😎','🤔','😢','😅','🙏',
@@ -156,14 +156,14 @@ function EmojiPicker({ onSelect }: { onSelect: (emoji: string) => void }) {
       {open && (
         <>
           <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />
-          <div className="absolute z-30 bottom-full mb-2 left-0 bg-white border border-[#E4E7EB] rounded-2xl shadow-xl p-3 w-72">
+          <div className={`absolute z-30 bottom-full mb-2 ${align === 'right' ? 'right-0' : 'left-0'} bg-white border border-[#E4E7EB] rounded-2xl shadow-xl p-3 w-72 max-w-[calc(100vw-2rem)]`}>
             <div className="grid grid-cols-10 gap-0.5">
               {emojis.map(e => (
                 <button
                   key={e}
                   type="button"
                   onClick={() => { onSelect(e); setOpen(false) }}
-                  className="w-[26px] h-[26px] flex items-center justify-center text-lg hover:bg-[#F0F2F5] rounded-lg transition-colors"
+                  className="aspect-square w-full flex items-center justify-center text-lg leading-none hover:bg-[#F0F2F5] rounded-lg transition-colors"
                 >
                   {e}
                 </button>
@@ -2720,7 +2720,7 @@ export default function Home() {
                                     className="flex-1 min-w-[140px] bg-white border border-[#E4E7EB] rounded-xl px-3 py-2 text-sm text-[#0A0B0D] placeholder-[#8A919E] focus:outline-none focus:border-[#0052FF]"
                                   />
                                   <div className="flex gap-2 flex-shrink-0 ml-auto">
-                                    <EmojiPicker onSelect={e => setCommentTexts(prev => ({ ...prev, [key]: (prev[key] || '') + e }))} />
+                                    <EmojiPicker align="right" onSelect={e => setCommentTexts(prev => ({ ...prev, [key]: (prev[key] || '') + e }))} />
                                     <button onClick={() => handleComment(post.id)} disabled={isCommenting || !commentTexts[key]}
                                       className="flex-shrink-0 bg-[#0052FF] hover:bg-[#1652F0] text-white disabled:opacity-40 px-4 py-2 rounded-xl text-sm font-bold transition-colors">
                                       {isCommenting ? '...' : '↑'}
