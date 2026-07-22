@@ -1,0 +1,35 @@
+name: x-autopost
+
+# Posts a fresh, Groq-generated FlameBase/Base post to X ~9 times a day at
+# varied (non-round) times so it reads as human, not clockwork. Each run makes a
+# brand-new post (no repeats, no hashtags).
+#
+# Setup:
+#   - Repo secret NOTIFY_SECRET (same one used by notify-scan).
+#   - Vercel env: X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, X_ACCESS_SECRET, GROQ_API_KEY.
+# Times are UTC.
+
+on:
+  schedule:
+    - cron: '7 6 * * *'
+    - cron: '43 8 * * *'
+    - cron: '19 10 * * *'
+    - cron: '51 11 * * *'
+    - cron: '11 13 * * *'
+    - cron: '39 15 * * *'
+    - cron: '3 17 * * *'
+    - cron: '47 19 * * *'
+    - cron: '23 21 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post to X
+        run: |
+          code=$(curl -sS -o /tmp/out.json -w '%{http_code}' -X POST \
+            "https://flamebase.xyz/api/x/post" \
+            -H "x-notify-secret: ${{ secrets.NOTIFY_SECRET }}")
+          echo "HTTP $code"; cat /tmp/out.json || true
+          test "$code" = "200"
