@@ -636,9 +636,6 @@ export default function Home() {
 
   // Unread message count from Messages component
   const [unreadMessages, setUnreadMessages] = useState(0)
-  // Share popover state — which post's share menu is open + brief "copied" flash
-  const [sharePost, setSharePost] = useState<string | null>(null)
-  const [shareCopied, setShareCopied] = useState(false)
   // AI post improvement
   const [improving, setImproving] = useState(false)
 
@@ -1701,6 +1698,28 @@ export default function Home() {
     setActiveTab('post')
   }
 
+  // Share a post OUTSIDE FlameBase — the distribution loop. Inside Base App /
+  // Farcaster it opens the cast composer with the post embedded; on the web it
+  // uses the native share sheet, falling back to an X (Twitter) intent.
+  const sharePost = async (post: Post) => {
+    const url = `https://flamebase.xyz/post/${post.id}`
+    const body = post.content ? post.content.slice(0, 200) : 'Check out this post on FlameBase'
+    try {
+      if (await fcSdk.isInMiniApp()) {
+        await fcSdk.actions.composeCast({ text: body, embeds: [url] })
+        return
+      }
+    } catch { /* not in a mini app */ }
+    try {
+      if (typeof navigator !== 'undefined' && navigator.share) {
+        await navigator.share({ text: body, url })
+        return
+      }
+    } catch { /* user cancelled share sheet */ }
+    const text = `${body}\n\nvia FlameBase — onchain social on Base`
+    window.open(`https://x.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`, '_blank', 'noopener')
+  }
+
   const boostPost = async (postId: string) => {
     const weiAmount = parseEther((0.09 / ethPrice).toFixed(10))
     setLoadingAction(`boost-${postId}`)
@@ -2658,6 +2677,12 @@ export default function Home() {
                                 title="Repost / quote"
                                 className="flex items-center gap-1 text-[#5B6271] hover:text-[#0052FF] hover:bg-[#E6EEFF] rounded-xl px-3 py-2 text-sm transition-all">
                                 <span className="text-lg">🔁</span>
+                              </button>
+
+                              <button onClick={() => sharePost(post)}
+                                title="Share to Farcaster / X"
+                                className="flex items-center gap-1 text-[#5B6271] hover:text-[#0052FF] hover:bg-[#E6EEFF] rounded-xl px-3 py-2 text-sm transition-all">
+                                <span className="text-lg">↗</span>
                               </button>
 
                               {!isOwnPost && (
