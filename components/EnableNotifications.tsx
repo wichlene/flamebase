@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useAccount } from 'wagmi'
+import { useAccount, useSignMessage } from 'wagmi'
 import { enablePush, notifPermission } from '../lib/pushClient'
 
 // Small floating opt-in pill. Shows only when the user is connected and hasn't
@@ -9,6 +9,7 @@ import { enablePush, notifPermission } from '../lib/pushClient'
 // of the subscription fresh and renders nothing.
 export default function EnableNotifications() {
   const { address, isConnected } = useAccount()
+  const { signMessageAsync } = useSignMessage()
   const [perm, setPerm] = useState<NotificationPermission | 'unsupported'>('default')
   const [busy, setBusy] = useState(false)
   const [dismissed, setDismissed] = useState(false)
@@ -16,9 +17,16 @@ export default function EnableNotifications() {
   useEffect(() => { setPerm(notifPermission()) }, [])
 
   // Already granted → refresh the subscription on the server (endpoints rotate).
+  // This now requires a wallet signature, so only do it once per session per
+  // address rather than silently prompting on every mount.
   useEffect(() => {
-    if (perm === 'granted' && isConnected && address) enablePush(address).catch(() => {})
-  }, [perm, isConnected, address])
+    if (perm !== 'granted' || !isConnected || !address) return
+    const key = `fb_push_synced_${address.toLowerCase()}`
+    if (typeof window !== 'undefined' && sessionStorage.getItem(key)) return
+    enablePush(address, (args) => signMessageAsync(args))
+      .then((r) => { if (r.ok && typeof window !== 'undefined') sessionStorage.setItem(key, '1') })
+      .catch(() => {})
+  }, [perm, isConnected, address, signMessageAsync])
 
   if (dismissed) return null
   if (!isConnected || !address) return null
@@ -29,7 +37,7 @@ export default function EnableNotifications() {
       <button
         onClick={async () => {
           setBusy(true)
-          const r = await enablePush(address)
+          const r = await enablePush(address, (args) => signMessageAsync(args))
           setBusy(false)
           setPerm(notifPermission())
           if (r.ok) setDismissed(true)

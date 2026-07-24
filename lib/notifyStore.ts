@@ -95,8 +95,15 @@ export async function getFcToken(fid: number): Promise<FcToken | null> {
 export async function linkAddrFid(addrRaw: string, fid: number): Promise<void> {
   const addr = addrRaw.toLowerCase()
   if (!isAddr(addr) || !fid) return
-  if (useRedis) await redis(['SET', `fb:addr2fid:${addr}`, String(fid)])
-  else memAddr2Fid[addr] = fid
+  if (useRedis) {
+    await redis(['SET', `fb:addr2fid:${addr}`, String(fid)])
+    // Reverse index so the unsigned Farcaster webhook can at least check "is
+    // this FID known to us at all" before accepting a token update for it.
+    await redis(['SET', `fb:fid2addr:${fid}`, addr])
+  } else {
+    memAddr2Fid[addr] = fid
+    memFid2Addr[`${fid}`] = addr
+  }
 }
 
 export async function getFidForAddr(addrRaw: string): Promise<number | null> {
@@ -108,8 +115,15 @@ export async function getFidForAddr(addrRaw: string): Promise<number | null> {
   return v ? Number(v) : null
 }
 
+export async function getAddrForFid(fid: number): Promise<string | null> {
+  if (!fid) return null
+  if (useRedis) return (await redis(['GET', `fb:fid2addr:${fid}`])) || null
+  return memFid2Addr[`${fid}`] || null
+}
+
 const memFc: Record<string, string> = {}
 const memAddr2Fid: Record<string, number> = {}
+const memFid2Addr: Record<string, string> = {}
 
 // Debug: dump everything that's registered, so we can see which address/FID a
 // user's notifications actually landed under (users have multiple wallets).
@@ -155,5 +169,25 @@ export async function setCursor(block: bigint): Promise<void> {
 }
 
 let memCursor: string | null = null
+
+// Serializes overlapping /api/notifications/scan runs (e.g. a slow request
+// still in flight when the next cron tick fires) so the same on-chain block
+// range is never processed twice, which would double-send notifications.
+// Redis SET NX with a TTL acts as a lock that self-expires if a run crashes.
+let memLockUntil = 0
+export async function acquireScanLock(ttlSec = 55): Promise<boolean> {
+  if (useRedis) {
+    const res = await redis(['SET', 'fb:notif:scanlock', '1', 'NX', 'EX', ttlSec])
+    return res === 'OK'
+  }
+  if (Date.now() < memLockUntil) return false
+  memLockUntil = Date.now() + ttlSec * 1000
+  return true
+}
+
+export async function releaseScanLock(): Promise<void> {
+  if (useRedis) await redis(['DEL', 'fb:notif:scanlock'])
+  else memLockUntil = 0
+}
 
 export { isAddr }

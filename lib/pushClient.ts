@@ -1,9 +1,15 @@
 'use client'
 
+import { authMessage } from './walletAuth'
+
 // Client-side Web-Push helpers: register the service worker, ask permission,
 // subscribe with our VAPID public key, and hand the subscription to the server.
 
 const VAPID_PUBLIC = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || ''
+
+// Matches wagmi's useSignMessage().signMessageAsync signature closely enough
+// without importing wagmi into this plain lib file.
+type SignMessageAsync = (args: { message: string }) => Promise<string>
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
@@ -30,7 +36,10 @@ export function notifPermission(): NotificationPermission | 'unsupported' {
 
 // Full opt-in flow. Idempotent — safe to call again to keep the server copy of
 // the subscription fresh. Returns { ok, reason } so the caller can react.
-export async function enablePush(address: string): Promise<{ ok: boolean; reason?: string }> {
+// Requires a wallet signature (see lib/walletAuth.ts) proving control of
+// `address` — the server rejects subscribe requests without one, so a random
+// caller can't register their own device under someone else's address.
+export async function enablePush(address: string, signMessageAsync: SignMessageAsync): Promise<{ ok: boolean; reason?: string }> {
   if (!pushSupported()) return { ok: false, reason: 'unsupported' }
   if (!VAPID_PUBLIC) return { ok: false, reason: 'no-vapid' }
 
@@ -48,10 +57,18 @@ export async function enablePush(address: string): Promise<{ ok: boolean; reason
     })
   }
 
+  const timestamp = Date.now()
+  let signature: string
+  try {
+    signature = await signMessageAsync({ message: authMessage('subscribe', address, timestamp) })
+  } catch {
+    return { ok: false, reason: 'sign-rejected' }
+  }
+
   const res = await fetch('/api/notifications/subscribe', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ address, subscription: sub.toJSON() }),
+    body: JSON.stringify({ address, subscription: sub.toJSON(), timestamp, signature }),
   })
   if (!res.ok) return { ok: false, reason: 'save-failed' }
   return { ok: true }

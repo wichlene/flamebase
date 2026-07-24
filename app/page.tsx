@@ -1483,7 +1483,10 @@ export default function Home() {
       return
     }
     setCommentFiles(prev => ({ ...prev, [key]: file }))
-    setCommentPreviews(prev => ({ ...prev, [key]: file ? URL.createObjectURL(file) : null }))
+    setCommentPreviews(prev => {
+      if (prev[key]) URL.revokeObjectURL(prev[key]!)
+      return { ...prev, [key]: file ? URL.createObjectURL(file) : null }
+    })
   }
 
   const handleComment = async (postId: bigint) => {
@@ -1509,7 +1512,10 @@ export default function Home() {
       await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'comment', args: [postId, finalText], value: effectiveFee(commentPrice as bigint | undefined, DEFAULT_COMMENT_PRICE) })
       setCommentTexts(prev => ({ ...prev, [key]: '' }))
       setCommentFiles(prev => ({ ...prev, [key]: null }))
-      setCommentPreviews(prev => ({ ...prev, [key]: null }))
+      setCommentPreviews(prev => {
+        if (prev[key]) URL.revokeObjectURL(prev[key]!)
+        return { ...prev, [key]: null }
+      })
       setReplyingTo(prev => ({ ...prev, [key]: '' }))
       await loadComments(key)
     } catch (e) { console.error(e); showToast('error', t('errCommentFailed')) }
@@ -1745,12 +1751,21 @@ export default function Home() {
   const sharePost = async (post: Post) => {
     const url = `https://flamebase.xyz/post/${post.id}`
     const body = post.content ? post.content.slice(0, 200) : 'Check out this post on FlameBase'
-    try {
-      if (await fcSdk.isInMiniApp()) {
+    // isInMiniApp() failing means the SDK/host isn't a mini app at all — silently
+    // fall through to the web share methods below. A genuine composeCast()
+    // failure once we're confirmed inside a mini app is a real error, though,
+    // and there's no other share method to fall back to inside that webview —
+    // surface it instead of failing silently.
+    let inMiniApp = false
+    try { inMiniApp = await fcSdk.isInMiniApp() } catch { /* not a mini app host */ }
+    if (inMiniApp) {
+      try {
         await fcSdk.actions.composeCast({ text: body, embeds: [url] })
-        return
+      } catch {
+        showToast('error', 'Could not open the cast composer — try again')
       }
-    } catch { /* not in a mini app */ }
+      return
+    }
     try {
       if (typeof navigator !== 'undefined' && navigator.share) {
         await navigator.share({ text: body, url })
@@ -2794,7 +2809,7 @@ export default function Home() {
                                   {commentPreviews[key] && (
                                     <div className="relative w-fit">
                                       <img src={commentPreviews[key]!} alt="" className="max-h-28 rounded-xl border border-[#E4E7EB]" />
-                                      <button onClick={() => { setCommentFiles(prev => ({ ...prev, [key]: null })); setCommentPreviews(prev => ({ ...prev, [key]: null })) }}
+                                      <button onClick={() => { setCommentFiles(prev => ({ ...prev, [key]: null })); setCommentPreviews(prev => { if (prev[key]) URL.revokeObjectURL(prev[key]!); return { ...prev, [key]: null } }) }}
                                         className="absolute -top-2 -right-2 w-5 h-5 bg-black/70 hover:bg-black text-white rounded-full text-xs flex items-center justify-center">
                                         ×
                                       </button>
