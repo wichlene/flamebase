@@ -4,7 +4,7 @@ import { ConnectButton, useConnectModal } from '@rainbow-me/rainbowkit'
 import { useAccount, useWriteContract, useReadContract, usePublicClient, useBalance, useSwitchChain, useChainId, useDisconnect, useConnect } from 'wagmi'
 import { sdk as fcSdk } from '@farcaster/miniapp-sdk'
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react'
-import { parseEther, formatEther, erc20Abi, encodeFunctionData, keccak256, toHex } from 'viem'
+import { parseEther, formatEther, erc20Abi, encodeFunctionData, keccak256, toHex, decodeEventLog, parseAbiItem } from 'viem'
 import { base } from 'wagmi/chains'
 import dynamic from 'next/dynamic'
 import { CONTRACT_ADDRESS, CONTRACT_ABI } from '../lib/contract'
@@ -546,6 +546,38 @@ export default function Home() {
         if (!hash) {
           pendingId = id
           throw new Error(`PENDING_UNCONFIRMED:${id}`)
+        }
+        // ERC-4337 smart wallets (Coinbase Smart Wallet / Base App) route the
+        // call through EntryPoint.handleOps, which reports the OUTER
+        // transaction as successful even when the INNER UserOperation (our
+        // actual FlameBase call) reverted — EntryPoint deliberately swallows a
+        // failing op so it doesn't waste other users' bundled operations, and
+        // records the real per-op outcome only in a UserOperationEvent(...,bool
+        // success,...) log. The status check above only sees the outer
+        // receipt/bundle status, so it misses exactly this case — this is the
+        // actual root cause behind tips (and other actions) from Base App
+        // showing "success" on Basescan while never taking effect. Fetch the
+        // real receipt and check every UserOperationEvent log directly.
+        try {
+          const receipt = await publicClient!.getTransactionReceipt({ hash })
+          const uoAbi = parseAbiItem(
+            'event UserOperationEvent(bytes32 indexed userOpHash, address indexed sender, address indexed paymaster, uint256 nonce, bool success, uint256 actualGasCost, uint256 actualGasUsed)'
+          )
+          for (const log of receipt.logs) {
+            try {
+              const decoded = decodeEventLog({ abi: [uoAbi], data: log.data, topics: log.topics })
+              if (decoded.eventName === 'UserOperationEvent' && (decoded.args as { success: boolean }).success === false) {
+                throw new Error('CONTRACT_REVERT:transaction reverted on-chain (inner call failed)')
+              }
+            } catch (decodeErr: any) {
+              if (decodeErr?.message?.startsWith('CONTRACT_REVERT:')) throw decodeErr
+              // Not a UserOperationEvent log (or a shape we don't recognize) — ignore and keep scanning.
+            }
+          }
+        } catch (receiptErr: any) {
+          if (receiptErr?.message?.startsWith('CONTRACT_REVERT:')) throw receiptErr
+          // RPC hiccup fetching the receipt — we already have a resolved hash
+          // from the wallet, so don't block a possibly-successful tx on this.
         }
       } catch (e: any) {
         // Only a deliberate user rejection, a confirmed on-chain revert, or an
