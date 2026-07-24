@@ -4108,25 +4108,35 @@ export default function Home() {
                   <p className="text-[#8A919E] text-xs">Following</p>
                 </div>
               </div>
-              {/* User's posts */}
-              <div className="space-y-3">
-                {posts.filter(p => p.author.toLowerCase() === selectedUser.toLowerCase()).map(post => (
-                  <div key={post.id.toString()} className="bg-[#F7F9FC] rounded-2xl p-4 border border-[#EEF1F5]">
-                    {post.content && <p className="text-sm text-[#0A0B0D] mb-2">{post.content}</p>}
-                    {post.ipfsHash && (post.ipfsHash.startsWith('vid_')
-                      ? <IpfsVideo hash={post.ipfsHash.slice(4)} className="w-full max-h-40 bg-black rounded-xl mb-2" />
-                      : <IpfsImage hash={post.ipfsHash} className="w-full max-h-40 object-cover rounded-xl mb-2" alt="" />)}
-                    <div className="flex items-center gap-3 text-xs text-[#8A919E]">
-                      <span>🔥 {post.likes.toString()}</span>
-                      <span>💸 {parseFloat(formatEther(post.tips)).toFixed(4)} ETH</span>
-                      <span className="ml-auto">{timeAgo(post.timestamp)}</span>
-                    </div>
+              {/* User's posts — Instagram-style grid, same treatment as the profile tab's own grid */}
+              {(() => {
+                const userPosts = posts.filter(p => p.author.toLowerCase() === selectedUser.toLowerCase())
+                if (userPosts.length === 0) return <p className="text-[#8A919E] text-sm text-center py-4">No posts yet</p>
+                return (
+                  <div className="grid grid-cols-3 gap-0.5 bg-[#EEF1F5] rounded-xl overflow-hidden border border-[#EEF1F5]">
+                    {userPosts.map(post => (
+                      <button key={post.id.toString()}
+                        onClick={() => { const id = post.id.toString(); setSelectedUser(null); scrollToPost(id) }}
+                        className="aspect-square bg-[#F7F9FC] hover:opacity-80 transition-opacity overflow-hidden relative">
+                        {post.ipfsHash?.startsWith('vid_') ? (
+                          <div className="w-full h-full flex items-center justify-center bg-black">
+                            <span className="text-white text-2xl">▶</span>
+                          </div>
+                        ) : post.ipfsHash ? (
+                          <IpfsImage hash={post.ipfsHash} className="w-full h-full object-cover" alt="" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center p-2">
+                            <p className="text-xs text-[#5B6271] text-center line-clamp-3 leading-tight">{post.content}</p>
+                          </div>
+                        )}
+                        <div className="absolute bottom-1 right-1 flex items-center gap-0.5 bg-black/50 rounded px-1 py-0.5">
+                          <span className="text-[10px] text-white">🔥{post.likes.toString()}</span>
+                        </div>
+                      </button>
+                    ))}
                   </div>
-                ))}
-                {posts.filter(p => p.author.toLowerCase() === selectedUser.toLowerCase()).length === 0 && (
-                  <p className="text-[#8A919E] text-sm text-center py-4">No posts yet</p>
-                )}
-              </div>
+                )
+              })()}
             </div>
           </div>
         </div>
