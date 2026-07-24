@@ -2704,7 +2704,11 @@ export default function Home() {
                               </button>
                               {verifiedAddresses[post.author.toLowerCase()] && <VerifiedBadge />}
                               {premiumUsers.has(post.author.toLowerCase()) && <span className="text-yellow-500 text-sm" title="Premium">✨</span>}
-                              <span className="text-[#8A919E] text-xs">{post.author.slice(0,6)}...{post.author.slice(-4)}</span>
+                              {/* Raw wallet address: only the post's own author and the admin see it — every
+                                  other viewer just sees the username, not who they actually are on-chain. */}
+                              {(isOwnPost || isAdmin) && (
+                                <span className="text-[#8A919E] text-xs">{post.author.slice(0,6)}...{post.author.slice(-4)}</span>
+                              )}
                               <span className="text-[#8A919E] text-xs">·</span>
                               <span className="text-[#8A919E] text-xs">{timeAgo(post.timestamp)}</span>
                               {postViews[key] && postViews[key] > 1 && (
@@ -2713,8 +2717,10 @@ export default function Home() {
                               {(boostedPosts[key] || 0) > Date.now() && (
                                 <span className="bg-orange-100 text-orange-600 text-[10px] font-black px-2 py-0.5 rounded-full">🚀 Boosted</span>
                               )}
-                              <a href={`https://basescan.org/address/${post.author}`} target="_blank"
-                                className="ml-auto text-[#8A919E] hover:text-[#0052FF] text-xs transition-colors">↗</a>
+                              {(isOwnPost || isAdmin) && (
+                                <a href={`https://basescan.org/address/${post.author}`} target="_blank"
+                                  className="ml-auto text-[#8A919E] hover:text-[#0052FF] text-xs transition-colors">↗</a>
+                              )}
                               {isOwnPost && (
                                 <button
                                   onClick={() => hidePost(key)}
@@ -4044,8 +4050,13 @@ export default function Home() {
                     <h3 className="text-xl font-black truncate">{getUsername(selectedUser)}</h3>
                     {verifiedAddresses[selectedUser.toLowerCase()] && <VerifiedBadge />}
                   </div>
-                  <p className="text-[#8A919E] text-sm truncate">{selectedUser.slice(0,8)}...{selectedUser.slice(-6)}</p>
-                  <a href={`https://basescan.org/address/${selectedUser}`} target="_blank" className="text-[#0052FF] text-xs hover:underline">View on Basescan ↗</a>
+                  {/* Raw address + Basescan link: only this user themselves and the admin see it. */}
+                  {(isAdmin || (address && selectedUser.toLowerCase() === address.toLowerCase())) && (
+                    <>
+                      <p className="text-[#8A919E] text-sm truncate">{selectedUser.slice(0,8)}...{selectedUser.slice(-6)}</p>
+                      <a href={`https://basescan.org/address/${selectedUser}`} target="_blank" className="text-[#0052FF] text-xs hover:underline">View on Basescan ↗</a>
+                    </>
+                  )}
                 </div>
               </div>
               {isConnected && address && selectedUser.toLowerCase() !== address.toLowerCase() && (
