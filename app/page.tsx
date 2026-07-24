@@ -343,6 +343,25 @@ export default function Home() {
   const [posts, setPosts] = useState<Post[]>([])
   const [seenActivity, setSeenActivity] = useState<Record<string, number>>({})
 
+  // Scroll to a specific post's article in the feed and flash a highlight —
+  // shared by the /?post= deep-link below and by clicking a post in the
+  // Instagram-style "My Posts" grid on the profile tab.
+  const scrollToPost = (id: string, attemptsLeft = 10) => {
+    setActiveTab('feed')
+    const tryScroll = (left: number) => {
+      const el = document.getElementById(`post-${id}`)
+      if (!el) {
+        if (left > 0) setTimeout(() => tryScroll(left - 1), 100)
+        return
+      }
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      el.style.transition = 'background-color 1s'
+      el.style.backgroundColor = '#EAF1FF'
+      setTimeout(() => { el.style.backgroundColor = '' }, 2000)
+    }
+    tryScroll(attemptsLeft)
+  }
+
   // Deep-link: /post/<id> redirects into the app as /?post=<id>. Once the feed
   // has that post in the DOM, jump to it and flash a highlight. Runs at most
   // once per load (retries as posts stream in until the target appears).
@@ -351,16 +370,10 @@ export default function Home() {
     if (deepLinkedRef.current || typeof window === 'undefined') return
     const pid = new URLSearchParams(window.location.search).get('post')
     if (!pid) { deepLinkedRef.current = true; return }
-    // Make sure we're on the feed first — the post article only renders there,
-    // so switching tabs is required before the element can be found/scrolled to.
-    setActiveTab('feed')
     const el = document.getElementById(`post-${pid}`)
     if (!el) return
     deepLinkedRef.current = true
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    el.style.transition = 'background-color 1s'
-    el.style.backgroundColor = '#EAF1FF'
-    setTimeout(() => { el.style.backgroundColor = '' }, 2000)
+    scrollToPost(pid, 0)
   }, [posts])
 
   // Derive unseen activity count: likes+comments on user's posts since last visit to activity tab
@@ -3393,8 +3406,8 @@ export default function Home() {
                           <span className="text-xs text-[#8A919E]">{myPosts.length} post{myPosts.length !== 1 ? 's' : ''}</span>
                         </div>
                         <div className="grid grid-cols-3 gap-0.5 bg-[#EEF1F5]">
-                          {myPosts.slice(0, 9).map(post => (
-                            <button key={post.id.toString()} onClick={() => setActiveTab('feed')}
+                          {myPosts.map(post => (
+                            <button key={post.id.toString()} onClick={() => scrollToPost(post.id.toString())}
                               className="aspect-square bg-[#F7F9FC] hover:opacity-80 transition-opacity overflow-hidden relative">
                               {post.ipfsHash?.startsWith('vid_') ? (
                                 <div className="w-full h-full flex items-center justify-center bg-black">
@@ -3413,12 +3426,6 @@ export default function Home() {
                             </button>
                           ))}
                         </div>
-                        {myPosts.length > 9 && (
-                          <button onClick={() => setActiveTab('feed')}
-                            className="w-full py-2.5 text-xs text-[#0052FF] font-bold hover:bg-[#F0F4FF] transition-colors border-t border-[#EEF1F5]">
-                            View all {myPosts.length} posts →
-                          </button>
-                        )}
                       </div>
                     )}
 
