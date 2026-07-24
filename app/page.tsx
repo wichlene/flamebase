@@ -510,29 +510,60 @@ export default function Home() {
           }
         }
         if (!id) throw lastErr || new Error('wallet_sendCalls failed')
-        // Best-effort: resolve the bundle id to a real tx hash for the log.
-        for (let i = 0; i < 8 && !hash; i++) {
+        // Resolve the bundle id to a real tx hash AND its outcome. Previously
+        // this only checked for a transactionHash's presence — a REVERTED call
+        // still gets mined and gets a real hash, so a self-tip / any other
+        // revert was silently reported as a success ("Tipped $X" shown, no
+        // money ever moved). Check the receipt's status, not just its existence.
+        let callStatus: string | undefined
+        for (let i = 0; i < 14 && !hash; i++) {
           try {
             const st: any = await provider.request({ method: 'wallet_getCallsStatus', params: [id] })
-            const h = st?.receipts?.[0]?.transactionHash
-            if (h) hash = h as `0x${string}`
+            const receipt = st?.receipts?.[0]
+            const h = receipt?.transactionHash
+            if (h) {
+              hash = h as `0x${string}`
+              // EIP-5792 receipts report status as a hex string ('0x1'/'0x0'),
+              // and some hosts additionally/instead set a bundle-level status
+              // ('CONFIRMED'/'FAILED' or the 100/200/400/500 draft codes).
+              const rStatus = (receipt?.status ?? '').toString().toLowerCase()
+              const bStatus = (st?.status ?? '').toString().toLowerCase()
+              if (rStatus === '0x0' || rStatus === 'reverted' || bStatus === 'failed' || bStatus === '400' || bStatus === '500') {
+                callStatus = 'reverted'
+              }
+            }
           } catch {}
           if (!hash) await new Promise(r => setTimeout(r, 1500))
+        }
+        if (callStatus === 'reverted') {
+          throw new Error('CONTRACT_REVERT:transaction reverted on-chain')
         }
         // Didn't resolve in time — the bundle id is NOT a real tx hash (wrong
         // format for Basescan), so don't pass it off as one. Log it as
         // pending; the tx-log UI shows it without a (broken) explorer link.
-        if (!hash) pendingId = id
+        // This is now surfaced as an error rather than silently treated as
+        // success, since we genuinely don't know the outcome yet.
+        if (!hash) {
+          pendingId = id
+          throw new Error(`PENDING_UNCONFIRMED:${id}`)
+        }
       } catch (e: any) {
-        // Only a deliberate user rejection stops here; ANY other error
-        // (unsupported method, -32602 invalid params from a wallet that speaks
-        // a different 5792 dialect, etc.) falls through to the classic path so
-        // we never get stuck on the experimental route. The Farcaster wallet
-        // returns -32602 for wallet_sendCalls — that must degrade gracefully.
+        // Only a deliberate user rejection, a confirmed on-chain revert, or an
+        // unconfirmed-outcome bundle stop here; ANY other error (unsupported
+        // method, -32602 invalid params from a wallet that speaks a different
+        // 5792 dialect, etc.) falls through to the classic path so we never get
+        // stuck on the experimental route. The Farcaster wallet returns -32602
+        // for wallet_sendCalls — that must degrade gracefully.
+        //
+        // The revert/unconfirmed cases must NOT fall through: wallet_sendCalls
+        // already submitted a real on-chain transaction by that point, so
+        // retrying via the classic path would be a genuine second transaction
+        // (double-tip, double-post, …) rather than a harmless retry.
         const m = (e?.message || '').toLowerCase()
         const userRejected =
           e?.code === 4001 || m.includes('user rejected') || m.includes('user denied') || m.includes('rejected the request')
-        if (userRejected) throw e
+        const finalOutcome = m.startsWith('contract_revert:') || m.startsWith('pending_unconfirmed:')
+        if (userRejected || finalOutcome) throw e
       }
     }
 
@@ -570,9 +601,14 @@ export default function Home() {
 
   const txError = (e: unknown): string => {
     const msg = e instanceof Error ? e.message : String(e)
-    // A revert we caught in pre-flight simulation — show the contract's real
-    // reason verbatim so the user knows exactly what to fix.
+    // A revert we caught in pre-flight simulation OR confirmed after the fact
+    // via wallet_getCallsStatus — show the contract's real reason verbatim so
+    // the user knows exactly what to fix.
     if (msg.startsWith('CONTRACT_REVERT:')) return `⚠️ ${msg.slice('CONTRACT_REVERT:'.length).trim()}`
+    // The smart-wallet bundle never resolved to a confirmed outcome within our
+    // polling window — genuinely unknown, not a success. Point at the tx log
+    // rather than claiming it worked.
+    if (msg.startsWith('PENDING_UNCONFIRMED:')) return '⏳ Still confirming on-chain — check your activity/tx history in a moment before retrying.'
     // Diagnostic (Base App mini-app only): the in-app Smart Wallet swallows the
     // real reason behind its own opaque "transaction cannot be signed" toast.
     // Surface the raw provider error (code + first line) so we can finally see
@@ -1538,7 +1574,7 @@ export default function Home() {
       showToast('success', `Tipped $${usd}`)
     } catch (e) {
       console.error(e)
-      showToast('error', 'Tip failed — transaction rejected or reverted')
+      showToast('error', txError(e))
     }
     setLoadingAction(null)
   }
