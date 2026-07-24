@@ -57,6 +57,12 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
   const [sending, setSending] = useState(false)
   const endRef = useRef<HTMLDivElement>(null)
   const activeIdRef = useRef<string | null>(null)
+  // While a send() is in flight, the server thread doesn't have the new
+  // message yet — a poll landing mid-send would wholesale-replace `messages`
+  // with a shorter array and the optimistic bubble would flicker away until
+  // send()'s own post-send loadThread() restores it. Skip polls until send()
+  // settles instead.
+  const sendingRef = useRef(false)
 
   // Build username → address reverse lookup
   const usernameToAddress: Record<string, string> = {}
@@ -118,7 +124,7 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
     activeIdRef.current = activeId
     if (!activeId) return
     loadThread(activeId)
-    const t = setInterval(() => { if (activeIdRef.current) loadThread(activeIdRef.current) }, 3000)
+    const t = setInterval(() => { if (activeIdRef.current && !sendingRef.current) loadThread(activeIdRef.current) }, 3000)
     return () => clearInterval(t)
   }, [activeId, loadThread])
 
@@ -153,6 +159,7 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
     if (!text || !activeId || !me) return
     const peer = peerOf(activeId)
     setSending(true)
+    sendingRef.current = true
     // optimistic
     const optimistic: Msg = { id: `tmp-${Date.now()}`, from: me, text, ts: Date.now() }
     setMessages(prev => [...prev, optimistic])
@@ -176,6 +183,7 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
       setDraft(text)
       alert(e?.message || 'Send failed')
     }
+    sendingRef.current = false
     setSending(false)
   }
 

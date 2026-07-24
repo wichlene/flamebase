@@ -3,6 +3,7 @@
 import { parseEther, parseUnits, encodeFunctionData, erc20Abi, isAddress } from 'viem'
 import { CONTRACT_ABI, CONTRACT_ADDRESS } from './contract'
 import { TOOLS_ABI, TOOLS_ADDRESS, TOKEN_FACTORY_ABI, TOKEN_FACTORY_ADDRESS, DAO_ABI, DAO_ADDRESS } from './toolsContracts'
+import { safeSend, type RawCall, type MinimalProvider } from './safeSend'
 
 // USDC on Base (6 decimals).
 const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as const
@@ -26,13 +27,23 @@ type WalletLike = {
   sendTransaction: (args: any) => Promise<`0x${string}`>
 }
 
-// Minimal shape of viem's PublicClient we need for price/postId reads.
+// Minimal shape of viem's PublicClient we need for price/postId reads and
+// the safeSend pre-flight simulation / receipt check.
 type PublicClientLike = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   readContract: (args: any) => Promise<any>
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   waitForTransactionReceipt?: (args: any) => Promise<any>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  call: (args: any) => Promise<any>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  getTransactionReceipt: (args: any) => Promise<any>
 }
+
+// Whether the connected wallet is the Base App / Farcaster mini-app's
+// ERC-4337 Coinbase Smart Wallet — see lib/safeSend.ts for why that changes
+// how a transaction must be sent and verified.
+export type ExecContext = { isSmartWallet: boolean; provider?: MinimalProvider }
 
 const DEFAULT_LIKE_PRICE = parseEther('0.0001')
 const DEFAULT_COMMENT_PRICE = parseEther('0.0003')
@@ -272,9 +283,13 @@ export function validateAction(a: AgentAction): string | null {
       return null
     case 'log_entry':
       if (!args.text || typeof args.text !== 'string' || !args.text.trim()) return 'Log text is required.'
+      // Contract requires 1-280 bytes (require "1-280 chars").
+      if (new TextEncoder().encode(args.text).length > 280) return 'Log text is too long (max 280 characters).'
       return null
     case 'send_greeting':
       if (!args.greeting || typeof args.greeting !== 'string' || !args.greeting.trim()) return 'Greeting text is required.'
+      // Contract caps the greeting at 100 bytes (require "Max 100 chars").
+      if (new TextEncoder().encode(args.greeting).length > 100) return 'Greeting is too long (max 100 characters).'
       return null
     case 'deploy_token': {
       const { name, symbol, supply } = args
@@ -315,37 +330,54 @@ export function validateAction(a: AgentAction): string | null {
   }
 }
 
-/** Execute the action via the connected wallet. Returns the tx hash. */
-export async function executeAction(a: AgentAction, wallet: WalletLike, publicClient: PublicClientLike): Promise<`0x${string}`> {
+/**
+ * Execute the action via the connected wallet. Returns the tx hash.
+ * `ctx` carries whether this is the Base App's ERC-4337 smart wallet (and its
+ * EIP-1193 provider) so every send goes through safeSend's pre-flight
+ * simulation + UserOperationEvent check — without it, a smart-wallet
+ * "success" here can be an inner revert that silently moved nothing, exactly
+ * like the bug that used to hit tips/follows in the main feed.
+ */
+export async function executeAction(a: AgentAction, wallet: WalletLike, publicClient: PublicClientLike, ctx?: ExecContext): Promise<`0x${string}`> {
   if (!wallet.account) throw new Error('Wallet not connected')
+  const account = wallet.account.address
   const args = a.args as Record<string, any>
+
+  const send = (call: RawCall) => safeSend({
+    call,
+    account,
+    publicClient,
+    isSmartWallet: !!ctx?.isSmartWallet,
+    provider: ctx?.provider,
+    sendTransaction: c => wallet.sendTransaction({ to: c.to, data: c.data, value: c.value }),
+  })
 
   switch (a.tool) {
     case 'send_token': {
       const { to, amount, token } = args as { to: `0x${string}`; amount: string; token: string }
-      if (token === 'ETH') return wallet.sendTransaction({ to, value: parseEther(amount) })
+      if (token === 'ETH') return send({ to, value: parseEther(amount) })
       const data = encodeFunctionData({ abi: erc20Abi, functionName: 'transfer', args: [to, parseUnits(amount, 6)] })
-      return wallet.sendTransaction({ to: USDC_ADDRESS, data })
+      return send({ to: USDC_ADDRESS, data })
     }
 
     case 'like_post': {
       const postId = parsePostId(args.postId) ?? (await resolveLatestPostId(publicClient))
       const value = await effectiveFee(publicClient, 'likePrice', DEFAULT_LIKE_PRICE)
       const data = encodeFunctionData({ abi: CONTRACT_ABI, functionName: 'like', args: [postId] })
-      return wallet.sendTransaction({ to: CONTRACT_ADDRESS, data, value })
+      return send({ to: CONTRACT_ADDRESS, data, value })
     }
 
     case 'tip_post': {
       const postId = parsePostId(args.postId) ?? (await resolveLatestPostId(publicClient))
       const data = encodeFunctionData({ abi: CONTRACT_ABI, functionName: 'tip', args: [postId] })
-      return wallet.sendTransaction({ to: CONTRACT_ADDRESS, data, value: parseEther(String(args.amount)) })
+      return send({ to: CONTRACT_ADDRESS, data, value: parseEther(String(args.amount)) })
     }
 
     case 'comment_post': {
       const postId = parsePostId(args.postId) ?? (await resolveLatestPostId(publicClient))
       const value = await effectiveFee(publicClient, 'commentPrice', DEFAULT_COMMENT_PRICE)
       const data = encodeFunctionData({ abi: CONTRACT_ABI, functionName: 'comment', args: [postId, String(args.text)] })
-      return wallet.sendTransaction({ to: CONTRACT_ADDRESS, data, value })
+      return send({ to: CONTRACT_ADDRESS, data, value })
     }
 
     case 'create_post': {
@@ -359,7 +391,7 @@ export async function executeAction(a: AgentAction, wallet: WalletLike, publicCl
       const content = String(args.content ?? '').replace(/\[attached media ipfs:[^\]]*\]/gi, '').trim()
       const ipfsHash = typeof args.ipfsHash === 'string' ? args.ipfsHash.trim() : ''
       const data = encodeFunctionData({ abi: CONTRACT_ABI, functionName: 'createPost', args: [content, ipfsHash] })
-      return wallet.sendTransaction({ to: CONTRACT_ADDRESS, data, value })
+      return send({ to: CONTRACT_ADDRESS, data, value })
     }
 
     case 'create_profile': {
@@ -367,35 +399,35 @@ export async function executeAction(a: AgentAction, wallet: WalletLike, publicCl
       if (await hasProfile(publicClient, wallet.account.address))
         throw new AgentActionError('You already have a FlameBase profile.')
       const data = encodeFunctionData({ abi: CONTRACT_ABI, functionName: 'createProfile', args: [String(args.username), ''] })
-      return wallet.sendTransaction({ to: CONTRACT_ADDRESS, data })
+      return send({ to: CONTRACT_ADDRESS, data })
     }
 
     case 'check_in': {
       requireAddress(TOOLS_ADDRESS, 'FlameBase Tools')
       const value = await fixedFeeWei()
       const data = encodeFunctionData({ abi: TOOLS_ABI, functionName: 'checkIn', args: [] })
-      return wallet.sendTransaction({ to: TOOLS_ADDRESS, data, value })
+      return send({ to: TOOLS_ADDRESS, data, value })
     }
 
     case 'tap_counter': {
       requireAddress(TOOLS_ADDRESS, 'FlameBase Tools')
       const value = await fixedFeeWei()
       const data = encodeFunctionData({ abi: TOOLS_ABI, functionName: 'count', args: [] })
-      return wallet.sendTransaction({ to: TOOLS_ADDRESS, data, value })
+      return send({ to: TOOLS_ADDRESS, data, value })
     }
 
     case 'log_entry': {
       requireAddress(TOOLS_ADDRESS, 'FlameBase Tools')
       const value = await fixedFeeWei()
       const data = encodeFunctionData({ abi: TOOLS_ABI, functionName: 'log', args: [String(args.text)] })
-      return wallet.sendTransaction({ to: TOOLS_ADDRESS, data, value })
+      return send({ to: TOOLS_ADDRESS, data, value })
     }
 
     case 'send_greeting': {
       requireAddress(TOOLS_ADDRESS, 'FlameBase Tools')
       const value = await fixedFeeWei()
       const data = encodeFunctionData({ abi: TOOLS_ABI, functionName: 'greet', args: [String(args.greeting)] })
-      return wallet.sendTransaction({ to: TOOLS_ADDRESS, data, value })
+      return send({ to: TOOLS_ADDRESS, data, value })
     }
 
     case 'deploy_token': {
@@ -406,7 +438,7 @@ export async function executeAction(a: AgentAction, wallet: WalletLike, publicCl
         functionName: 'deployToken',
         args: [String(args.name), String(args.symbol), BigInt(args.supply)],
       })
-      return wallet.sendTransaction({ to: TOKEN_FACTORY_ADDRESS, data, value })
+      return send({ to: TOKEN_FACTORY_ADDRESS, data, value })
     }
 
     case 'create_proposal': {
@@ -417,7 +449,7 @@ export async function executeAction(a: AgentAction, wallet: WalletLike, publicCl
         functionName: 'propose',
         args: [String(args.title), String(args.description ?? '')],
       })
-      return wallet.sendTransaction({ to: DAO_ADDRESS, data, value })
+      return send({ to: DAO_ADDRESS, data, value })
     }
 
     case 'vote_proposal': {
@@ -428,7 +460,7 @@ export async function executeAction(a: AgentAction, wallet: WalletLike, publicCl
         functionName: 'vote',
         args: [BigInt(args.proposalId), Boolean(args.support)],
       })
-      return wallet.sendTransaction({ to: DAO_ADDRESS, data, value })
+      return send({ to: DAO_ADDRESS, data, value })
     }
 
     case 'swap_token': {
@@ -449,7 +481,7 @@ export async function executeAction(a: AgentAction, wallet: WalletLike, publicCl
         })) as bigint
         if (allowance < amountIn) {
           const approveData = encodeFunctionData({ abi: erc20Abi, functionName: 'approve', args: [SWAP_ROUTER_ADDRESS, amountIn] })
-          const approveHash = await wallet.sendTransaction({ to: USDC_ADDRESS, data: approveData })
+          const approveHash = await send({ to: USDC_ADDRESS, data: approveData })
           if (publicClient.waitForTransactionReceipt) await publicClient.waitForTransactionReceipt({ hash: approveHash })
         }
       }
@@ -466,14 +498,14 @@ export async function executeAction(a: AgentAction, wallet: WalletLike, publicCl
           abi: SWAP_ROUTER_ABI, functionName: 'unwrapWETH9', args: [amountOutMinimum, wallet.account.address],
         })
         const data = encodeFunctionData({ abi: SWAP_ROUTER_ABI, functionName: 'multicall', args: [[swapData, unwrapData]] })
-        return wallet.sendTransaction({ to: SWAP_ROUTER_ADDRESS, data, value })
+        return send({ to: SWAP_ROUTER_ADDRESS, data, value })
       }
 
       const data = encodeFunctionData({
         abi: SWAP_ROUTER_ABI, functionName: 'exactInputSingle',
         args: [{ tokenIn, tokenOut, fee, recipient: wallet.account.address, amountIn, amountOutMinimum, sqrtPriceLimitX96: 0n }],
       })
-      return wallet.sendTransaction({ to: SWAP_ROUTER_ADDRESS, data, value })
+      return send({ to: SWAP_ROUTER_ADDRESS, data, value })
     }
 
     case 'trade_token': {
@@ -507,11 +539,11 @@ export async function executeAction(a: AgentAction, wallet: WalletLike, publicCl
         const allowance = (await publicClient.readContract({ address: token, abi: erc20Abi, functionName: 'allowance', args: [sender, d.router] })) as bigint
         if (allowance < amountIn) {
           const approveData = encodeFunctionData({ abi: erc20Abi, functionName: 'approve', args: [d.router, amountIn] })
-          const approveHash = await wallet.sendTransaction({ to: token, data: approveData })
+          const approveHash = await send({ to: token, data: approveData })
           if (publicClient.waitForTransactionReceipt) await publicClient.waitForTransactionReceipt({ hash: approveHash })
         }
       }
-      return wallet.sendTransaction({ to: d.to, data: d.data, value: BigInt(d.value || '0') })
+      return send({ to: d.to, data: d.data, value: BigInt(d.value || '0') })
     }
 
     default:

@@ -1920,7 +1920,7 @@ export default function Home() {
       setBoostedPosts(next)
       localStorage.setItem('flamebase_boosted', JSON.stringify(next))
       showToast('success', '🚀 Boosted! Post will appear at the top for 24h')
-    } catch { showToast('error', 'Boost failed') }
+    } catch (e) { showToast('error', txError(e)) }
     setLoadingAction(null)
   }
 
@@ -2871,6 +2871,14 @@ export default function Home() {
                                 className="flex items-center gap-1 text-[#5B6271] hover:text-[#0052FF] hover:bg-[#E6EEFF] rounded-xl px-3 py-2 text-sm transition-all">
                                 <span className="text-lg">↗</span>
                               </button>
+
+                              {isOwnPost && !((boostedPosts[key] || 0) > Date.now()) && (
+                                <button onClick={() => boostPost(key)} disabled={loadingAction === `boost-${key}`}
+                                  title="Boost this post to the top of the feed for 24h (~$0.09)"
+                                  className="flex items-center gap-1 text-orange-600 hover:bg-orange-50 disabled:opacity-40 rounded-xl px-3 py-2 text-sm font-bold transition-all ml-auto">
+                                  {loadingAction === `boost-${key}` ? '…' : '🚀'}
+                                </button>
+                              )}
 
                               {!isOwnPost && (
                               <div className="flex items-center gap-1 ml-auto">

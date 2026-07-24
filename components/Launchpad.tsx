@@ -1,10 +1,10 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useAccount, usePublicClient, useSendTransaction, useWatchAsset, useWriteContract } from 'wagmi'
-import { erc20Abi, formatEther, formatUnits, parseEther, parseUnits } from 'viem'
-import { base } from 'wagmi/chains'
+import { useAccount, usePublicClient, useWatchAsset } from 'wagmi'
+import { encodeFunctionData, erc20Abi, formatUnits, parseEther, parseUnits } from 'viem'
 import { BUILDER_CODE_DATA_SUFFIX } from '../lib/builderCode'
+import { useSafeSend } from '../lib/useSafeSend'
 
 /*
   B20 DEX — a Uniswap-Explore-style table of every B20 token on Base, with
@@ -96,12 +96,10 @@ export default function Launchpad() {
   // Base Builder Code: attribute every DEX tx to FlameBase. Skipped in the
   // Farcaster/Base App mini-app (its preview can't simulate suffixed calldata)
   // — same rule as the main app's tx wrapper.
-  const suffixOpt = connector?.id === 'farcaster' ? {} : { dataSuffix: BUILDER_CODE_DATA_SUFFIX }
   const suffixData = (data: `0x${string}`): `0x${string}` =>
     connector?.id === 'farcaster' ? data : ((data + BUILDER_CODE_DATA_SUFFIX.slice(2)) as `0x${string}`)
   const publicClient = usePublicClient()
-  const { writeContractAsync } = useWriteContract()
-  const { sendTransactionAsync } = useSendTransaction()
+  const safeSend = useSafeSend()
   const { watchAssetAsync } = useWatchAsset()
 
   const [toks, setToks] = useState<Tok[]>([])
@@ -251,14 +249,16 @@ export default function Launchpad() {
       // approve exact token amount to the router — WAIT for it to confirm before adding
       const allowance = await publicClient.readContract({ address: token, abi: erc20Abi, functionName: 'allowance', args: [address, AERO_ROUTER] }) as bigint
       if (allowance < amtTok) {
-        const approveHash = await writeContractAsync({ chainId: base.id, address: token, abi: erc20Abi, functionName: 'approve', args: [AERO_ROUTER, amtTok], ...suffixOpt })
+        const approveData = encodeFunctionData({ abi: erc20Abi, functionName: 'approve', args: [AERO_ROUTER, amtTok] })
+        const approveHash = await safeSend({ to: token, data: suffixData(approveData) })
         await publicClient.waitForTransactionReceipt({ hash: approveHash })
       }
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 1200)
-      const hash = await writeContractAsync({
-        chainId: base.id, address: AERO_ROUTER, abi: AERO_ROUTER_ABI, functionName: 'addLiquidityETH',
-        args: [token, false, amtTok, 0n, 0n, address, deadline], value: amtEth, ...suffixOpt,
+      const addLiqData = encodeFunctionData({
+        abi: AERO_ROUTER_ABI, functionName: 'addLiquidityETH',
+        args: [token, false, amtTok, 0n, 0n, address, deadline],
       })
+      const hash = await safeSend({ to: AERO_ROUTER, data: suffixData(addLiqData), value: amtEth })
       const receipt = await publicClient.waitForTransactionReceipt({ hash })
       if (receipt.status !== 'success') throw new Error('Add-liquidity transaction reverted on-chain — no pool was created.')
       setLiqNote({ ok: true, t: 'Liquidity added ✓ — pool created. Aggregator indexing takes a few minutes before buys route to it.' })
@@ -341,22 +341,25 @@ export default function Launchpad() {
         const amt = parseUnits(amount, active.dec)
         const allowance = await publicClient.readContract({ address: active.token, abi: erc20Abi, functionName: 'allowance', args: [address!, spender] }) as bigint
         if (allowance < amt) {
-          const approveHash = await writeContractAsync({ chainId: base.id, address: active.token, abi: erc20Abi, functionName: 'approve', args: [spender, amt], ...suffixOpt })
+          const approveData = encodeFunctionData({ abi: erc20Abi, functionName: 'approve', args: [spender, amt] })
+          const approveHash = await safeSend({ to: active.token, data: suffixData(approveData) })
           await publicClient.waitForTransactionReceipt({ hash: approveHash })
         }
       }
 
       if (quote.venue === 'kyber') {
-        await sendTransactionAsync({ chainId: base.id, to: quote.to!, data: suffixData(quote.data!), value: BigInt(quote.value || '0') })
+        await safeSend({ to: quote.to!, data: suffixData(quote.data!), value: BigInt(quote.value || '0') })
       } else {
         // Aerodrome direct: our own volatile WETH pool
         const minOut = quote.amountOut - (quote.amountOut * 1000n) / 10000n // 10% slippage
         const deadline = BigInt(Math.floor(Date.now() / 1000) + 1200)
         const routes = [{ from: (side === 'buy' ? WETH : active.token), to: (side === 'buy' ? active.token : WETH), stable: false, factory: AERO_FACTORY }]
         if (side === 'buy') {
-          await writeContractAsync({ chainId: base.id, address: AERO_ROUTER, abi: AERO_ROUTER_ABI, functionName: 'swapExactETHForTokens', args: [minOut, routes, address!, deadline], value: parseEther(amount), ...suffixOpt })
+          const swapData = encodeFunctionData({ abi: AERO_ROUTER_ABI, functionName: 'swapExactETHForTokens', args: [minOut, routes, address!, deadline] })
+          await safeSend({ to: AERO_ROUTER, data: suffixData(swapData), value: parseEther(amount) })
         } else {
-          await writeContractAsync({ chainId: base.id, address: AERO_ROUTER, abi: AERO_ROUTER_ABI, functionName: 'swapExactTokensForETH', args: [parseUnits(amount, active.dec), minOut, routes, address!, deadline], ...suffixOpt })
+          const swapData = encodeFunctionData({ abi: AERO_ROUTER_ABI, functionName: 'swapExactTokensForETH', args: [parseUnits(amount, active.dec), minOut, routes, address!, deadline] })
+          await safeSend({ to: AERO_ROUTER, data: suffixData(swapData) })
         }
       }
       setNote({ ok: true, t: `${side === 'buy' ? 'Bought' : 'Sold'} ✓ — check your wallet` }); setAmount(''); setQuote(null)
@@ -588,7 +591,7 @@ export default function Launchpad() {
               {quote && Number(amount) > 0 && (
                 <div className="mt-3 bg-[#F0F4FF] rounded-2xl px-4 py-3 flex items-center justify-between">
                   <span className="text-xs text-[#5B6271]">You receive →</span>
-                  <span className="font-black text-[#0A0B0D] text-right">{side === 'buy' ? `${fmtTok(Number(formatEther(quote.amountOut)))} ${active.symbol}` : `${fmtTok(Number(formatEther(quote.amountOut)))} ETH`}</span>
+                  <span className="font-black text-[#0A0B0D] text-right">{side === 'buy' ? `${fmtTok(Number(formatUnits(quote.amountOut, active.dec)))} ${active.symbol}` : `${fmtTok(Number(formatUnits(quote.amountOut, 18)))} ETH`}</span>
                 </div>
               )}
 

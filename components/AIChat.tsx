@@ -50,7 +50,7 @@ export default function AIChat() {
   // lands on the create_post action even if the model forgets the ipfsHash arg.
   const lastAttachRef = useRef<string | null>(null)
   const endRef = useRef<HTMLDivElement>(null)
-  const { isConnected } = useAccount()
+  const { isConnected, connector } = useAccount()
   const { data: walletClient } = useWalletClient()
   const publicClient = usePublicClient()
 
@@ -164,7 +164,14 @@ export default function AIChat() {
     }
     updateAt(i, { actionState: 'running', actionError: undefined })
     try {
-      const hash = await executeAction(m.action, walletClient, publicClient)
+      // Base App / Farcaster mini-app connects an ERC-4337 Coinbase Smart
+      // Wallet — route through EIP-5792 + verify the real UserOperation
+      // outcome (see lib/safeSend.ts), or a "successful" tx here can be a
+      // silent inner revert that moved nothing.
+      const isSmartWallet = connector?.id === 'farcaster'
+      let provider: unknown
+      if (isSmartWallet) { try { provider = await connector!.getProvider() } catch {} }
+      const hash = await executeAction(m.action, walletClient, publicClient, { isSmartWallet, provider: provider as any })
       updateAt(i, { actionState: 'done', actionTx: hash })
     } catch (e) {
       updateAt(i, { actionState: 'error', actionError: friendlyError(e) })
