@@ -348,6 +348,12 @@ export default function Home() {
   // Instagram-style "My Posts" grid on the profile tab.
   const scrollToPost = (id: string, attemptsLeft = 10) => {
     setActiveTab('feed')
+    // A leftover search/bookmarks filter can hide the target post from the
+    // feed entirely (it's still in `posts`, so it shows in the profile grid,
+    // but never gets an <article> in the DOM) — clear both so the post we're
+    // jumping to is guaranteed to actually render.
+    setSearchQuery('')
+    setShowBookmarks(false)
     const tryScroll = (left: number) => {
       const el = document.getElementById(`post-${id}`)
       if (!el) {
@@ -3344,6 +3350,38 @@ export default function Home() {
                       </div>
                     </div>
 
+                    {/* My Posts grid — right below the profile card, like Instagram's grid
+                        is the primary content, not buried under other widgets. */}
+                    {myPosts.length > 0 && (
+                      <div className="bg-white border border-[#E4E7EB] rounded-2xl overflow-hidden shadow-sm mb-4">
+                        <div className="flex items-center justify-between px-5 py-3 border-b border-[#EEF1F5]">
+                          <h3 className="font-black text-[#0A0B0D]">My Posts</h3>
+                          <span className="text-xs text-[#8A919E]">{myPosts.length} post{myPosts.length !== 1 ? 's' : ''}</span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-0.5 bg-[#EEF1F5]">
+                          {myPosts.map(post => (
+                            <button key={post.id.toString()} onClick={() => scrollToPost(post.id.toString())}
+                              className="aspect-square bg-[#F7F9FC] hover:opacity-80 transition-opacity overflow-hidden relative">
+                              {post.ipfsHash?.startsWith('vid_') ? (
+                                <div className="w-full h-full flex items-center justify-center bg-black">
+                                  <span className="text-white text-2xl">▶</span>
+                                </div>
+                              ) : post.ipfsHash ? (
+                                <IpfsImage hash={post.ipfsHash} className="w-full h-full object-cover" alt="" />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center p-2">
+                                  <p className="text-xs text-[#5B6271] text-center line-clamp-3 leading-tight">{post.content}</p>
+                                </div>
+                              )}
+                              <div className="absolute bottom-1 right-1 flex items-center gap-0.5 bg-black/50 rounded px-1 py-0.5">
+                                <span className="text-[10px] text-white">🔥{post.likes.toString()}</span>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Check-in streak badge */}
                     {TOOLS_DEPLOYED && Number(userStreakDays || 0) > 0 && (
                       <div className="bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200 rounded-2xl p-4 mb-4 flex items-center justify-between">
@@ -3397,37 +3435,6 @@ export default function Home() {
                         </div>
                       )
                     })()}
-
-                    {/* My Posts grid */}
-                    {myPosts.length > 0 && (
-                      <div className="bg-white border border-[#E4E7EB] rounded-2xl overflow-hidden shadow-sm mb-4">
-                        <div className="flex items-center justify-between px-5 py-3 border-b border-[#EEF1F5]">
-                          <h3 className="font-black text-[#0A0B0D]">My Posts</h3>
-                          <span className="text-xs text-[#8A919E]">{myPosts.length} post{myPosts.length !== 1 ? 's' : ''}</span>
-                        </div>
-                        <div className="grid grid-cols-3 gap-0.5 bg-[#EEF1F5]">
-                          {myPosts.map(post => (
-                            <button key={post.id.toString()} onClick={() => scrollToPost(post.id.toString())}
-                              className="aspect-square bg-[#F7F9FC] hover:opacity-80 transition-opacity overflow-hidden relative">
-                              {post.ipfsHash?.startsWith('vid_') ? (
-                                <div className="w-full h-full flex items-center justify-center bg-black">
-                                  <span className="text-white text-2xl">▶</span>
-                                </div>
-                              ) : post.ipfsHash ? (
-                                <IpfsImage hash={post.ipfsHash} className="w-full h-full object-cover" alt="" />
-                              ) : (
-                                <div className="w-full h-full flex items-center justify-center p-2">
-                                  <p className="text-xs text-[#5B6271] text-center line-clamp-3 leading-tight">{post.content}</p>
-                                </div>
-                              )}
-                              <div className="absolute bottom-1 right-1 flex items-center gap-0.5 bg-black/50 rounded px-1 py-0.5">
-                                <span className="text-[10px] text-white">🔥{post.likes.toString()}</span>
-                              </div>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
 
                     {/* Admin only */}
                     {isAdmin && (
