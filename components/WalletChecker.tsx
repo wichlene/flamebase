@@ -190,7 +190,7 @@ function generateCard(result: WalletResult, address: string): string {
   return canvas.toDataURL('image/png')
 }
 
-export default function WalletChecker({ onPay, compact }: { onPay?: () => Promise<void>; compact?: boolean }) {
+export default function WalletChecker({ onPay, compact, targetAddress }: { onPay?: () => Promise<void>; compact?: boolean; targetAddress?: string }) {
   const { data: walletClient } = useWalletClient()
   const [loading, setLoading] = useState(false)
   const [loadStep, setLoadStep] = useState(0)
@@ -198,10 +198,19 @@ export default function WalletChecker({ onPay, compact }: { onPay?: () => Promis
   const [error, setError] = useState('')
   const [sharing, setSharing] = useState<null | 'download' | 'x' | 'fc'>(null)
 
-  const address = walletClient?.account?.address
+  // Admin-only override: analyze an arbitrary address instead of the
+  // connected wallet's own (everyone else only ever sees their own analysis).
+  const address = targetAddress || walletClient?.account?.address
 
   const mountedRef = useRef(true)
   useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false } }, [])
+
+  // Admin lookups fetch immediately on mount instead of requiring a second
+  // "Analyze" click after the address has already been submitted once.
+  useEffect(() => {
+    if (targetAddress) run()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetAddress])
 
   const run = async () => {
     if (!address) return

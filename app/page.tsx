@@ -143,6 +143,45 @@ function IpfsVideo({ hash, className }: { hash: string; className?: string }) {
   )
 }
 
+// Renders post/comment text with clickable #hashtags, @mentions, and
+// auto-linked URLs/bare domains (e.g. "flamebase.xyz") — previously only
+// hashtags were clickable; mentions and URLs rendered as inert plain text.
+const RICH_TEXT_RE = /(#[\p{L}0-9_]{2,30}|@[\w]+|https?:\/\/[^\s]+|www\.[^\s]+|\b[a-zA-Z0-9-]+\.(?:com|xyz|io|org|net|eth|app|dev|co)\b(?:\/[^\s]*)?)/gu
+function RichText({ text, onHashtag, onMention }: { text: string; onHashtag: (tag: string) => void; onMention: (handle: string) => void }) {
+  return (
+    <>
+      {text.split(RICH_TEXT_RE).map((part, i) => {
+        if (!part) return null
+        if (part.startsWith('#')) {
+          return (
+            <span key={i} role="button" tabIndex={0}
+              onClick={(e) => { e.stopPropagation(); onHashtag(part.toLowerCase()) }}
+              onKeyDown={(e) => { if (e.key === 'Enter') onHashtag(part.toLowerCase()) }}
+              className="text-[#0052FF] hover:underline cursor-pointer font-semibold">{part}</span>
+          )
+        }
+        if (part.startsWith('@')) {
+          return (
+            <span key={i} role="button" tabIndex={0}
+              onClick={(e) => { e.stopPropagation(); onMention(part) }}
+              onKeyDown={(e) => { if (e.key === 'Enter') onMention(part) }}
+              className="text-[#0052FF] hover:underline cursor-pointer font-semibold">{part}</span>
+          )
+        }
+        if (/^(https?:\/\/|www\.)/i.test(part) || /\.(com|xyz|io|org|net|eth|app|dev|co)(\/|$)/i.test(part)) {
+          const href = /^https?:\/\//i.test(part) ? part : `https://${part}`
+          return (
+            <a key={i} href={href} target="_blank" rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="text-[#0052FF] hover:underline break-all">{part}</a>
+          )
+        }
+        return <span key={i}>{part}</span>
+      })}
+    </>
+  )
+}
+
 function EmojiPicker({ onSelect, align = 'left' }: { onSelect: (emoji: string) => void; align?: 'left' | 'right' }) {
   const [open, setOpen] = useState(false)
   const emojis = [
@@ -1152,6 +1191,10 @@ export default function Home() {
   const hasProfile = myProfile && myProfile[2]
   const isAdmin = address?.toLowerCase() === ADMIN_ADDRESS.toLowerCase()
   const isWrongNetwork = isConnected && chainId !== base.id
+  // Admin-only wallet lookup — everyone else can only ever analyze their own
+  // connected wallet via WalletChecker.
+  const [adminLookupInput, setAdminLookupInput] = useState('')
+  const [adminLookupTarget, setAdminLookupTarget] = useState('')
 
   // Fetch ETH price for $0.04 calculation
   useEffect(() => {
@@ -2748,19 +2791,10 @@ export default function Home() {
                                   </div>
                                 )
                               }
-                              // Normal content: hashtags + @mentions
+                              // Normal content: hashtags + @mentions + links
                               return (
                                 <p className="text-[#0A0B0D] text-[15px] leading-relaxed mb-3 whitespace-pre-wrap">
-                                  {content.split(/(#[\p{L}0-9_]{2,30}|@[\w]+)/gu).map((part, i) =>
-                                    part.startsWith('#')
-                                      ? <span key={i} role="button" tabIndex={0}
-                                          onClick={(e) => { e.stopPropagation(); setSearchQuery(part.toLowerCase()) }}
-                                          onKeyDown={(e) => { if (e.key === 'Enter') setSearchQuery(part.toLowerCase()) }}
-                                          className="text-[#0052FF] hover:underline cursor-pointer font-semibold">{part}</span>
-                                      : part.startsWith('@')
-                                        ? <span key={i} className="text-[#0052FF] font-semibold">{part}</span>
-                                        : <span key={i}>{part}</span>
-                                  )}
+                                  <RichText text={content} onHashtag={setSearchQuery} onMention={(h) => setSearchQuery(h.toLowerCase())} />
                                 </p>
                               )
                             })()}
@@ -2855,7 +2889,7 @@ export default function Home() {
                                     <span className="font-bold text-sm text-[#0A0B0D]">{getUsername(c.commenter)}</span>
                                     <span className="text-[#8A919E] text-xs">{timeAgo(c.timestamp)}</span>
                                   </div>
-                                  {cText && <p className="text-[#0A0B0D] text-sm leading-relaxed">{cText}</p>}
+                                  {cText && <p className="text-[#0A0B0D] text-sm leading-relaxed"><RichText text={cText} onHashtag={setSearchQuery} onMention={(h) => setSearchQuery(h.toLowerCase())} /></p>}
                                   {imgHash && (
                                     <IpfsImage hash={imgHash} className="mt-1.5 rounded-xl max-h-64 border border-[#EEF1F5]" alt="comment attachment" />
                                   )}
@@ -3436,6 +3470,29 @@ export default function Home() {
                           >
                             {deployingLogoNft ? 'Deploying… (1-2 min)' : FLAME_NFT_ADDRESS ? '🔄 Re-deploy' : '🎨 Deploy FlameBase Logo NFT'}
                           </button>
+                        </div>
+
+                        {/* Admin-only wallet lookup — no other user can view someone else's portfolio */}
+                        <div className="bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl p-4 mb-3">
+                          <p className="text-[#5B6271] text-xs font-semibold uppercase tracking-wider mb-2">🔍 Analyze any wallet</p>
+                          <div className="flex gap-2 mb-3">
+                            <input type="text" placeholder="0x… address to analyze"
+                              value={adminLookupInput}
+                              onChange={e => setAdminLookupInput(e.target.value.trim())}
+                              className="flex-1 min-w-0 bg-white border border-[#E4E7EB] rounded-lg px-3 py-2 text-xs font-mono text-[#0A0B0D] placeholder-[#8A919E] focus:outline-none focus:border-[#0052FF]"
+                            />
+                            <button
+                              onClick={() => { if (/^0x[a-fA-F0-9]{40}$/.test(adminLookupInput)) setAdminLookupTarget(adminLookupInput) }}
+                              disabled={!/^0x[a-fA-F0-9]{40}$/.test(adminLookupInput)}
+                              className="flex-shrink-0 bg-[#0052FF] hover:bg-[#1652F0] text-white disabled:opacity-40 px-4 py-2 rounded-lg text-xs font-bold transition-colors">
+                              Analyze
+                            </button>
+                          </div>
+                          {adminLookupTarget && (
+                            <div className="bg-white border border-[#E4E7EB] rounded-xl overflow-hidden">
+                              <WalletChecker key={adminLookupTarget} targetAddress={adminLookupTarget} compact />
+                            </div>
+                          )}
                         </div>
 
                         <div className="space-y-2">
