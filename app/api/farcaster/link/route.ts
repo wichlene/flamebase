@@ -6,9 +6,10 @@ import { verifyWalletAuth } from '../../../../lib/walletAuth'
 // (which only sees wallet addresses in events) can map a post author back to a
 // Farcaster FID and deliver an in-app notification.
 //
-// Requires a signature proving control of `address` — otherwise anyone could
-// POST an arbitrary victim address here and redirect that victim's outgoing
-// notifications to their own FID.
+// Requires a signature proving control of `address`, bound to this exact fid
+// — otherwise a signature obtained for one fid could be replayed with a
+// different (attacker-chosen) fid in the body, silently rerouting the
+// victim's outgoing notifications to the attacker's Farcaster inbox.
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {
@@ -18,7 +19,7 @@ export async function POST(req: NextRequest) {
     if (!f || !isAddr(address || '')) {
       return NextResponse.json({ ok: false, error: 'bad request' }, { status: 400 })
     }
-    if (!(await verifyWalletAuth('link', address, timestamp, signature))) {
+    if (!(await verifyWalletAuth('link', address, timestamp, signature, String(f)))) {
       return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
     }
     await linkAddrFid(address, f)

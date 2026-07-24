@@ -175,7 +175,11 @@ let memCursor: string | null = null
 // range is never processed twice, which would double-send notifications.
 // Redis SET NX with a TTL acts as a lock that self-expires if a run crashes.
 let memLockUntil = 0
-export async function acquireScanLock(ttlSec = 55): Promise<boolean> {
+// Default TTL must comfortably exceed the scan route's own maxDuration (60s)
+// — otherwise the lock can self-expire mid-run (a busy block range doing
+// per-event on-chain reads can plausibly take 55-60s), letting an overlapping
+// cron retry acquire it and reprocess the same range, double-sending notifications.
+export async function acquireScanLock(ttlSec = 120): Promise<boolean> {
   if (useRedis) {
     const res = await redis(['SET', 'fb:notif:scanlock', '1', 'NX', 'EX', ttlSec])
     return res === 'OK'

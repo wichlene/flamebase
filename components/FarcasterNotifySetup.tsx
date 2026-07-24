@@ -42,19 +42,33 @@ export default function FarcasterNotifySetup() {
     return () => { cancelled = true }
   }, [])
 
+  // `status` was previously never reset, so switching to a different
+  // connected address after completing setup for one address left the
+  // button permanently hidden ('done') for every subsequent address, with no
+  // way to link/register the new one short of a full page reload.
+  useEffect(() => {
+    setStatus('idle')
+    setErrorMsg('')
+    setDismissed(false)
+  }, [address])
+
   const enable = async () => {
     if (!address || !fid) return
     setStatus('working')
     setErrorMsg('')
     try {
-      const sign = async (action: string) => {
+      // Bind each signature to the SPECIFIC data it authorizes (not just
+      // "address signed something for this action") — otherwise a signature
+      // obtained for one fid/token could be replayed with a different,
+      // attacker-controlled fid/url/token in the request body.
+      const sign = async (action: string, payload: string) => {
         const timestamp = Date.now()
-        const signature = await signMessageAsync({ message: authMessage(action, address, timestamp) })
+        const signature = await signMessageAsync({ message: authMessage(action, address, timestamp, payload) })
         return { timestamp, signature }
       }
 
       // 1. Link fid ↔ address.
-      const { timestamp: lt, signature: ls } = await sign('link')
+      const { timestamp: lt, signature: ls } = await sign('link', String(fid))
       const linkRes = await fetch('/api/farcaster/link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -76,7 +90,7 @@ export default function FarcasterNotifySetup() {
         throw new Error('Farcaster did not return a notification token — check notifications are allowed for FlameBase in your client settings.')
       }
 
-      const { timestamp: tt, signature: ts } = await sign('token')
+      const { timestamp: tt, signature: ts } = await sign('token', `${fid}:${nd.url}:${nd.token}`)
       const tokenRes = await fetch('/api/farcaster/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

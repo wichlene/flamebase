@@ -1214,6 +1214,10 @@ export default function Home() {
   // connected wallet via WalletChecker.
   const [adminLookupInput, setAdminLookupInput] = useState('')
   const [adminLookupTarget, setAdminLookupTarget] = useState('')
+  // Bumped on every "Analyze" click so re-submitting the SAME address still
+  // remounts WalletChecker (setAdminLookupTarget alone is a no-op re-render
+  // when the string is unchanged, since React bails out on an identical value).
+  const [adminLookupNonce, setAdminLookupNonce] = useState(0)
 
   // Fetch ETH price for $0.04 calculation
   useEffect(() => {
@@ -2947,7 +2951,7 @@ export default function Home() {
                                     placeholder={replyingTo[key] ? t('replyPlaceholder', { user: replyingTo[key] }) : t('commentPlaceholder')}
                                     value={commentTexts[key] || ''}
                                     onChange={e => setCommentTexts(prev => ({ ...prev, [key]: e.target.value }))}
-                                    onKeyDown={e => e.key === 'Enter' && handleComment(post.id)}
+                                    onKeyDown={e => e.key === 'Enter' && !isCommenting && handleComment(post.id)}
                                     enterKeyHint="send"
                                     className="flex-1 min-w-[140px] bg-white border border-[#E4E7EB] rounded-xl px-3 py-2 text-sm text-[#0A0B0D] placeholder-[#8A919E] focus:outline-none focus:border-[#0052FF]"
                                   />
@@ -3351,15 +3355,21 @@ export default function Home() {
                     </div>
 
                     {/* My Posts grid — right below the profile card, like Instagram's grid
-                        is the primary content, not buried under other widgets. */}
-                    {myPosts.length > 0 && (
+                        is the primary content, not buried under other widgets.
+                        Excludes hiddenPosts: those have no <article> in the feed DOM
+                        (filtered out of visiblePosts), so a thumbnail for one would be
+                        clickable but scrollToPost could never find/reach it. */}
+                    {(() => {
+                      const shownPosts = myPosts.filter(p => !hiddenPosts.has(p.id.toString()))
+                      if (shownPosts.length === 0) return null
+                      return (
                       <div className="bg-white border border-[#E4E7EB] rounded-2xl overflow-hidden shadow-sm mb-4">
                         <div className="flex items-center justify-between px-5 py-3 border-b border-[#EEF1F5]">
                           <h3 className="font-black text-[#0A0B0D]">My Posts</h3>
-                          <span className="text-xs text-[#8A919E]">{myPosts.length} post{myPosts.length !== 1 ? 's' : ''}</span>
+                          <span className="text-xs text-[#8A919E]">{shownPosts.length} post{shownPosts.length !== 1 ? 's' : ''}</span>
                         </div>
                         <div className="grid grid-cols-3 gap-0.5 bg-[#EEF1F5]">
-                          {myPosts.map(post => (
+                          {shownPosts.map(post => (
                             <button key={post.id.toString()} onClick={() => scrollToPost(post.id.toString())}
                               className="aspect-square bg-[#F7F9FC] hover:opacity-80 transition-opacity overflow-hidden relative">
                               {post.ipfsHash?.startsWith('vid_') ? (
@@ -3380,7 +3390,8 @@ export default function Home() {
                           ))}
                         </div>
                       </div>
-                    )}
+                      )
+                    })()}
 
                     {/* Check-in streak badge */}
                     {TOOLS_DEPLOYED && Number(userStreakDays || 0) > 0 && (
@@ -3502,7 +3513,11 @@ export default function Home() {
                               className="flex-1 min-w-0 bg-white border border-[#E4E7EB] rounded-lg px-3 py-2 text-xs font-mono text-[#0A0B0D] placeholder-[#8A919E] focus:outline-none focus:border-[#0052FF]"
                             />
                             <button
-                              onClick={() => { if (/^0x[a-fA-F0-9]{40}$/.test(adminLookupInput)) setAdminLookupTarget(adminLookupInput) }}
+                              onClick={() => {
+                                if (!/^0x[a-fA-F0-9]{40}$/.test(adminLookupInput)) return
+                                setAdminLookupTarget(adminLookupInput)
+                                setAdminLookupNonce(n => n + 1)
+                              }}
                               disabled={!/^0x[a-fA-F0-9]{40}$/.test(adminLookupInput)}
                               className="flex-shrink-0 bg-[#0052FF] hover:bg-[#1652F0] text-white disabled:opacity-40 px-4 py-2 rounded-lg text-xs font-bold transition-colors">
                               Analyze
@@ -3510,7 +3525,7 @@ export default function Home() {
                           </div>
                           {adminLookupTarget && (
                             <div className="bg-white border border-[#E4E7EB] rounded-xl overflow-hidden">
-                              <WalletChecker key={adminLookupTarget} targetAddress={adminLookupTarget} compact />
+                              <WalletChecker key={`${adminLookupTarget}-${adminLookupNonce}`} targetAddress={adminLookupTarget} compact />
                             </div>
                           )}
                         </div>
@@ -4110,7 +4125,7 @@ export default function Home() {
               </div>
               {/* User's posts — Instagram-style grid, same treatment as the profile tab's own grid */}
               {(() => {
-                const userPosts = posts.filter(p => p.author.toLowerCase() === selectedUser.toLowerCase())
+                const userPosts = posts.filter(p => p.author.toLowerCase() === selectedUser.toLowerCase() && !hiddenPosts.has(p.id.toString()))
                 if (userPosts.length === 0) return <p className="text-[#8A919E] text-sm text-center py-4">No posts yet</p>
                 return (
                   <div className="grid grid-cols-3 gap-0.5 bg-[#EEF1F5] rounded-xl overflow-hidden border border-[#EEF1F5]">

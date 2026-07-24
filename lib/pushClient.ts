@@ -60,7 +60,10 @@ export async function enablePush(address: string, signMessageAsync: SignMessageA
   const timestamp = Date.now()
   let signature: string
   try {
-    signature = await signMessageAsync({ message: authMessage('subscribe', address, timestamp) })
+    // Bind the signature to this specific subscription endpoint, not just
+    // "address signed something" — otherwise a replayed signature could be
+    // submitted with a different (attacker-controlled) subscription.
+    signature = await signMessageAsync({ message: authMessage('subscribe', address, timestamp, sub.endpoint) })
   } catch {
     return { ok: false, reason: 'sign-rejected' }
   }
