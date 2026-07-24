@@ -75,13 +75,22 @@ export async function generatePost(): Promise<string> {
         { role: 'system', content: sys },
         { role: 'user', content: 'Write the post now. Output only the post text.' },
       ],
-      max_tokens: 180,
+      // gpt-oss-120b spends part of its token budget on hidden reasoning before
+      // the visible reply — 180 was too tight and left nothing for the actual
+      // post, producing empty output. Give it real headroom.
+      max_tokens: 600,
       temperature: 1.05,
     }),
     cache: 'no-store',
   })
   const data = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    throw new Error(`Groq ${res.status}: ${data?.error?.message || 'request failed'}`)
+  }
   let text = (data?.choices?.[0]?.message?.content || '').trim()
+  if (!text) {
+    throw new Error(`Groq returned empty content (finish_reason: ${data?.choices?.[0]?.finish_reason || 'unknown'})`)
+  }
   text = text.replace(/^["']+|["']+$/g, '').replace(/#\w+/g, '').replace(/\s{2,}/g, ' ').trim()
   if (text.length > 275) text = text.slice(0, 272).trimEnd() + '…'
   return text
