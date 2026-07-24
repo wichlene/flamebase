@@ -118,6 +118,15 @@ function IpfsImage({ hash, className, alt = '' }: { hash: string; className?: st
   )
 }
 
+// Comments have no on-chain image field, so an attached photo's IPFS hash
+// rides inside the comment text as a trailing marker; this splits it back out.
+const COMMENT_IMG_RE = /\n?\[\[img:([a-zA-Z0-9]+)\]\]$/
+function parseCommentMedia(text: string): { text: string; imgHash: string | null } {
+  const m = text.match(COMMENT_IMG_RE)
+  if (!m) return { text, imgHash: null }
+  return { text: text.slice(0, m.index).trimEnd(), imgHash: m[1] }
+}
+
 function IpfsVideo({ hash, className }: { hash: string; className?: string }) {
   const [gatewayIndex, setGatewayIndex] = useState(0)
   const src = IPFS_GATEWAYS[gatewayIndex] + hash
@@ -346,6 +355,11 @@ export default function Home() {
   const [loadingAction, setLoadingAction] = useState<string | null>(null)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  // Photo attachments for comments, keyed by postId — a comment's on-chain
+  // struct has no image field, so an attached photo's IPFS hash is embedded in
+  // the text itself (see COMMENT_IMG_RE) rather than requiring a contract change.
+  const [commentFiles, setCommentFiles] = useState<Record<string, File | null>>({})
+  const [commentPreviews, setCommentPreviews] = useState<Record<string, string | null>>({})
   const [ethPrice, setEthPrice] = useState(2500)
   const [txLog, setTxLog] = useState<Array<{ hash: string; type: string; time: number; pending?: boolean }>>([])
   const [showTerminal, setShowTerminal] = useState(false)
@@ -1461,14 +1475,41 @@ export default function Home() {
     setLoadingAction(null)
   }
 
+  const handleCommentFileChange = (key: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null
+    if (file && file.size > 50 * 1024 * 1024) {
+      showToast('error', t('errFileTooLarge'))
+      e.target.value = ''
+      return
+    }
+    setCommentFiles(prev => ({ ...prev, [key]: file }))
+    setCommentPreviews(prev => ({ ...prev, [key]: file ? URL.createObjectURL(file) : null }))
+  }
+
   const handleComment = async (postId: bigint) => {
     const key = postId.toString()
-    const text = commentTexts[key]
-    if (!text) return
+    const text = commentTexts[key] || ''
+    const file = commentFiles[key]
+    if (!text && !file) return
     setLoadingAction(`comment-${postId}`)
     try {
-      await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'comment', args: [postId, text], value: effectiveFee(commentPrice as bigint | undefined, DEFAULT_COMMENT_PRICE) })
+      let finalText = text
+      if (file) {
+        const fd = new FormData()
+        fd.append('file', file)
+        const res = await fetch('/api/upload', { method: 'POST', body: fd })
+        const data = await res.json()
+        if (!res.ok || !data.ipfsHash) {
+          showToast('error', 'Upload failed — try a smaller file or different format')
+          setLoadingAction(null)
+          return
+        }
+        finalText = `${text}\n[[img:${data.ipfsHash}]]`
+      }
+      await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'comment', args: [postId, finalText], value: effectiveFee(commentPrice as bigint | undefined, DEFAULT_COMMENT_PRICE) })
       setCommentTexts(prev => ({ ...prev, [key]: '' }))
+      setCommentFiles(prev => ({ ...prev, [key]: null }))
+      setCommentPreviews(prev => ({ ...prev, [key]: null }))
       setReplyingTo(prev => ({ ...prev, [key]: '' }))
       await loadComments(key)
     } catch (e) { console.error(e); showToast('error', t('errCommentFailed')) }
@@ -2721,7 +2762,9 @@ export default function Home() {
                             {comments.length === 0 && (
                               <p className="text-[#8A919E] text-sm py-2">{t('noComments')}</p>
                             )}
-                            {comments.map((c, idx) => (
+                            {comments.map((c, idx) => {
+                              const { text: cText, imgHash } = parseCommentMedia(c.text)
+                              return (
                               <div key={idx} className="flex items-start gap-2 py-2 px-2 hover:bg-[#F7F9FC] rounded-xl transition-colors group">
                                 <Avatar addr={c.commenter} profiles={profiles} size="sm" />
                                 <div className="flex-1 min-w-0">
@@ -2729,7 +2772,10 @@ export default function Home() {
                                     <span className="font-bold text-sm text-[#0A0B0D]">{getUsername(c.commenter)}</span>
                                     <span className="text-[#8A919E] text-xs">{timeAgo(c.timestamp)}</span>
                                   </div>
-                                  <p className="text-[#0A0B0D] text-sm leading-relaxed">{c.text}</p>
+                                  {cText && <p className="text-[#0A0B0D] text-sm leading-relaxed">{cText}</p>}
+                                  {imgHash && (
+                                    <IpfsImage hash={imgHash} className="mt-1.5 rounded-xl max-h-64 border border-[#EEF1F5]" alt="comment attachment" />
+                                  )}
                                 </div>
                                 {isConnected && (
                                   <button onClick={() => setReply(key, c.commenter)}
@@ -2738,12 +2784,23 @@ export default function Home() {
                                   </button>
                                 )}
                               </div>
-                            ))}
+                              )
+                            })}
 
                             {isConnected ? (
                               <div className="flex gap-2 pt-2">
                                 <Avatar addr={address!} profiles={profiles} size="sm" />
-                                <div className="flex-1 min-w-0 flex flex-wrap gap-2">
+                                <div className="flex-1 min-w-0 flex flex-col gap-1.5">
+                                  {commentPreviews[key] && (
+                                    <div className="relative w-fit">
+                                      <img src={commentPreviews[key]!} alt="" className="max-h-28 rounded-xl border border-[#E4E7EB]" />
+                                      <button onClick={() => { setCommentFiles(prev => ({ ...prev, [key]: null })); setCommentPreviews(prev => ({ ...prev, [key]: null })) }}
+                                        className="absolute -top-2 -right-2 w-5 h-5 bg-black/70 hover:bg-black text-white rounded-full text-xs flex items-center justify-center">
+                                        ×
+                                      </button>
+                                    </div>
+                                  )}
+                                  <div className="flex flex-wrap gap-2">
                                   <input type="text"
                                     placeholder={replyingTo[key] ? t('replyPlaceholder', { user: replyingTo[key] }) : t('commentPlaceholder')}
                                     value={commentTexts[key] || ''}
@@ -2753,11 +2810,16 @@ export default function Home() {
                                     className="flex-1 min-w-[140px] bg-white border border-[#E4E7EB] rounded-xl px-3 py-2 text-sm text-[#0A0B0D] placeholder-[#8A919E] focus:outline-none focus:border-[#0052FF]"
                                   />
                                   <div className="flex gap-2 flex-shrink-0 ml-auto">
+                                    <label className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-[#F0F2F5] transition-colors text-lg cursor-pointer" title="Add photo">
+                                      📷
+                                      <input type="file" accept="image/*" className="hidden" onChange={e => handleCommentFileChange(key, e)} />
+                                    </label>
                                     <EmojiPicker align="right" onSelect={e => setCommentTexts(prev => ({ ...prev, [key]: (prev[key] || '') + e }))} />
-                                    <button onClick={() => handleComment(post.id)} disabled={isCommenting || !commentTexts[key]}
+                                    <button onClick={() => handleComment(post.id)} disabled={isCommenting || (!commentTexts[key] && !commentFiles[key])}
                                       className="flex-shrink-0 bg-[#0052FF] hover:bg-[#1652F0] text-white disabled:opacity-40 px-4 py-2 rounded-xl text-sm font-bold transition-colors">
                                       {isCommenting ? '...' : '↑'}
                                     </button>
+                                  </div>
                                   </div>
                                 </div>
                               </div>
