@@ -33,7 +33,7 @@ export default function EnableNotifications() {
   if (perm === 'unsupported' || perm === 'granted' || perm === 'denied') return null
 
   return (
-    <div style={{ position: 'fixed', right: 16, bottom: 16, zIndex: 9999, display: 'flex', gap: 8, alignItems: 'center' }}>
+    <div style={{ position: 'fixed', right: 16, bottom: 'calc(var(--bottom-nav-h, 64px) + 16px)', zIndex: 9999, display: 'flex', gap: 8, alignItems: 'center' }}>
       <button
         onClick={async () => {
           setBusy(true)

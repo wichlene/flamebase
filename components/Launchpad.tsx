@@ -207,6 +207,7 @@ export default function Launchpad() {
   const [amount, setAmount] = useState('')
   const [quote, setQuote] = useState<SwapTx | null>(null)
   const [quoting, setQuoting] = useState(false)
+  const [quoteError, setQuoteError] = useState<string | null>(null)
   const [bal, setBal] = useState<bigint>(0n)
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState<{ ok: boolean; t: string } | null>(null)
@@ -280,43 +281,51 @@ export default function Launchpad() {
 
   // Quote a trade: try the KyberSwap aggregator (best price across all Base
   // DEXs); if it has no route yet (e.g. a brand-new Aerodrome pool it hasn't
-  // indexed), fall back to routing directly through Aerodrome.
-  const fetchSwap = useCallback(async (side: 'buy' | 'sell', token: `0x${string}`, amountIn: bigint): Promise<SwapTx | null> => {
-    if (!address) return null
+  // indexed), fall back to routing directly through Aerodrome. Returns the
+  // real failure reason on the way out — a blanket "No liquidity" message
+  // was hiding whether the aggregator genuinely found no route, or its
+  // service call itself failed (network hiccup, rate limit, bad response),
+  // which look identical to the user but need very different explanations.
+  const fetchSwap = useCallback(async (side: 'buy' | 'sell', token: `0x${string}`, amountIn: bigint): Promise<{ quote: SwapTx | null; reason: string | null }> => {
+    if (!address) return { quote: null, reason: 'Connect your wallet first.' }
     const tokenIn = side === 'buy' ? NATIVE : token
     const tokenOut = side === 'buy' ? token : NATIVE
     // 1) KyberSwap
+    let kyberReason = ''
     try {
       const r = await fetch('/api/swap', {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ tokenIn, tokenOut, amountIn: amountIn.toString(), sender: address, recipient: address, slippageBps: 1000 }),
       })
       const d = await r.json()
-      if (r.ok && d?.to) return { venue: 'kyber', to: d.to, router: d.router, data: d.data, value: d.value, amountOut: BigInt(d.amountOut || '0'), needsApprove: !!d.needsApprove }
-    } catch { /* fall through to Aerodrome */ }
+      if (r.ok && d?.to) return { quote: { venue: 'kyber', to: d.to, router: d.router, data: d.data, value: d.value, amountOut: BigInt(d.amountOut || '0'), needsApprove: !!d.needsApprove }, reason: null }
+      kyberReason = typeof d?.error === 'string' && d.error ? d.error : `route service error (${r.status})`
+    } catch {
+      kyberReason = 'route service unreachable — check your connection'
+    }
     // 2) Aerodrome direct (our own pools) — volatile pair with WETH
-    if (!publicClient) return null
+    if (!publicClient) return { quote: null, reason: kyberReason }
     try {
       const routes = [{ from: (side === 'buy' ? WETH : token), to: (side === 'buy' ? token : WETH), stable: false, factory: AERO_FACTORY }]
       const amounts = await publicClient.readContract({ address: AERO_ROUTER, abi: AERO_ROUTER_ABI, functionName: 'getAmountsOut', args: [amountIn, routes] }) as bigint[]
       const out = amounts?.[amounts.length - 1] ?? 0n
-      if (out > 0n) return { venue: 'aero', amountOut: out, needsApprove: side === 'sell' }
+      if (out > 0n) return { quote: { venue: 'aero', amountOut: out, needsApprove: side === 'sell' }, reason: null }
     } catch { /* no aero pool either */ }
-    return null
+    return { quote: null, reason: kyberReason || 'No liquidity route found on any Base DEX.' }
   }, [address, publicClient])
 
   // debounced live quote
   useEffect(() => {
     let stop = false
-    if (!active || !amount || Number(amount) <= 0) { setQuote(null); setQuoting(false); return }
+    if (!active || !amount || Number(amount) <= 0) { setQuote(null); setQuoteError(null); setQuoting(false); return }
     setQuoting(true)
     const id = setTimeout(async () => {
       try {
         // buy: amountIn is ETH (18 dec); sell: amountIn is the token (its own decimals)
         const amt = side === 'buy' ? parseEther(amount) : parseUnits(amount, active.dec)
-        const res = await fetchSwap(side, active.token, amt)
-        if (!stop) setQuote(res)
-      } catch { if (!stop) setQuote(null) }
+        const { quote: res, reason } = await fetchSwap(side, active.token, amt)
+        if (!stop) { setQuote(res); setQuoteError(res ? null : reason) }
+      } catch { if (!stop) { setQuote(null); setQuoteError('Quote failed — try again.') } }
       if (!stop) setQuoting(false)
     }, 550)
     return () => { stop = true; clearTimeout(id) }
@@ -616,6 +625,10 @@ export default function Launchpad() {
                 </div>
               )}
 
+              {!quote && !quoting && quoteError && Number(amount) > 0 && (
+                <div className="mt-3 text-xs rounded-xl px-3 py-2 bg-red-50 text-red-600">{quoteError}</div>
+              )}
+
               {note && <div className={`text-sm rounded-xl px-3 py-2 mt-3 ${note.ok ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'}`}>{note.t}</div>}
 
               {bought && (
@@ -626,7 +639,7 @@ export default function Launchpad() {
 
               <button onClick={doTrade} disabled={!isConnected || busy || quoting || !amount || Number(amount) <= 0 || !quote}
                 className={`w-full mt-4 text-white font-black text-base py-3.5 rounded-2xl transition-colors disabled:opacity-50 ${side === 'buy' ? 'bg-[#0052FF] hover:bg-[#1652F0]' : 'bg-[#0A0B0D] hover:bg-black'}`}>
-                {busy ? 'Confirm in wallet…' : !isConnected ? 'Connect wallet' : quoting && Number(amount) > 0 ? 'Finding best price…' : !quote && Number(amount) > 0 ? 'No liquidity for this token' : side === 'buy' ? `Buy ${active.symbol}` : `Sell ${active.symbol}`}
+                {busy ? 'Confirm in wallet…' : !isConnected ? 'Connect wallet' : quoting && Number(amount) > 0 ? 'Finding best price…' : !quote && Number(amount) > 0 ? 'No route found' : side === 'buy' ? `Buy ${active.symbol}` : `Sell ${active.symbol}`}
               </button>
               <p className="text-[10px] text-[#C5CBD3] text-center mt-2">Goes straight to your wallet · 10% max slippage · 1% platform fee · best route across Base DEXs</p>
             </div>

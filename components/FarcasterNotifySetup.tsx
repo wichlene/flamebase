@@ -113,7 +113,7 @@ export default function FarcasterNotifySetup() {
   if (!inMiniApp || !isConnected || !address || !fid || dismissed || status === 'done') return null
 
   return (
-    <div style={{ position: 'fixed', left: 16, bottom: 16, zIndex: 9999, maxWidth: 280, display: 'flex', flexDirection: 'column', gap: 6 }}>
+    <div style={{ position: 'fixed', left: 16, bottom: 'calc(var(--bottom-nav-h, 64px) + 16px)', zIndex: 9999, maxWidth: 280, display: 'flex', flexDirection: 'column', gap: 6 }}>
       {status === 'error' && (
         <div style={{ background: '#FEE2E2', color: '#991B1B', borderRadius: 12, padding: '8px 12px', fontSize: 12, fontWeight: 600 }}>
           ⚠️ {errorMsg}
