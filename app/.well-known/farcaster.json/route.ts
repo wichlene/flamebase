@@ -31,13 +31,6 @@ const miniapp = {
   // Base mainnet (CAIP-2). Tells Base App's catalog this is a Base-native app.
   requiredChains: ['eip155:8453'],
   noindex: false,
-  // Claims this manifest for Base Build — proves domain ownership to the
-  // address(es) allowed to see this app's dashboard/leaderboard analytics
-  // and claim Builder Code rewards. Without this, the app can be
-  // discoverable but isn't actually linked to a Base Build account.
-  baseBuilder: {
-    allowedAddresses: ['0xa77A5D4D37d6F39C20C2441295da9fA60Ab9fD69'],
-  },
 }
 
 export function GET() {
@@ -48,6 +41,14 @@ export function GET() {
       payload: 'eyJkb21haW4iOiJmbGFtZWJhc2UueHl6In0',
       signature:
         'lpzx0l3BVyl8Dh2BwU19i8GfG1AEGpUInrqAyjKbsFRGpfhVIhVjBExxEZbZNHEjjEO1au9dS5Rr0hbUeItV9Bw=',
+    },
+    // Claims this manifest for Base Build — a TOP-LEVEL key (sibling to
+    // accountAssociation/miniapp, not nested inside either) that proves which
+    // address(es) can see this app's Base Build dashboard/leaderboard
+    // analytics and claim Builder Code rewards. Without it, the app can be
+    // discoverable but isn't actually linked to a Base Build account.
+    baseBuilder: {
+      allowedAddresses: ['0xa77A5D4D37d6F39C20C2441295da9fA60Ab9fD69'],
     },
     // `miniapp` is the current spec key; `frame` is the legacy key some
     // indexers (including older Base/Warpcast crawlers) still read. Publish
