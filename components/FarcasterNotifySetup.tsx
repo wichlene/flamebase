@@ -120,7 +120,13 @@ export default function FarcasterNotifySetup() {
         nd = r?.notificationDetails
       }
       if (!nd?.url || !nd?.token) {
-        throw new Error('Farcaster did not return a notification token — check notifications are allowed for FlameBase in your client settings.')
+        // Once the app is already added, hosts like Base App don't re-prompt
+        // for notification permission on a repeat addMiniApp() call — there
+        // is no SDK method to force it. The only fix is the user flipping it
+        // on in the host's own UI (the ••• menu at the top of the mini-app
+        // frame → Notifications), which is exactly why the listener above
+        // exists: the moment they do, we pick it up without another click.
+        throw new Error('Farcaster/Base App didn’t grant notification permission. Tap the ••• menu at the top of this screen → Notifications → turn it on for FlameBase, then come back here.')
       }
 
       const { timestamp: tt, signature: ts } = await sign('token', `${fid}:${nd.url}:${nd.token}`)
