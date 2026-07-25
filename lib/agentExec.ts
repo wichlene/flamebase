@@ -4,6 +4,7 @@ import { parseEther, parseUnits, encodeFunctionData, erc20Abi, isAddress } from 
 import { CONTRACT_ABI, CONTRACT_ADDRESS } from './contract'
 import { TOOLS_ABI, TOOLS_ADDRESS, TOKEN_FACTORY_ABI, TOKEN_FACTORY_ADDRESS, DAO_ABI, DAO_ADDRESS } from './toolsContracts'
 import { safeSend, type RawCall, type MinimalProvider } from './safeSend'
+import { BUILDER_CODE_DATA_SUFFIX } from './builderCode'
 
 // USDC on Base (6 decimals).
 const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as const
@@ -349,7 +350,12 @@ export async function executeAction(a: AgentAction, wallet: WalletLike, publicCl
     publicClient,
     isSmartWallet: !!ctx?.isSmartWallet,
     provider: ctx?.provider,
-    sendTransaction: c => wallet.sendTransaction({ to: c.to, data: c.data, value: c.value }),
+    dataSuffix: BUILDER_CODE_DATA_SUFFIX,
+    sendTransaction: c => wallet.sendTransaction({
+      to: c.to,
+      data: (!ctx?.isSmartWallet && c.data) ? ((c.data + BUILDER_CODE_DATA_SUFFIX.slice(2)) as `0x${string}`) : c.data,
+      value: c.value,
+    }),
   })
 
   switch (a.tool) {

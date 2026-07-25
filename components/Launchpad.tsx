@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAccount, usePublicClient, useWatchAsset } from 'wagmi'
 import { encodeFunctionData, erc20Abi, formatUnits, parseEther, parseUnits } from 'viem'
-import { BUILDER_CODE_DATA_SUFFIX } from '../lib/builderCode'
 import { useSafeSend } from '../lib/useSafeSend'
 
 /*
@@ -96,12 +95,10 @@ function TokenLogo({ img, symbol, size = 30 }: { img?: string; symbol: string; s
 }
 
 export default function Launchpad() {
-  const { address, isConnected, connector } = useAccount()
-  // Base Builder Code: attribute every DEX tx to FlameBase. Skipped in the
-  // Farcaster/Base App mini-app (its preview can't simulate suffixed calldata)
-  // — same rule as the main app's tx wrapper.
-  const suffixData = (data: `0x${string}`): `0x${string}` =>
-    connector?.id === 'farcaster' ? data : ((data + BUILDER_CODE_DATA_SUFFIX.slice(2)) as `0x${string}`)
+  const { address, isConnected } = useAccount()
+  // Base Builder Code attribution is applied inside useSafeSend() itself now
+  // (try-with-suffix-first for smart wallets, always for classic ones) — call
+  // sites below just pass raw calldata.
   const publicClient = usePublicClient()
   const safeSend = useSafeSend()
   const { watchAssetAsync } = useWatchAsset()
@@ -262,7 +259,7 @@ export default function Launchpad() {
       const allowance = await publicClient.readContract({ address: token, abi: erc20Abi, functionName: 'allowance', args: [address, AERO_ROUTER] }) as bigint
       if (allowance < amtTok) {
         const approveData = encodeFunctionData({ abi: erc20Abi, functionName: 'approve', args: [AERO_ROUTER, amtTok] })
-        const approveHash = await safeSend({ to: token, data: suffixData(approveData) })
+        const approveHash = await safeSend({ to: token, data: approveData })
         await publicClient.waitForTransactionReceipt({ hash: approveHash })
       }
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 1200)
@@ -270,7 +267,7 @@ export default function Launchpad() {
         abi: AERO_ROUTER_ABI, functionName: 'addLiquidityETH',
         args: [token, false, amtTok, 0n, 0n, address, deadline],
       })
-      const hash = await safeSend({ to: AERO_ROUTER, data: suffixData(addLiqData), value: amtEth })
+      const hash = await safeSend({ to: AERO_ROUTER, data: addLiqData, value: amtEth })
       const receipt = await publicClient.waitForTransactionReceipt({ hash })
       if (receipt.status !== 'success') throw new Error('Add-liquidity transaction reverted on-chain — no pool was created.')
       setLiqNote({ ok: true, t: 'Liquidity added ✓ — pool created. Aggregator indexing takes a few minutes before buys route to it.' })
@@ -365,13 +362,13 @@ export default function Launchpad() {
         const allowance = await publicClient.readContract({ address: active.token, abi: erc20Abi, functionName: 'allowance', args: [address!, spender] }) as bigint
         if (allowance < amt) {
           const approveData = encodeFunctionData({ abi: erc20Abi, functionName: 'approve', args: [spender, amt] })
-          const approveHash = await safeSend({ to: active.token, data: suffixData(approveData) })
+          const approveHash = await safeSend({ to: active.token, data: approveData })
           await publicClient.waitForTransactionReceipt({ hash: approveHash })
         }
       }
 
       if (quote.venue === 'kyber') {
-        await safeSend({ to: quote.to!, data: suffixData(quote.data!), value: BigInt(quote.value || '0') })
+        await safeSend({ to: quote.to!, data: quote.data!, value: BigInt(quote.value || '0') })
       } else {
         // Aerodrome direct: whichever pool type the quote actually found liquidity in
         const minOut = quote.amountOut - (quote.amountOut * 1000n) / 10000n // 10% slippage
@@ -379,10 +376,10 @@ export default function Launchpad() {
         const routes = [{ from: (side === 'buy' ? WETH : active.token), to: (side === 'buy' ? active.token : WETH), stable: !!quote.stable, factory: AERO_FACTORY }]
         if (side === 'buy') {
           const swapData = encodeFunctionData({ abi: AERO_ROUTER_ABI, functionName: 'swapExactETHForTokens', args: [minOut, routes, address!, deadline] })
-          await safeSend({ to: AERO_ROUTER, data: suffixData(swapData), value: parseEther(amount) })
+          await safeSend({ to: AERO_ROUTER, data: swapData, value: parseEther(amount) })
         } else {
           const swapData = encodeFunctionData({ abi: AERO_ROUTER_ABI, functionName: 'swapExactTokensForETH', args: [parseUnits(amount, active.dec), minOut, routes, address!, deadline] })
-          await safeSend({ to: AERO_ROUTER, data: suffixData(swapData) })
+          await safeSend({ to: AERO_ROUTER, data: swapData })
         }
       }
       setNote({ ok: true, t: `${side === 'buy' ? 'Bought' : 'Sold'} ✓ — check your wallet` }); setAmount(''); setQuote(null)

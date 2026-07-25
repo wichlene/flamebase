@@ -165,12 +165,30 @@ async function sendViaEip5792(
   return hash
 }
 
+function isRecoverable(e: unknown): boolean {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const err = e as any
+  const m = (err?.message || '').toLowerCase()
+  const userRejected = err?.code === 4001 || m.includes('user rejected') || m.includes('user denied') || m.includes('rejected the request')
+  const finalOutcome = m.startsWith('contract_revert:') || m.startsWith('pending_unconfirmed:')
+  return !userRejected && !finalOutcome
+}
+
 /**
  * Send a raw {to, data, value} call with full smart-wallet safety: pre-flight
  * simulation, EIP-5792 routing + UserOperationEvent verification for smart
  * wallets, and a classic-path fallback for everyone else. Mirrors
  * app/page.tsx's writeContractAsync wrapper but works on ABI-agnostic raw
  * calldata, so ABI-based callers just encodeFunctionData() first.
+ *
+ * `dataSuffix`, when given, is tried FIRST appended to the smart-wallet
+ * (EIP-5792) attempt — Base Builder Code attribution, so transactions from
+ * inside Base App / Farcaster (the audience Base's mini-app "Popular Apps"
+ * leaderboard counts) get attributed like every other tx already does. If
+ * that specific attempt fails for a non-final, non-rejection reason (some
+ * host previews can't handle the extra calldata bytes), it's retried once
+ * more without the suffix before ever falling through to the classic path —
+ * never worse than skipping attribution outright, just tried first.
  */
 export async function safeSend(opts: {
   call: RawCall
@@ -178,23 +196,26 @@ export async function safeSend(opts: {
   publicClient: MinimalPublicClient
   isSmartWallet: boolean
   provider?: MinimalProvider
+  dataSuffix?: `0x${string}`
   sendTransaction: (call: RawCall) => Promise<`0x${string}`>
 }): Promise<`0x${string}`> {
-  const { call, account, publicClient, isSmartWallet, provider, sendTransaction } = opts
+  const { call, account, publicClient, isSmartWallet, provider, dataSuffix, sendTransaction } = opts
 
   await preflightSimulate(publicClient, account, call)
 
   if (isSmartWallet && provider) {
-    try {
-      return await sendViaEip5792(provider, account, call, publicClient)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (e: any) {
-      const m = (e?.message || '').toLowerCase()
-      const userRejected = e?.code === 4001 || m.includes('user rejected') || m.includes('user denied') || m.includes('rejected the request')
-      const finalOutcome = m.startsWith('contract_revert:') || m.startsWith('pending_unconfirmed:')
-      if (userRejected || finalOutcome) throw e
-      // Anything else (unsupported method, wrong 5792 dialect, …) — fall
-      // through to the classic path below, same as app/page.tsx's wrapper.
+    const variants: RawCall[] = dataSuffix && call.data
+      ? [{ ...call, data: (call.data + dataSuffix.slice(2)) as `0x${string}` }, call]
+      : [call]
+    for (const variant of variants) {
+      try {
+        return await sendViaEip5792(provider, account, variant, publicClient)
+      } catch (e) {
+        if (!isRecoverable(e)) throw e
+        // Anything else (unsupported method, wrong 5792 dialect, the suffix
+        // tripping up this host's preview, …) — try the next variant, or
+        // fall through to the classic path below if this was the last one.
+      }
     }
   }
 
