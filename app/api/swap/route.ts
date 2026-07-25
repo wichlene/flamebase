@@ -30,13 +30,24 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'bad params' }, { status: 400 })
     }
 
-    // 1) get the best route across all Base DEXs (with our platform fee on the ETH leg)
+    // 1) get the best route across all Base DEXs (with our platform fee on the ETH leg).
+    // The affiliate-fee params can themselves make a thin pool unroutable (the
+    // fee eats into an already-tight output, and Kyber's routing engine drops
+    // the path entirely rather than returning a worse quote) — if the
+    // fee-inclusive request comes back empty, retry once with no fee rather
+    // than blocking a trade a plain swap could still complete.
     const chargeFeeBy = tokenIn === NATIVE ? 'currency_in' : 'currency_out'
     const feeQs = `&feeAmount=${FEE_BPS}&chargeFeeBy=${chargeFeeBy}&isInBps=true&feeReceiver=${FEE_RECEIVER}`
-    const routeRes = await fetch(`${API}/routes?tokenIn=${tokenIn}&tokenOut=${tokenOut}&amountIn=${amountIn}&gasInclude=true${feeQs}`, { headers: H })
-    const route = await routeRes.json()
-    const summary = route?.data?.routeSummary
-    if (!summary) return NextResponse.json({ error: route?.message || 'No route for this token' }, { status: 404 })
+    const baseQs = `tokenIn=${tokenIn}&tokenOut=${tokenOut}&amountIn=${amountIn}&gasInclude=true`
+    let route = await (await fetch(`${API}/routes?${baseQs}${feeQs}`, { headers: H })).json()
+    let summary = route?.data?.routeSummary
+    let feeApplied = true
+    if (!summary) {
+      route = await (await fetch(`${API}/routes?${baseQs}`, { headers: H })).json()
+      summary = route?.data?.routeSummary
+      feeApplied = false
+    }
+    if (!summary) return NextResponse.json({ error: route?.message || 'route not found' }, { status: 404 })
 
     // 2) build the executable transaction
     const buildRes = await fetch(`${API}/route/build`, {

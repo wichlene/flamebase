@@ -60,6 +60,10 @@ type SwapTx = {
   needsApprove: boolean
   // kyber (pre-built aggregator tx):
   to?: `0x${string}`; router?: `0x${string}`; data?: `0x${string}`; value?: string
+  // aero: which pool type actually had the liquidity — a token can be paired
+  // as either, and hardcoding one meant a stable-paired token's real pool
+  // was invisible to the fallback even though volatile-only came back empty.
+  stable?: boolean
 }
 
 type Tok = { token: `0x${string}`; name: string; symbol: string; variant: number; block: bigint; dec: number }
@@ -303,14 +307,17 @@ export default function Launchpad() {
     } catch {
       kyberReason = 'route service unreachable — check your connection'
     }
-    // 2) Aerodrome direct (our own pools) — volatile pair with WETH
+    // 2) Aerodrome direct (our own pools) — try both pool types paired with
+    // WETH; a token can be listed as either and only one will actually work.
     if (!publicClient) return { quote: null, reason: kyberReason }
-    try {
-      const routes = [{ from: (side === 'buy' ? WETH : token), to: (side === 'buy' ? token : WETH), stable: false, factory: AERO_FACTORY }]
-      const amounts = await publicClient.readContract({ address: AERO_ROUTER, abi: AERO_ROUTER_ABI, functionName: 'getAmountsOut', args: [amountIn, routes] }) as bigint[]
-      const out = amounts?.[amounts.length - 1] ?? 0n
-      if (out > 0n) return { quote: { venue: 'aero', amountOut: out, needsApprove: side === 'sell' }, reason: null }
-    } catch { /* no aero pool either */ }
+    for (const stable of [false, true]) {
+      try {
+        const routes = [{ from: (side === 'buy' ? WETH : token), to: (side === 'buy' ? token : WETH), stable, factory: AERO_FACTORY }]
+        const amounts = await publicClient.readContract({ address: AERO_ROUTER, abi: AERO_ROUTER_ABI, functionName: 'getAmountsOut', args: [amountIn, routes] }) as bigint[]
+        const out = amounts?.[amounts.length - 1] ?? 0n
+        if (out > 0n) return { quote: { venue: 'aero', amountOut: out, needsApprove: side === 'sell', stable }, reason: null }
+      } catch { /* this pool type doesn't exist — try the other */ }
+    }
     return { quote: null, reason: kyberReason || 'No liquidity route found on any Base DEX.' }
   }, [address, publicClient])
 
@@ -366,10 +373,10 @@ export default function Launchpad() {
       if (quote.venue === 'kyber') {
         await safeSend({ to: quote.to!, data: suffixData(quote.data!), value: BigInt(quote.value || '0') })
       } else {
-        // Aerodrome direct: our own volatile WETH pool
+        // Aerodrome direct: whichever pool type the quote actually found liquidity in
         const minOut = quote.amountOut - (quote.amountOut * 1000n) / 10000n // 10% slippage
         const deadline = BigInt(Math.floor(Date.now() / 1000) + 1200)
-        const routes = [{ from: (side === 'buy' ? WETH : active.token), to: (side === 'buy' ? active.token : WETH), stable: false, factory: AERO_FACTORY }]
+        const routes = [{ from: (side === 'buy' ? WETH : active.token), to: (side === 'buy' ? active.token : WETH), stable: !!quote.stable, factory: AERO_FACTORY }]
         if (side === 'buy') {
           const swapData = encodeFunctionData({ abi: AERO_ROUTER_ABI, functionName: 'swapExactETHForTokens', args: [minOut, routes, address!, deadline] })
           await safeSend({ to: AERO_ROUTER, data: suffixData(swapData), value: parseEther(amount) })

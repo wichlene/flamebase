@@ -16,6 +16,8 @@ import { authMessage } from '../lib/walletAuth'
 // signMessage request that isn't the direct result of a user gesture — an
 // automatic background sign call can fail with zero visible error, which is
 // exactly what made this look broken with no diagnosable cause.
+type NotifDetails = { url: string; token: string }
+
 export default function FarcasterNotifySetup() {
   const { address, isConnected } = useAccount()
   const { signMessageAsync } = useSignMessage()
@@ -24,6 +26,12 @@ export default function FarcasterNotifySetup() {
   const [status, setStatus] = useState<'idle' | 'working' | 'done' | 'error'>('idle')
   const [errorMsg, setErrorMsg] = useState('')
   const [dismissed, setDismissed] = useState(false)
+  // Set only by the notificationsEnabled/miniAppAdded host events below —
+  // never auto-signed from there (signMessage silently fails when it isn't
+  // the direct result of a user gesture, see the note above enable()). When
+  // this is populated the button switches to a one-tap "Finish setup" that
+  // reuses these details instead of calling addMiniApp() again.
+  const [pendingNd, setPendingNd] = useState<NotifDetails | null>(null)
 
   // Detection only — no signing here, so nothing to silently fail on.
   useEffect(() => {
@@ -42,6 +50,27 @@ export default function FarcasterNotifySetup() {
     return () => { cancelled = true }
   }, [])
 
+  // If the user grants notification permission from OUTSIDE our button (the
+  // host's own native prompt, or its app-settings screen after our error
+  // told them to go check it), the host tells us via these events instead of
+  // a return value we're waiting on. Surface a one-tap "Finish setup" rather
+  // than leaving the stale error banner up until they happen to hit "Try
+  // again" again — but don't auto-sign from here, that's not a user gesture.
+  useEffect(() => {
+    if (!inMiniApp) return
+    const onDetails = (nd?: NotifDetails) => {
+      if (!nd?.url || !nd?.token) return
+      setPendingNd(nd)
+      setStatus('idle')
+      setErrorMsg('')
+    }
+    const onEnabled = (payload: { notificationDetails: NotifDetails }) => onDetails(payload?.notificationDetails)
+    const onAdded = (payload: { notificationDetails?: NotifDetails }) => onDetails(payload?.notificationDetails)
+    sdk.on('notificationsEnabled', onEnabled)
+    sdk.on('miniAppAdded', onAdded)
+    return () => { sdk.off('notificationsEnabled', onEnabled); sdk.off('miniAppAdded', onAdded) }
+  }, [inMiniApp])
+
   // `status` was previously never reset, so switching to a different
   // connected address after completing setup for one address left the
   // button permanently hidden ('done') for every subsequent address, with no
@@ -50,6 +79,7 @@ export default function FarcasterNotifySetup() {
     setStatus('idle')
     setErrorMsg('')
     setDismissed(false)
+    setPendingNd(null)
   }, [address])
 
   const enable = async () => {
@@ -80,10 +110,13 @@ export default function FarcasterNotifySetup() {
       }
 
       // 2. Get (or request) the notification token, then register it.
+      // A previous host event may already have handed us valid details
+      // (see the notificationsEnabled/miniAppAdded listener above) — reuse
+      // those instead of calling addMiniApp() again.
       const ctx = await sdk.context
-      let nd = (ctx?.client as { notificationDetails?: { url?: string; token?: string } })?.notificationDetails
+      let nd: NotifDetails | undefined = pendingNd ?? (ctx?.client as { notificationDetails?: NotifDetails })?.notificationDetails
       if (!nd?.url || !nd?.token) {
-        const r = (await sdk.actions.addMiniApp()) as { notificationDetails?: { url?: string; token?: string } }
+        const r = (await sdk.actions.addMiniApp()) as { notificationDetails?: NotifDetails }
         nd = r?.notificationDetails
       }
       if (!nd?.url || !nd?.token) {
@@ -102,6 +135,7 @@ export default function FarcasterNotifySetup() {
       }
 
       setStatus('done')
+      setPendingNd(null)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Unknown error'
       const rejected = /user rejected|denied|declined/i.test(msg)
@@ -119,6 +153,11 @@ export default function FarcasterNotifySetup() {
           ⚠️ {errorMsg}
         </div>
       )}
+      {pendingNd && status !== 'error' && (
+        <div style={{ background: '#DCFCE7', color: '#166534', borderRadius: 12, padding: '8px 12px', fontSize: 12, fontWeight: 600 }}>
+          ✓ Permission detected — tap to finish setup.
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <button
           onClick={enable}
@@ -130,7 +169,7 @@ export default function FarcasterNotifySetup() {
             boxShadow: '0 4px 14px rgba(0,82,255,.4)', cursor: status === 'working' ? 'default' : 'pointer',
           }}
         >
-          🔔 {status === 'working' ? 'Enabling…' : status === 'error' ? 'Try again' : 'Enable Farcaster notifications'}
+          🔔 {status === 'working' ? 'Enabling…' : pendingNd ? 'Finish setup' : status === 'error' ? 'Try again' : 'Enable Farcaster notifications'}
         </button>
         <button
           onClick={() => setDismissed(true)}
