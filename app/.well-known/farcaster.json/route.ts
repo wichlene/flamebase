@@ -31,6 +31,13 @@ const miniapp = {
   // Base mainnet (CAIP-2). Tells Base App's catalog this is a Base-native app.
   requiredChains: ['eip155:8453'],
   noindex: false,
+  // Claims this manifest for Base Build — proves domain ownership to the
+  // address(es) allowed to see this app's dashboard/leaderboard analytics
+  // and claim Builder Code rewards. Without this, the app can be
+  // discoverable but isn't actually linked to a Base Build account.
+  baseBuilder: {
+    allowedAddresses: ['0xa77A5D4D37d6F39C20C2441295da9fA60Ab9fD69'],
+  },
 }
 
 export function GET() {
