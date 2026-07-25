@@ -107,6 +107,10 @@ export default function Launchpad() {
   const [loading, setLoading] = useState(true)
   const [loadingMkt, setLoadingMkt] = useState(false)
   const [q, setQ] = useState('')
+  // Most B20 tokens are brand-new, zero-liquidity spam with no DexScreener
+  // data — left unfiltered, they bury the handful of actually-tradeable
+  // tokens under thousands of rows of "·". Default to hiding them.
+  const [tradeableOnly, setTradeableOnly] = useState(true)
   const [sortKey, setSortKey] = useState<'vol24' | 'fdv' | 'price' | 'change24'>('vol24')
   const [sortDir, setSortDir] = useState<'desc' | 'asc'>('desc')
   const toggleSort = (k: 'vol24' | 'fdv' | 'price' | 'change24') => {
@@ -179,15 +183,18 @@ export default function Launchpad() {
 
   useEffect(() => { loadToks() }, [loadToks])
 
-  // filter + sort: tokens with volume first (desc), then rest
+  // filter + sort: tokens with volume first (desc), then rest. A search
+  // query always overrides the tradeable-only filter — you can still paste
+  // in a brand-new token's address before it has any liquidity/price data.
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase()
-    const filtered = needle
+    let filtered = needle
       ? toks.filter(t => t.name.toLowerCase().includes(needle) || t.symbol.toLowerCase().includes(needle) || t.token.toLowerCase().includes(needle))
       : toks
+    if (tradeableOnly && !needle) filtered = filtered.filter(t => mkt[t.token.toLowerCase()])
     const val = (t: Tok) => { const m = mkt[t.token.toLowerCase()]; return m ? (m[sortKey] || 0) : -1 }
     return [...filtered].sort((a, b) => (sortDir === 'desc' ? val(b) - val(a) : val(a) - val(b)))
-  }, [toks, mkt, q, sortKey, sortDir])
+  }, [toks, mkt, q, sortKey, sortDir, tradeableOnly])
 
   const tradeable = useMemo(() => Object.keys(mkt).length, [mkt])
 
@@ -383,7 +390,21 @@ export default function Launchpad() {
       <div className="flex items-center gap-2 bg-[#F7F9FC] border border-[#E4E7EB] rounded-xl px-3 py-2.5 focus-within:border-[#0052FF]">
         <span className="text-[#8A919E]">🔍</span>
         <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search name, symbol or address…" className="flex-1 bg-transparent text-sm focus:outline-none" />
-        <button onClick={() => { loadToks() }} className="text-xs text-[#0052FF] font-bold">Refresh</button>
+        <button onClick={() => { loadToks() }} className="text-xs text-[#0052FF] font-bold flex-shrink-0">Refresh</button>
+      </div>
+
+      {/* filter chips */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <button onClick={() => setTradeableOnly(v => !v)}
+          className={`text-xs font-bold px-3 py-1.5 rounded-full border transition-colors ${tradeableOnly ? 'bg-[#0052FF] border-[#0052FF] text-white' : 'bg-white border-[#E4E7EB] text-[#5B6271]'}`}>
+          {tradeableOnly ? '✓ Tradeable only' : 'Tradeable only'}
+        </button>
+        {(['vol24', 'change24', 'price', 'fdv'] as const).map(k => (
+          <button key={k} onClick={() => toggleSort(k)}
+            className={`text-xs font-bold px-3 py-1.5 rounded-full border transition-colors ${sortKey === k ? 'bg-[#F0F4FF] border-[#D6E2FF] text-[#0052FF]' : 'bg-white border-[#E4E7EB] text-[#5B6271]'}`}>
+            {k === 'vol24' ? 'Volume' : k === 'change24' ? '24h' : k === 'fdv' ? 'FDV' : 'Price'}{sortKey === k ? (sortDir === 'desc' ? ' ↓' : ' ↑') : ''}
+          </button>
+        ))}
       </div>
 
       {/* admin: open a market for a token */}

@@ -2920,10 +2920,12 @@ export default function Home() {
                               const { text: cText, imgHash } = parseCommentMedia(c.text)
                               return (
                               <div key={idx} className="flex items-start gap-2 py-2 px-2 hover:bg-[#F7F9FC] rounded-xl transition-colors group">
-                                <Avatar addr={c.commenter} profiles={profiles} size="sm" />
+                                <button onClick={() => setSelectedUser(c.commenter)} className="flex-shrink-0 cursor-pointer">
+                                  <Avatar addr={c.commenter} profiles={profiles} size="sm" />
+                                </button>
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2 mb-0.5">
-                                    <span className="font-bold text-sm text-[#0A0B0D]">{getUsername(c.commenter)}</span>
+                                    <button onClick={() => setSelectedUser(c.commenter)} className="font-bold text-sm text-[#0A0B0D] hover:underline cursor-pointer">{getUsername(c.commenter)}</button>
                                     <span className="text-[#8A919E] text-xs">{timeAgo(c.timestamp)}</span>
                                   </div>
                                   {cText && <p className="text-[#0A0B0D] text-sm leading-relaxed"><RichText text={cText} onHashtag={setSearchQuery} onMention={(h) => setSearchQuery(h.toLowerCase())} /></p>}
@@ -3222,7 +3224,7 @@ export default function Home() {
             {activeTab === 'messages' && (
               <div className="-mb-24 md:mb-0">
                 <h1 className="hidden md:block text-xl font-black px-4 md:px-6 pt-4 md:pt-6 text-[#0A0B0D]">{t('navMessages')}</h1>
-                <Messages profiles={profiles} fixedFee={fixedFee} pendingTarget={pendingDmTarget} onPendingHandled={() => setPendingDmTarget(null)} onUnreadCount={setUnreadMessages} />
+                <Messages profiles={profiles} fixedFee={fixedFee} pendingTarget={pendingDmTarget} onPendingHandled={() => setPendingDmTarget(null)} onUnreadCount={setUnreadMessages} onOpenProfile={setSelectedUser} />
               </div>
             )}
 

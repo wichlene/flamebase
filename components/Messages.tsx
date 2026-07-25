@@ -26,6 +26,7 @@ type Props = {
   pendingTarget?: string | null
   onPendingHandled?: () => void
   onUnreadCount?: (count: number) => void
+  onOpenProfile?: (addr: string) => void
 }
 
 const SEEN_KEY = 'flamebase_msg_seen'
@@ -42,7 +43,7 @@ function convIdOf(a: string, b: string): string {
   return [a.toLowerCase(), b.toLowerCase()].sort().join('_')
 }
 
-export default function Messages({ profiles, fixedFee, pendingTarget, onPendingHandled, onUnreadCount }: Props) {
+export default function Messages({ profiles, fixedFee, pendingTarget, onPendingHandled, onUnreadCount, onOpenProfile }: Props) {
   const { address } = useAccount()
   const me = address?.toLowerCase() || ''
 
@@ -321,13 +322,15 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
                 className="md:hidden w-8 h-8 flex items-center justify-center rounded-full hover:bg-[#F0F2F5] text-[#0A0B0D] flex-shrink-0 text-lg" aria-label="Back">
                 ←
               </button>
-              <Avatar addr={activePeer} profiles={profiles} size="sm" />
-              <div className="min-w-0">
-                <p className="font-bold text-sm text-[#0A0B0D] truncate leading-tight">{activePeerLabel}</p>
-                {profiles[activePeer]?.username && (
-                  <p className="text-[11px] text-[#8A919E] truncate leading-tight">{activePeer.slice(0, 6)}…{activePeer.slice(-4)}</p>
-                )}
-              </div>
+              <button onClick={() => onOpenProfile?.(activePeer)} className="flex items-center gap-2 min-w-0 hover:opacity-80 transition-opacity">
+                <Avatar addr={activePeer} profiles={profiles} size="sm" />
+                <div className="min-w-0 text-left">
+                  <p className="font-bold text-sm text-[#0A0B0D] truncate leading-tight">{activePeerLabel}</p>
+                  {profiles[activePeer]?.username && (
+                    <p className="text-[11px] text-[#8A919E] truncate leading-tight">{activePeer.slice(0, 6)}…{activePeer.slice(-4)}</p>
+                  )}
+                </div>
+              </button>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-1.5 min-h-0">
               {messages.length === 0 && (
