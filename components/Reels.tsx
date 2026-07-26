@@ -179,7 +179,7 @@ export default function Reels() {
   const switchVideo = (newId: string) => setActiveId(newId)
 
   return (
-    <div className="flex flex-col select-none" style={{ height: 'calc(100dvh - calc(60px + var(--inset-top, 0px)) - calc(56px + var(--inset-bottom, 0px)))' }}>
+    <div className="flex flex-col select-none messages-shell">
 
       <div className="flex gap-2 px-3 py-2 border-b border-[#EEF1F5] bg-white flex-shrink-0">
         <input value={searchInput} onChange={e => setSearchInput(e.target.value)}

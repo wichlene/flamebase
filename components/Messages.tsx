@@ -301,7 +301,7 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
                       })
                     } catch {}
                   }}
-                  className="opacity-0 group-hover:opacity-100 mr-2 w-6 h-6 flex items-center justify-center rounded-full hover:bg-red-100 text-[#8A919E] hover:text-red-500 text-xs transition-all flex-shrink-0"
+                  className="opacity-100 md:opacity-0 md:group-hover:opacity-100 mr-2 w-8 h-8 flex items-center justify-center rounded-full hover:bg-red-100 text-[#8A919E] hover:text-red-500 text-sm transition-all flex-shrink-0"
                   title="Delete conversation">
                   🗑
                 </button>

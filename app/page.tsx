@@ -249,8 +249,14 @@ function ConnectPrompt({ message, label = 'Connect Wallet', onConnect }: { messa
 function AITabContent() {
   const [aiSubTab, setAiSubTab] = useState<'chat' | 'analyze'>('chat')
   return (
-    <div>
-      <div className="flex border-b border-[#E4E7EB] px-4 gap-1 pt-2">
+    // messages-shell sizes to the real (measured) header/nav heights instead
+    // of a guessed vh offset — AIChat's own internal height calc used to
+    // assume it filled the whole tab area, ignoring this sub-tab bar sitting
+    // above it, so its input row could end up pushed under the bottom nav.
+    // flex-col + flex-1/min-h-0 on the child lets AIChat just fill whatever
+    // space is actually left instead of computing its own guess.
+    <div className="messages-shell flex flex-col">
+      <div className="flex border-b border-[#E4E7EB] px-4 gap-1 pt-2 flex-shrink-0">
         {([['chat', '🤖 AI Chat'], ['analyze', '🔍 Token Analyzer']] as const).map(([id, label]) => (
           <button key={id} onClick={() => setAiSubTab(id)}
             className={`px-4 py-2 text-sm font-semibold rounded-t-xl transition-colors ${aiSubTab === id ? 'bg-[#F0F4FF] text-[#0052FF] border-b-2 border-[#0052FF]' : 'text-[#5B6271] hover:text-[#0A0B0D]'}`}>
@@ -258,7 +264,9 @@ function AITabContent() {
           </button>
         ))}
       </div>
-      {aiSubTab === 'chat' ? <AIChat /> : <TokenAnalyzer />}
+      <div className={`flex-1 min-h-0 ${aiSubTab === 'chat' ? '' : 'overflow-y-auto'}`}>
+        {aiSubTab === 'chat' ? <AIChat /> : <TokenAnalyzer />}
+      </div>
     </div>
   )
 }
@@ -1975,20 +1983,26 @@ export default function Home() {
         value: fixedFee,
       }, 'mintPostNft')
       showToast('success', 'Deploying your post NFT…')
-      setTimeout(async () => {
-        try {
-          const cols = await publicClient.readContract({
-            address: NFT_FACTORY_ADDRESS, abi: NFT_FACTORY_ABI, functionName: 'getCollections',
-          }) as unknown as Array<{ addr: `0x${string}`; name: string; creator: string }>
-          const mine = cols.filter(c => c.creator.toLowerCase() === address.toLowerCase() && c.name === name).pop()
-          if (!mine) { showToast('error', 'Deployed, but could not auto-mint — check Basescan'); return }
-          await writeContractAsync({ address: mine.addr, abi: FLAME_NFT_ABI, functionName: 'mint', value: 0n }, 'mintPostNftFinal')
-          showToast('success', `🎉 Post minted as NFT! ${mine.addr.slice(0, 8)}…${mine.addr.slice(-4)}`)
-        } catch (e) {
-          console.error(e)
-          showToast('error', 'Collection deployed, but mint step failed — try minting it on Basescan')
-        }
-      }, 5000)
+      // Wait for the deployment to be indexable, then mint token #0 — kept
+      // inside this same try/finally (was previously an un-awaited
+      // setTimeout) so the loading guard below stays set for the ENTIRE
+      // two-step flow. It used to clear immediately after the first
+      // writeContractAsync, re-enabling the button up to 5s before the
+      // second transaction even started — a second click in that window
+      // would deploy a second, orphaned NFT collection for the same post.
+      await new Promise(r => setTimeout(r, 5000))
+      try {
+        const cols = await publicClient.readContract({
+          address: NFT_FACTORY_ADDRESS, abi: NFT_FACTORY_ABI, functionName: 'getCollections',
+        }) as unknown as Array<{ addr: `0x${string}`; name: string; creator: string }>
+        const mine = cols.filter(c => c.creator.toLowerCase() === address.toLowerCase() && c.name === name).pop()
+        if (!mine) { showToast('error', 'Deployed, but could not auto-mint — check Basescan'); return }
+        await writeContractAsync({ address: mine.addr, abi: FLAME_NFT_ABI, functionName: 'mint', value: 0n }, 'mintPostNftFinal')
+        showToast('success', `🎉 Post minted as NFT! ${mine.addr.slice(0, 8)}…${mine.addr.slice(-4)}`)
+      } catch (e) {
+        console.error(e)
+        showToast('error', 'Collection deployed, but mint step failed — try minting it on Basescan')
+      }
     } catch (e) {
       console.error(e)
       showToast('error', txError(e))
@@ -2535,7 +2549,7 @@ export default function Home() {
 
           {/* Notification dropdown */}
           {showNotifications && (
-            <div className="fixed top-16 left-2 right-2 md:left-auto md:right-4 md:w-80 z-[200] bg-white rounded-2xl shadow-2xl border border-[#EEF1F5] max-h-[70vh] md:max-h-96 overflow-y-auto">
+            <div className="notif-dropdown-top fixed left-2 right-2 md:left-auto md:right-4 md:w-80 z-[200] bg-white rounded-2xl shadow-2xl border border-[#EEF1F5] max-h-[70vh] md:max-h-96 overflow-y-auto">
               <div className="px-4 py-3 border-b border-[#EEF1F5] flex items-center justify-between sticky top-0 bg-white">
                 <h3 className="font-black text-sm text-[#0A0B0D]">🔔 Notifications</h3>
                 {notifications.length > 0 && (
@@ -2961,7 +2975,7 @@ export default function Home() {
                                 </div>
                                 {isConnected && (
                                   <button onClick={() => setReply(key, c.commenter)}
-                                    className="opacity-0 group-hover:opacity-100 text-[#8A919E] hover:text-[#0052FF] text-xs transition-all px-2 py-1 rounded-lg hover:bg-[#E6EEFF] flex-shrink-0">
+                                    className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-[#8A919E] hover:text-[#0052FF] text-xs transition-all px-2 py-1 rounded-lg hover:bg-[#E6EEFF] flex-shrink-0">
                                     {t('reply')}
                                   </button>
                                 )}

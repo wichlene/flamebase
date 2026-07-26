@@ -31,6 +31,15 @@ function friendlyError(e: unknown): string {
   if (e instanceof AgentActionError) return `⚠️ ${e.message}`
   const msg = e instanceof Error ? e.message : ''
   if (/reject|denied|cancel|user rejected/i.test(msg)) return '❌ Cancelled in wallet.'
+  // safeSend()/executeAction() throw these two prefixes for a CONFIRMED
+  // on-chain revert or a genuinely unresolved outcome — both real, final
+  // results, not "something went wrong, try again." Collapsing them to the
+  // generic message threw away the actual revert reason this whole
+  // UserOperationEvent-checking machinery exists to surface, and for a
+  // pending/unconfirmed action specifically invited the user to retry via
+  // chat, which is exactly the double-submit that outcome must not trigger.
+  if (msg.startsWith('CONTRACT_REVERT:')) return `⚠️ ${msg.slice('CONTRACT_REVERT:'.length).trim()}`
+  if (msg.startsWith('PENDING_UNCONFIRMED:')) return "⏳ Still confirming on-chain — check the tx log before trying again, don't resend."
   if (/insufficient|balance|exceeds/i.test(msg)) return '💸 Not enough balance for this on Base.'
   return 'Something went wrong. Try again.'
 }
@@ -179,7 +188,7 @@ export default function AIChat() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-120px)]">
+    <div className="flex flex-col h-full">
       {/* Header */}
       <div className="px-4 pt-4 pb-3 border-b border-[#EEF1F5] flex items-center gap-3">
         <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#7B3FE4] to-[#0052FF] flex items-center justify-center text-xl flex-shrink-0">

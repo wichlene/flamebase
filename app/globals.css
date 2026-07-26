@@ -59,6 +59,21 @@ body {
   .messages-shell { height: calc(100vh - 120px); }
 }
 
+/* Same reasoning as .messages-shell: the mobile header's real height varies
+   by device (notch/Dynamic Island safe-area insets, longer wallet-address
+   text) so a hardcoded top offset drifts and lets these fixed overlays
+   render on top of the still-visible header instead of below it. Desktop
+   never had this problem (the mobile header doesn't render there), so it
+   keeps the original fixed values. */
+.notif-dropdown-top { top: calc(var(--mobile-header-h, 64px) + 8px); }
+@media (min-width: 768px) {
+  .notif-dropdown-top { top: 4rem; }
+}
+.toast-top { top: calc(var(--mobile-header-h, 64px) + 24px); }
+@media (min-width: 768px) {
+  .toast-top { top: 5rem; }
+}
+
 ::selection {
   background: #0052FF;
   color: white;
