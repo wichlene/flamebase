@@ -1490,7 +1490,7 @@ export default function Home() {
   const [supportersLoaded, setSupportersLoaded] = useState(false)
   useEffect(() => {
     let cancelled = false
-    const load = () => fetch('/api/leaderboard?n=10').then(r => r.json()).then(d => {
+    const load = () => fetch('/api/leaderboard?n=5').then(r => r.json()).then(d => {
       if (cancelled) return
       if (Array.isArray(d?.leaderboard)) setSupporters(d.leaderboard)
       setSupportersLoaded(true)
@@ -3816,11 +3816,11 @@ export default function Home() {
               {supporters.length > 0 ? (
                 <>
                   <div className="bg-[#FAFBFD] border border-[#EEF1F5] rounded-2xl overflow-hidden">
-                    {supporters.map((u, i) => (
+                    {supporters.slice(0, 5).map((u, i) => (
                       <button key={u.addr} onClick={() => setSelectedUser(u.addr)}
                         className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-[#F0F4FF] transition-colors border-b border-[#EEF1F5] last:border-b-0">
-                        <span className={`text-sm font-black w-5 text-center flex-shrink-0 ${i === 0 ? 'text-[#F59E0B]' : i === 1 ? 'text-[#9CA3AF]' : i === 2 ? 'text-[#B45309]' : 'text-[#C5CBD3]'}`}>
-                          {i + 1}
+                        <span className={`text-sm font-black w-5 text-center flex-shrink-0 flex items-center justify-center ${i === 0 ? 'text-[#F59E0B]' : i === 1 ? 'text-[#9CA3AF]' : i === 2 ? 'text-[#B45309]' : 'text-[#C5CBD3]'}`}>
+                          {i < 3 ? '👑' : i + 1}
                         </span>
                         <Avatar addr={u.addr} profiles={profiles} size="sm" />
                         <span className="flex-1 text-left text-sm font-bold text-[#0A0B0D] truncate">{getUsername(u.addr)}</span>
