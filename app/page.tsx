@@ -1487,11 +1487,14 @@ export default function Home() {
   // (app/api/leaderboard/scan) so it reflects EVERYONE's full history, not
   // just whichever posts happen to be loaded in the feed right now.
   const [supporters, setSupporters] = useState<{ addr: string; score: number }[]>([])
+  const [supportersLoaded, setSupportersLoaded] = useState(false)
   useEffect(() => {
     let cancelled = false
     const load = () => fetch('/api/leaderboard?n=10').then(r => r.json()).then(d => {
-      if (!cancelled && Array.isArray(d?.leaderboard)) setSupporters(d.leaderboard)
-    }).catch(() => {})
+      if (cancelled) return
+      if (Array.isArray(d?.leaderboard)) setSupporters(d.leaderboard)
+      setSupportersLoaded(true)
+    }).catch(() => { if (!cancelled) setSupportersLoaded(true) })
     load()
     const id = setInterval(load, 120_000)
     return () => { cancelled = true; clearInterval(id) }
@@ -3803,24 +3806,33 @@ export default function Home() {
         <aside className="hidden xl:flex flex-col fixed right-0 top-0 h-full w-96 bg-white border-l border-[#E4E7EB] z-40 overflow-y-auto">
 
           {/* Top Supporters — total on-chain actions ever taken on FlameBase,
-              not just likes/tips on whatever posts happen to be loaded. */}
-          {supporters.length > 0 && (
+              not just likes/tips on whatever posts happen to be loaded. Shown
+              even while empty (rather than vanishing) so a fresh deploy —
+              before the background scanner has produced its first data —
+              reads as "still gathering", not "broken". */}
+          {supportersLoaded && (
             <div className="px-3 pt-4 pb-1">
               <p className="text-xs font-black text-[#8A919E] uppercase tracking-wider px-1 mb-2">🔥 Top Supporters</p>
-              <div className="bg-[#FAFBFD] border border-[#EEF1F5] rounded-2xl overflow-hidden">
-                {supporters.map((u, i) => (
-                  <button key={u.addr} onClick={() => setSelectedUser(u.addr)}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-[#F0F4FF] transition-colors border-b border-[#EEF1F5] last:border-b-0">
-                    <span className={`text-sm font-black w-5 text-center flex-shrink-0 ${i === 0 ? 'text-[#F59E0B]' : i === 1 ? 'text-[#9CA3AF]' : i === 2 ? 'text-[#B45309]' : 'text-[#C5CBD3]'}`}>
-                      {i + 1}
-                    </span>
-                    <Avatar addr={u.addr} profiles={profiles} size="sm" />
-                    <span className="flex-1 text-left text-sm font-bold text-[#0A0B0D] truncate">{getUsername(u.addr)}</span>
-                    <span className="text-xs font-bold text-[#FF6B35] flex-shrink-0">⚡ {u.score.toLocaleString('en')}</span>
-                  </button>
-                ))}
-              </div>
-              <p className="text-[10px] text-[#C5CBD3] px-1 mt-1.5">Total posts, likes, comments, tips, votes &amp; more — everything, ever.</p>
+              {supporters.length > 0 ? (
+                <>
+                  <div className="bg-[#FAFBFD] border border-[#EEF1F5] rounded-2xl overflow-hidden">
+                    {supporters.map((u, i) => (
+                      <button key={u.addr} onClick={() => setSelectedUser(u.addr)}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-[#F0F4FF] transition-colors border-b border-[#EEF1F5] last:border-b-0">
+                        <span className={`text-sm font-black w-5 text-center flex-shrink-0 ${i === 0 ? 'text-[#F59E0B]' : i === 1 ? 'text-[#9CA3AF]' : i === 2 ? 'text-[#B45309]' : 'text-[#C5CBD3]'}`}>
+                          {i + 1}
+                        </span>
+                        <Avatar addr={u.addr} profiles={profiles} size="sm" />
+                        <span className="flex-1 text-left text-sm font-bold text-[#0A0B0D] truncate">{getUsername(u.addr)}</span>
+                        <span className="text-xs font-bold text-[#FF6B35] flex-shrink-0">⚡ {u.score.toLocaleString('en')}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-[#C5CBD3] px-1 mt-1.5">Total posts, likes, comments, tips, votes &amp; more — everything, ever.</p>
+                </>
+              ) : (
+                <p className="text-xs text-[#C5CBD3] px-1">Gathering onchain history… check back in a bit.</p>
+              )}
             </div>
           )}
 
