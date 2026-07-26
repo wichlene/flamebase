@@ -368,7 +368,7 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
       {/* New conversation modal */}
       {showNew && (
         <div className="fixed inset-0 bg-black/50 z-[300] flex items-center justify-center p-4" onClick={() => setShowNew(false)}>
-          <div className="bg-white rounded-2xl p-5 max-w-sm w-full" onClick={e => e.stopPropagation()}>
+          <div className="animate-modal-in bg-white rounded-2xl p-5 max-w-sm w-full" onClick={e => e.stopPropagation()}>
             <h3 className="font-black text-lg mb-2 text-[#0A0B0D]">New Message</h3>
             <p className="text-xs text-[#5B6271] mb-3">Search by username or enter a 0x address.</p>
             <div className="relative">

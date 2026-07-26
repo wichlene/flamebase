@@ -202,7 +202,7 @@ export default function AIChat() {
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {messages.map((m, i) => (
-          <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+          <div key={i} className={`animate-card-in flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             {m.role === 'assistant' && (
               <div className="w-6 h-6 rounded-full bg-gradient-to-br from-[#7B3FE4] to-[#0052FF] flex items-center justify-center text-xs mr-2 mt-1 flex-shrink-0">
                 🤖

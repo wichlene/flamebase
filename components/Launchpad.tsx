@@ -485,7 +485,7 @@ export default function Launchpad() {
       {/* admin: add-liquidity modal */}
       {showLiq && isAdmin && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center z-[60] p-3" onClick={() => setShowLiq(false)}>
-          <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-sm p-5 shadow-2xl max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+          <div className="animate-modal-in bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-sm p-5 shadow-2xl max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
               <span className="font-black text-[#0A0B0D]">➕ Add Liquidity</span>
               <button onClick={() => setShowLiq(false)} className="text-[#8A919E] hover:text-[#0A0B0D] text-xl leading-none">✕</button>
@@ -526,7 +526,7 @@ export default function Launchpad() {
         ]
         return (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-stretch sm:items-center justify-center z-[60] p-0 sm:p-4" onClick={() => setDetail(null)}>
-            <div className="bg-white sm:rounded-3xl w-full max-w-lg h-[100dvh] sm:h-auto sm:max-h-[92vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="animate-modal-in bg-white sm:rounded-3xl w-full max-w-lg h-[100dvh] sm:h-auto sm:max-h-[92vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
               {/* header */}
               <div className="flex items-center gap-3 p-4 border-b border-[#F0F2F5] sticky top-0 bg-white z-10">
                 <TokenLogo img={m?.img} symbol={detail.symbol} size={40} />
@@ -586,7 +586,7 @@ export default function Launchpad() {
         const quick = side === 'buy' ? ['0.005', '0.01', '0.05', '0.1'] : null
         return (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center z-[60] p-3" onClick={() => setActive(null)}>
-            <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-sm p-5 shadow-2xl max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="animate-modal-in bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-sm p-5 shadow-2xl max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
               {/* header */}
               <div className="flex items-center gap-3 mb-4">
                 <TokenLogo img={m?.img} symbol={active.symbol} size={44} />

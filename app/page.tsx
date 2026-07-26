@@ -2737,7 +2737,7 @@ export default function Home() {
                   const isOwnPost = address && post.author.toLowerCase() === address.toLowerCase()
 
                   return (
-                    <article key={key} id={`post-${key}`} className="border-b border-[#EEF1F5] hover:bg-[#FAFBFD] hover:shadow-sm transition-all duration-200 overflow-hidden">
+                    <article key={key} id={`post-${key}`} className="animate-card-in border-b border-[#EEF1F5] hover:bg-[#FAFBFD] hover:shadow-sm hover:-translate-y-px transition-all duration-200 overflow-hidden">
                       <div className="p-4">
                         <div className="flex gap-3">
                           <button onClick={() => setSelectedUser(post.author)} className="flex-shrink-0 cursor-pointer">
@@ -3818,7 +3818,8 @@ export default function Home() {
                   <div className="bg-[#FAFBFD] border border-[#EEF1F5] rounded-2xl overflow-hidden">
                     {supporters.slice(0, 5).map((u, i) => (
                       <button key={u.addr} onClick={() => setSelectedUser(u.addr)}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-[#F0F4FF] transition-colors border-b border-[#EEF1F5] last:border-b-0">
+                        style={{ animationDelay: `${i * 40}ms` }}
+                        className="animate-card-in w-full flex items-center gap-3 px-3 py-2.5 hover:bg-[#F0F4FF] transition-colors border-b border-[#EEF1F5] last:border-b-0">
                         <span className={`text-sm font-black w-5 text-center flex-shrink-0 flex items-center justify-center ${i === 0 ? 'text-[#F59E0B]' : i === 1 ? 'text-[#9CA3AF]' : i === 2 ? 'text-[#B45309]' : 'text-[#C5CBD3]'}`}>
                           {i < 3 ? '👑' : i + 1}
                         </span>
@@ -4109,7 +4110,7 @@ export default function Home() {
       {/* ── User Profile Modal ── */}
       {selectedUser && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4" onClick={() => setSelectedUser(null)}>
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-y-auto overflow-x-hidden" onClick={e => e.stopPropagation()}>
+          <div className="animate-modal-in bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-y-auto overflow-x-hidden" onClick={e => e.stopPropagation()}>
             <div className="sticky top-0 bg-white border-b border-[#EEF1F5] px-5 py-4 flex items-center justify-between">
               <h2 className="font-black text-lg">Profile</h2>
               <button onClick={() => setSelectedUser(null)} className="w-8 h-8 rounded-full hover:bg-[#F7F9FC] flex items-center justify-center text-[#5B6271] transition-colors">✕</button>
