@@ -97,12 +97,17 @@ export default function FarcasterNotifySetup() {
         return { timestamp, signature }
       }
 
-      // 1. Link fid ↔ address.
+      // 1. Link fid ↔ address. The wallet signature above only proves
+      // control of `address` — it does NOT prove `address`'s owner actually
+      // controls fid `fid` (anyone can sign a message claiming any fid
+      // number). Quick Auth is Farcaster's own cryptographic proof of FID
+      // ownership, verified server-side against Farcaster's auth server.
+      const { token: quickAuthToken } = await sdk.quickAuth.getToken()
       const { timestamp: lt, signature: ls } = await sign('link', String(fid))
       const linkRes = await fetch('/api/farcaster/link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fid, address, timestamp: lt, signature: ls }),
+        body: JSON.stringify({ fid, address, timestamp: lt, signature: ls, quickAuthToken }),
       })
       if (!linkRes.ok) {
         const d = await linkRes.json().catch(() => ({}))

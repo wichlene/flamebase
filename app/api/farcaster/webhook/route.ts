@@ -13,10 +13,14 @@ import { saveFcToken, removeFcToken, getAddrForFid } from '../../../../lib/notif
 // amounts, comment previews) to an attacker-controlled endpoint. As a partial
 // mitigation, we only accept an update for FIDs that already have a
 // signature-verified address link (established via /api/farcaster/link, which
-// DOES require a wallet signature) — so a forged call can't hijack an
-// arbitrary/unknown FID, only one that's a legitimate FlameBase user AND whose
-// (address, fid) pair the attacker already knows. Full JFS verification is
-// still needed to close this completely; treat it as a hardening TODO.
+// DOES require a wallet signature AND a Quick Auth-verified fid) — so a forged
+// call can't hijack an arbitrary/unknown FID, only one that's a legitimate
+// FlameBase user AND whose fid the attacker already knows. Applied to BOTH the
+// add/enable branch AND the remove/disable branch — a forged "remove" event
+// used to be accepted unconditionally for ANY fid, letting an attacker
+// silently unsubscribe a real, legitimately-registered user's notifications
+// with nothing more than their public fid. Full JFS verification is still
+// needed to close this completely; treat it as a hardening TODO.
 export const dynamic = 'force-dynamic'
 
 function decode(b64url: string): unknown {
@@ -39,10 +43,13 @@ export async function POST(req: NextRequest) {
     const event = payload?.event
     const nd = payload?.notificationDetails
 
-    if ((event === 'miniapp_added' || event === 'notifications_enabled') && nd?.url && nd?.token) {
+    if (event === 'miniapp_added' || event === 'notifications_enabled' || event === 'miniapp_removed' || event === 'notifications_disabled') {
       if (!(await getAddrForFid(fid))) {
         return NextResponse.json({ ok: false, error: 'fid not linked to a known address' }, { status: 403 })
       }
+    }
+
+    if ((event === 'miniapp_added' || event === 'notifications_enabled') && nd?.url && nd?.token) {
       await saveFcToken(fid, { url: nd.url, token: nd.token })
     } else if (event === 'miniapp_removed' || event === 'notifications_disabled') {
       await removeFcToken(fid)
