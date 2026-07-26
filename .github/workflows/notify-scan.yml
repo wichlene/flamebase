@@ -18,7 +18,11 @@ jobs:
     steps:
       - name: Trigger notification scan
         run: |
-          code=$(curl -sS -o /tmp/out.json -w '%{http_code}' -X POST \
+          # -L: flamebase.xyz 307-redirects to the canonical domain (Vercel
+          # domain config) — without following it, every run was hitting the
+          # redirect response itself instead of the actual route, so the
+          # scan never ran at all despite looking like a normal HTTP failure.
+          code=$(curl -sSL -o /tmp/out.json -w '%{http_code}' -X POST \
             "https://flamebase.xyz/api/notifications/scan" \
             -H "x-notify-secret: ${{ secrets.NOTIFY_SECRET }}")
           echo "HTTP $code"; cat /tmp/out.json || true

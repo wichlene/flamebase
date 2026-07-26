@@ -19,7 +19,9 @@ jobs:
     steps:
       - name: Trigger leaderboard scan
         run: |
-          code=$(curl -sS -o /tmp/out.json -w '%{http_code}' -X POST \
+          # -L: flamebase.xyz 307-redirects to the canonical domain (Vercel
+          # domain config) — see notify-scan.yml for the full story.
+          code=$(curl -sSL -o /tmp/out.json -w '%{http_code}' -X POST \
             "https://flamebase.xyz/api/leaderboard/scan" \
             -H "x-notify-secret: ${{ secrets.NOTIFY_SECRET }}")
           echo "HTTP $code"; cat /tmp/out.json || true
