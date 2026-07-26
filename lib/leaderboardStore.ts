@@ -23,21 +23,36 @@ async function redis(cmd: (string | number)[]): Promise<any> {
 }
 
 const memScores: Record<string, number> = {}
-let memCursor: string | null = null
+const mem: Record<string, string> = {}
 let memLockUntil = 0
 
-export async function getCursor(): Promise<bigint | null> {
+async function getNum(key: string): Promise<bigint | null> {
   let v: string | null = null
-  if (useRedis) v = await redis(['GET', 'fb:lb:cursor'])
-  else v = memCursor
+  if (useRedis) v = await redis(['GET', key])
+  else v = mem[key] ?? null
   return v ? BigInt(v) : null
 }
-
-export async function setCursor(block: bigint): Promise<void> {
+async function setNum(key: string, block: bigint): Promise<void> {
   const v = block.toString()
-  if (useRedis) await redis(['SET', 'fb:lb:cursor', v])
-  else memCursor = v
+  if (useRedis) await redis(['SET', key, v])
+  else mem[key] = v
 }
+
+// Two-cursor design so live activity is never starved by a slow historical
+// backfill: `head` is the highest block whose forward range has been fully
+// captured (advances every run to whatever the current chain tip is, so new
+// actions always show up within one run). `tail` is the lowest block
+// captured so far walking BACKWARD from where `head` started — it creeps
+// down toward `floor` (the original ~2-month backfill target, computed once
+// so it doesn't drift as time passes) filling in history behind the live
+// edge, instead of crawling forward from 2 months ago and leaving recent
+// activity invisible until it catches all the way up.
+export const getHead = () => getNum('fb:lb:head')
+export const setHead = (b: bigint) => setNum('fb:lb:head', b)
+export const getTail = () => getNum('fb:lb:tail')
+export const setTail = (b: bigint) => setNum('fb:lb:tail', b)
+export const getFloor = () => getNum('fb:lb:floor')
+export const setFloor = (b: bigint) => setNum('fb:lb:floor', b)
 
 // Increments each address's total action count by however many times it
 // shows up in this batch. Upstash's REST API has no bulk ZINCRBY, so this

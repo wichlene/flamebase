@@ -3,7 +3,7 @@ import { createPublicClient, http, fallback, parseAbiItem, type AbiEvent } from 
 import { base } from 'viem/chains'
 import { CONTRACT_ADDRESS } from '../../../../lib/contract'
 import { TOOLS_ADDRESS, TOKEN_FACTORY_ADDRESS, NFT_FACTORY_ADDRESS, DAO_ADDRESS, FOLLOW_ADDRESS } from '../../../../lib/toolsContracts'
-import { getCursor, setCursor, bumpScores, acquireScanLock, releaseScanLock } from '../../../../lib/leaderboardStore'
+import { getHead, setHead, getTail, setTail, getFloor, setFloor, bumpScores, acquireScanLock, releaseScanLock } from '../../../../lib/leaderboardStore'
 
 // Incremental on-chain scanner that builds the "Top Supporters" leaderboard:
 // a total-actions-ever count per address, across every FlameBase-owned
@@ -74,7 +74,7 @@ function sources(): Source[] {
 // younger than that) instead of scanning from Base genesis. ~2s/block.
 const BACKFILL_BLOCKS = 2_700_000n
 const CHUNK = 9000n // public RPCs reject wider eth_getLogs ranges
-const CHUNKS_PER_RUN = 8 // ≈72,000 blocks/run — backfills 2 months in a few hours of 5-min ticks
+const CHUNKS_PER_RUN = 20 // ≈180,000 blocks/run — backfills 2 months in roughly an hour of 5-min ticks
 
 function authorized(req: NextRequest): boolean {
   const auth = req.headers.get('authorization') || ''
@@ -82,6 +82,25 @@ function authorized(req: NextRequest): boolean {
   const s = req.headers.get('x-notify-secret') || req.nextUrl.searchParams.get('key') || ''
   if (process.env.NOTIFY_SECRET && s === process.env.NOTIFY_SECRET) return true
   return false
+}
+
+// Scans [from, to] (inclusive) across every source and tallies the actors
+// found. Returns how many action-events were counted.
+async function scanRange(srcs: Source[], from: bigint, to: bigint): Promise<number> {
+  const results = await Promise.all(
+    srcs.map(s => client.getLogs({ address: s.address, event: s.event, fromBlock: from, toBlock: to }).catch(() => []))
+  )
+  const actors: string[] = []
+  results.forEach((logs, idx) => {
+    const argName = srcs[idx].argName
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const log of logs as any[]) {
+      const addr = log.args?.[argName]
+      if (addr) actors.push(addr as string)
+    }
+  })
+  if (actors.length) await bumpScores(actors)
+  return actors.length
 }
 
 async function handle(req: NextRequest) {
@@ -100,46 +119,61 @@ async function handle(req: NextRequest) {
 
   try {
     const latest = await client.getBlockNumber()
-    let cursor = await getCursor()
-    if (cursor === null) {
-      cursor = latest > BACKFILL_BLOCKS ? latest - BACKFILL_BLOCKS : 0n
-    }
-    if (cursor >= latest) {
-      return NextResponse.json({ ok: true, scanned: 0, head: latest.toString() })
+    const storedHead = await getHead()
+    let head: bigint
+    let tail: bigint
+    let floor: bigint
+
+    if (storedHead === null) {
+      // First run ever: nothing captured yet in either direction. Seed head
+      // at the current tip (so the forward pass below has nothing to do —
+      // there's no "since last run" gap on run #1) and tail at tip+1 (so the
+      // backward pass starts by scanning the block right below it).
+      head = latest
+      tail = latest + 1n
+      floor = latest > BACKFILL_BLOCKS ? latest - BACKFILL_BLOCKS : 0n
+      await Promise.all([setHead(head), setTail(tail), setFloor(floor)])
+    } else {
+      // tail/floor were set together with head on the first run, so they exist too.
+      head = storedHead
+      tail = (await getTail()) as bigint
+      floor = (await getFloor()) as bigint
     }
 
-    const startedFrom = cursor + 1n
-    let from = startedFrom
     let totalActions = 0
+    let chunksUsed = 0
 
-    for (let i = 0; i < CHUNKS_PER_RUN && from <= latest; i++) {
-      const to = latest - from > CHUNK ? from + CHUNK : latest
-      const results = await Promise.all(
-        srcs.map(s => client.getLogs({ address: s.address, event: s.event, fromBlock: from, toBlock: to }).catch(() => []))
-      )
-      const actors: string[] = []
-      results.forEach((logs, idx) => {
-        const argName = srcs[idx].argName
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        for (const log of logs as any[]) {
-          const addr = log.args?.[argName]
-          if (addr) actors.push(addr as string)
-        }
-      })
-      totalActions += actors.length
-      if (actors.length) await bumpScores(actors)
-
-      if (to >= latest) { from = to + 1n; break }
-      from = to + 1n
+    // 1) Freshness pass: whatever's landed since the last run, first —
+    // never let backfill work starve live activity from showing up.
+    if (head < latest) {
+      let from = head + 1n
+      while (from <= latest && chunksUsed < CHUNKS_PER_RUN) {
+        const to = latest - from > CHUNK ? from + CHUNK : latest
+        totalActions += await scanRange(srcs, from, to)
+        chunksUsed++
+        from = to + 1n
+      }
+      head = latest
+      await setHead(head)
     }
 
-    await setCursor(from - 1n)
+    // 2) Backfill pass: walk backward from `tail` toward `floor` with
+    // whatever chunk budget this run has left.
+    while (tail > floor && chunksUsed < CHUNKS_PER_RUN) {
+      const from = tail - CHUNK > floor ? tail - CHUNK : floor
+      totalActions += await scanRange(srcs, from, tail - 1n)
+      tail = from
+      chunksUsed++
+    }
+    await setTail(tail)
 
     return NextResponse.json({
       ok: true,
-      from: startedFrom.toString(),
-      to: (from - 1n).toString(),
-      head: latest.toString(),
+      head: head.toString(),
+      tail: tail.toString(),
+      floor: floor.toString(),
+      backfillDone: tail <= floor,
+      chunksUsed,
       actions: totalActions,
     })
   } finally {
