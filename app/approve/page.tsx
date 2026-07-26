@@ -2,10 +2,10 @@
 
 import { Suspense, useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { useSendTransaction, useAccount, useConnect } from 'wagmi'
+import { useAccount, useConnect } from 'wagmi'
 import { base } from 'wagmi/chains'
-import { parseEther } from 'viem'
 import Link from 'next/link'
+import { useSafeSend } from '../../lib/useSafeSend'
 
 interface TxCall {
   to: string
@@ -23,10 +23,13 @@ function ApproveContent() {
   const searchParams = useSearchParams()
   const { address, isConnected } = useAccount()
   const { connect, connectors } = useConnect()
-  const { sendTransaction, isPending, isSuccess, isError, error, data: txHash } = useSendTransaction()
+  const safeSend = useSafeSend()
 
   const [payload, setPayload] = useState<TxPayload | null>(null)
   const [decodeError, setDecodeError] = useState<string | null>(null)
+  const [status, setStatus] = useState<'idle' | 'pending' | 'success' | 'error'>('idle')
+  const [txHash, setTxHash] = useState<string | null>(null)
+  const [errMsg, setErrMsg] = useState('')
 
   useEffect(() => {
     const raw = searchParams.get('tx')
@@ -72,14 +75,29 @@ function ApproveContent() {
 
   const actionName = payload.description || 'FlameBase İşlemi'
 
-  function handleApprove() {
+  async function handleApprove() {
     if (!call) return
-    sendTransaction({
-      to: call.to as `0x${string}`,
-      data: call.data as `0x${string}`,
-      value: call.value ? BigInt(call.value) : 0n,
-      chainId: base.id,
-    })
+    setStatus('pending')
+    setErrMsg('')
+    try {
+      const hash = await safeSend({
+        to: call.to as `0x${string}`,
+        data: call.data as `0x${string}`,
+        value: call.value ? BigInt(call.value) : undefined,
+      })
+      setTxHash(hash)
+      setStatus('success')
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Bilinmeyen hata'
+      const rejected = /user rejected|user denied|rejected the request/i.test(msg)
+      const friendly = rejected
+        ? 'İşlem cüzdanda iptal edildi.'
+        : msg.startsWith('CONTRACT_REVERT:') ? msg.slice('CONTRACT_REVERT:'.length).trim()
+        : msg.startsWith('PENDING_UNCONFIRMED:') ? 'İşlem onaylanamadı — sonucu Basescan\'de kontrol et, tekrar denemeden önce.'
+        : msg.slice(0, 140)
+      setErrMsg(friendly)
+      setStatus('error')
+    }
   }
 
   return (
@@ -127,10 +145,10 @@ function ApproveContent() {
               </button>
             ))}
           </div>
-        ) : isSuccess ? (
+        ) : status === 'success' ? (
           <div className="text-center space-y-2">
             <div className="text-green-500 text-3xl">✓</div>
-            <p className="font-medium text-gray-900">İşlem Gönderildi!</p>
+            <p className="font-medium text-gray-900">İşlem Onaylandı!</p>
             {txHash && (
               <a
                 href={`https://basescan.org/tx/${txHash}`}
@@ -145,15 +163,15 @@ function ApproveContent() {
           </div>
         ) : (
           <div className="space-y-2">
-            {isError && (
-              <p className="text-red-500 text-xs text-center">{(error as Error)?.message?.slice(0, 100)}</p>
+            {status === 'error' && (
+              <p className="text-red-500 text-xs text-center">{errMsg}</p>
             )}
             <button
               onClick={handleApprove}
-              disabled={isPending}
+              disabled={status === 'pending'}
               className="w-full py-3 px-4 bg-[#0052FF] text-white rounded-xl font-semibold text-sm hover:bg-blue-700 disabled:opacity-60 transition-colors"
             >
-              {isPending ? 'Cüzdan bekleniyor…' : `Onayla — ${valueEth} ETH`}
+              {status === 'pending' ? 'Cüzdan bekleniyor…' : status === 'error' ? 'Tekrar dene' : `Onayla — ${valueEth} ETH`}
             </button>
             <Link href="/" className="block text-center text-gray-400 text-xs">İptal</Link>
           </div>
