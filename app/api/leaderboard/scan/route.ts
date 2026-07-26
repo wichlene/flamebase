@@ -70,11 +70,22 @@ function sources(): Source[] {
   return list
 }
 
-// First-ever run seeds the cursor ~2 months back (FlameBase's contracts are
-// younger than that) instead of scanning from Base genesis. ~2s/block.
-const BACKFILL_BLOCKS = 2_700_000n
+// First-ever run seeds the cursor back to before FlameBase's contracts
+// existed instead of scanning from Base genesis. Confirmed via BaseScan: the
+// main contract has been active 69 days — 3.2M blocks (~74 days at ~2s/block)
+// covers that with margin.
+const BACKFILL_BLOCKS = 3_200_000n
 const CHUNK = 9000n // public RPCs reject wider eth_getLogs ranges
-const CHUNKS_PER_RUN = 20 // ≈180,000 blocks/run — backfills 2 months in roughly an hour of 5-min ticks
+
+// GitHub's free scheduled-workflow runner does NOT reliably fire every 5
+// minutes as configured — on low-activity repos it silently skips most
+// ticks (confirmed: notify-scan's own history shows runs 1-2 hours apart,
+// not 5 minutes). A fixed chunks-per-run budget assumed frequent runs and
+// left backfill far behind actual usage. Instead, keep scanning until wall
+// clock time runs out (with margin under the 60s function limit) — however
+// rarely GitHub actually invokes this, each invocation does as much work as
+// it possibly can.
+const TIME_BUDGET_MS = 50_000
 
 function authorized(req: NextRequest): boolean {
   const auth = req.headers.get('authorization') || ''
@@ -138,8 +149,21 @@ async function handle(req: NextRequest) {
       head = storedHead
       tail = (await getTail()) as bigint
       floor = (await getFloor()) as bigint
+      // BACKFILL_BLOCKS was widened after the initial estimate turned out too
+      // shallow (BaseScan confirmed 69 days of real activity vs. the ~62
+      // days first assumed) — if the already-stored floor is shallower than
+      // what today's constant would target, push it deeper so backfill
+      // doesn't stop short of real history that's still waiting to be
+      // counted.
+      const recomputedFloor = latest > BACKFILL_BLOCKS ? latest - BACKFILL_BLOCKS : 0n
+      if (recomputedFloor < floor) {
+        floor = recomputedFloor
+        await setFloor(floor)
+      }
     }
 
+    const startedAt = Date.now()
+    const timeLeft = () => Date.now() - startedAt < TIME_BUDGET_MS
     let totalActions = 0
     let chunksUsed = 0
 
@@ -147,25 +171,25 @@ async function handle(req: NextRequest) {
     // never let backfill work starve live activity from showing up.
     if (head < latest) {
       let from = head + 1n
-      while (from <= latest && chunksUsed < CHUNKS_PER_RUN) {
+      while (from <= latest && timeLeft()) {
         const to = latest - from > CHUNK ? from + CHUNK : latest
         totalActions += await scanRange(srcs, from, to)
         chunksUsed++
         from = to + 1n
+        head = to
+        await setHead(head) // persisted per chunk: a mid-run cutoff loses no progress
       }
-      head = latest
-      await setHead(head)
     }
 
     // 2) Backfill pass: walk backward from `tail` toward `floor` with
-    // whatever chunk budget this run has left.
-    while (tail > floor && chunksUsed < CHUNKS_PER_RUN) {
+    // whatever time this run has left.
+    while (tail > floor && timeLeft()) {
       const from = tail - CHUNK > floor ? tail - CHUNK : floor
       totalActions += await scanRange(srcs, from, tail - 1n)
       tail = from
       chunksUsed++
+      await setTail(tail) // persisted per chunk, same reasoning as head above
     }
-    await setTail(tail)
 
     return NextResponse.json({
       ok: true,
@@ -175,6 +199,7 @@ async function handle(req: NextRequest) {
       backfillDone: tail <= floor,
       chunksUsed,
       actions: totalActions,
+      elapsedMs: Date.now() - startedAt,
     })
   } finally {
     await releaseScanLock()
