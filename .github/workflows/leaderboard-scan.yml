@@ -1,0 +1,26 @@
+name: leaderboard-scan
+
+# Incrementally scans every FlameBase contract's on-chain events to build the
+# "Top Supporters" leaderboard (total actions ever, per address). First runs
+# backfill roughly the last 2 months of history in bounded chunks; after
+# that it just keeps pace with new activity. Free and works on any Vercel
+# plan (unlike Vercel Cron, which is once-a-day on Hobby).
+#
+# Setup: reuses the same repo secret as notify-scan (NOTIFY_SECRET).
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger leaderboard scan
+        run: |
+          code=$(curl -sS -o /tmp/out.json -w '%{http_code}' -X POST \
+            "https://flamebase.xyz/api/leaderboard/scan" \
+            -H "x-notify-secret: ${{ secrets.NOTIFY_SECRET }}")
+          echo "HTTP $code"; cat /tmp/out.json || true
+          test "$code" = "200"
