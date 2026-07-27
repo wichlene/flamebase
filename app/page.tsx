@@ -531,27 +531,21 @@ export default function Home() {
     // behaviour is never worse than before (a genuine failure/rejection is
     // surfaced, not retried, to avoid a double prompt).
     //
-    // One full attempt below is tried twice: once WITH the Base Builder Code
-    // attribution suffix appended to calldata (so Base App / Farcaster mini-app
-    // transactions — the audience the Base "Popular Apps" WTU leaderboard
-    // actually counts — get attributed to FlameBase like every other tx
-    // already does), and if that specific attempt fails for a non-final,
-    // non-rejection reason, once more WITHOUT the suffix before ever falling
-    // through to the classic path below. This used to skip the suffix
-    // unconditionally because appending it once broke the wallet's own
-    // confirmation preview — trying suffixed-first with a same-path fallback
-    // gets the attribution when the host tolerates it, without reintroducing
-    // that failure mode when it doesn't.
+    // NOTE: Base Builder Code attribution is deliberately NOT attempted here.
+    // A prior attempt (tried-with-suffix-first, falling back to unsuffixed on
+    // failure) reintroduced the exact failure mode this comment used to warn
+    // about: on at least some hosts, the wallet's own confirmation preview
+    // doesn't cleanly reject the suffixed calldata — it just never renders a
+    // prompt at all, so wallet_sendCalls hangs indefinitely and the retry
+    // logic never gets a chance to run (there's no error to catch). That
+    // took down likes/tips/every smart-wallet action in Base App. Getting
+    // WTU credit is not worth that risk — do not re-add this without a way
+    // to time out a stuck confirmation and fall back cleanly.
     if (isSmartWalletMiniApp && address && config?.abi && config?.functionName) {
-      const provider: any = await connector?.getProvider().catch(() => null)
-      const baseData = provider ? encodeFunctionData({ abi: config.abi, functionName: config.functionName, args: config.args ?? [] }) : undefined
-      const dataVariants = baseData
-        ? [(baseData + BUILDER_CODE_DATA_SUFFIX.slice(2)) as `0x${string}`, baseData]
-        : []
-      for (let variant = 0; variant < dataVariants.length && !hash; variant++) {
       try {
+        const provider: any = await connector?.getProvider()
         if (!provider) throw new Error('no provider')
-        const data = dataVariants[variant]
+        const data = encodeFunctionData({ abi: config.abi, functionName: config.functionName, args: config.args ?? [] })
         const call: any = { to: config.address, data }
         if (config.value) call.value = `0x${BigInt(config.value).toString(16)}`
         const chainIdHex = `0x${base.id.toString(16)}`
@@ -679,11 +673,7 @@ export default function Home() {
           e?.code === 4001 || m.includes('user rejected') || m.includes('user denied') || m.includes('rejected the request')
         const finalOutcome = m.startsWith('contract_revert:') || m.startsWith('pending_unconfirmed:')
         if (userRejected || finalOutcome) throw e
-        // Otherwise: fall through to the next data variant (unsuffixed retry),
-        // or out of the loop entirely to the classic path if this was the
-        // last variant — never worse than the pre-attribution behavior.
       }
-      } // end variant loop
     }
 
     // Classic path (non-smart-wallet wallets, or smart wallets without 5792).

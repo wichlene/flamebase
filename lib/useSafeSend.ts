@@ -10,10 +10,12 @@ import { safeSend, type RawCall, type MinimalProvider } from './safeSend'
 // {to, data, value}. ABI-based calls (ERC20 approve, Aerodrome swaps, …)
 // should encodeFunctionData() into this shape first — see Launchpad.tsx.
 //
-// Applies Base Builder Code attribution to every call: unconditionally for
-// classic (non-smart-wallet) sends, and as a try-first/fall-back-without-it
-// attempt for smart wallets (see safeSend's dataSuffix handling) since a
-// past host's confirmation preview once choked on the extra calldata bytes.
+// Applies Base Builder Code attribution on the classic (non-smart-wallet)
+// path only — NOT on the smart-wallet EIP-5792 path. A past attempt to try
+// the suffix there too (falling back to unsuffixed on failure) made
+// wallet_sendCalls hang indefinitely on hosts whose confirmation preview
+// can't handle the extra calldata bytes, taking down every smart-wallet
+// action. See the warning in lib/safeSend.ts before touching this again.
 export function useSafeSend() {
   const { address, connector } = useAccount()
   const publicClient = usePublicClient()
@@ -32,7 +34,6 @@ export function useSafeSend() {
       publicClient,
       isSmartWallet,
       provider,
-      dataSuffix: BUILDER_CODE_DATA_SUFFIX,
       sendTransaction: c => sendTransactionAsync({
         chainId: base.id,
         to: c.to,
