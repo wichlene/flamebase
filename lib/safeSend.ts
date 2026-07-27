@@ -65,12 +65,18 @@ async function preflightSimulate(publicClient: MinimalPublicClient, account: `0x
   }
 }
 
-async function sendViaEip5792(
+// Submits via wallet_sendCalls (with '2.0.0'→'1.0' shape negotiation) and
+// returns the bundle id. This is the part that can hang: some hosts' wallet
+// confirmation preview doesn't cleanly reject calldata it can't handle (e.g.
+// a Builder Code attribution suffix appended past the ABI-encoded call) — it
+// just never renders a prompt, so this request never resolves OR rejects.
+// Callers that pass an attribution suffix race this against a timeout;
+// unsuffixed calls (the proven-safe path) are never time-limited.
+async function submitViaEip5792(
   provider: MinimalProvider,
   account: `0x${string}`,
   call: RawCall,
-  publicClient: MinimalPublicClient,
-): Promise<`0x${string}`> {
+): Promise<string> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const callParam: any = { to: call.to, data: call.data ?? '0x' }
   if (call.value) callParam.value = `0x${call.value.toString(16)}`
@@ -108,7 +114,18 @@ async function sendViaEip5792(
     }
   }
   if (!id) throw lastErr || new Error('wallet_sendCalls failed')
+  return id
+}
 
+// Polls wallet_getCallsStatus for a real tx hash + outcome, then verifies the
+// inner UserOperation actually succeeded. Only called once we already have a
+// bundle id, i.e. the wallet has definitely processed the request — nothing
+// here can hang the way submitViaEip5792 can.
+async function resolveEip5792(
+  provider: MinimalProvider,
+  id: string,
+  publicClient: MinimalPublicClient,
+): Promise<`0x${string}`> {
   let hash: `0x${string}` | undefined
   let callStatus: string | undefined
   for (let i = 0; i < 14 && !hash; i++) {
@@ -165,6 +182,41 @@ async function sendViaEip5792(
   return hash
 }
 
+async function sendViaEip5792(
+  provider: MinimalProvider,
+  account: `0x${string}`,
+  call: RawCall,
+  publicClient: MinimalPublicClient,
+): Promise<`0x${string}`> {
+  const id = await submitViaEip5792(provider, account, call)
+  return resolveEip5792(provider, id, publicClient)
+}
+
+// Once a suffixed attempt times out this session, stop trying it — this
+// host/wallet combo has demonstrated its confirmation preview can't handle
+// the extra calldata bytes. Resets on page reload (attribution is worth
+// retrying fresh next visit; a stuck host doesn't necessarily stay stuck).
+let attributionTimedOutThisSession = false
+
+// How long we're willing to wait for the wallet to even acknowledge a
+// suffixed wallet_sendCalls request (i.e. produce a bundle id) before
+// assuming its preview choked on the extra bytes. Generous — real
+// confirmations can take a few seconds on a slow connection/device, and
+// giving up too early would abandon a request that was about to work.
+const ATTRIBUTION_TIMEOUT_MS = 12_000
+
+const TIMEOUT_SENTINEL = Symbol('safeSend-attribution-timeout')
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(TIMEOUT_SENTINEL), ms)
+    promise.then(
+      v => { clearTimeout(timer); resolve(v) },
+      e => { clearTimeout(timer); reject(e) },
+    )
+  })
+}
+
 /**
  * Send a raw {to, data, value} call with full smart-wallet safety: pre-flight
  * simulation, EIP-5792 routing + UserOperationEvent verification for smart
@@ -172,15 +224,17 @@ async function sendViaEip5792(
  * app/page.tsx's writeContractAsync wrapper but works on ABI-agnostic raw
  * calldata, so ABI-based callers just encodeFunctionData() first.
  *
- * `dataSuffix` (Base Builder Code attribution) is applied ONLY on the
- * classic path, never on the smart-wallet EIP-5792 path. A prior version of
- * this function tried the suffix first there and fell back on failure — but
- * on at least some hosts, the wallet's own confirmation preview doesn't
- * cleanly reject suffixed calldata, it just never renders a prompt at all.
- * wallet_sendCalls then hangs indefinitely with nothing to catch, so the
- * fallback never runs — it took down every smart-wallet action (likes,
- * tips, DEX trades, agent actions) in Base App. Do not reintroduce this
- * without a way to time out a stuck confirmation and fall back cleanly.
+ * `dataSuffix` (Base Builder Code attribution), when given, is tried FIRST
+ * on the smart-wallet path, racing the submission specifically (not the
+ * whole flow — see submitViaEip5792) against ATTRIBUTION_TIMEOUT_MS. If it
+ * times out, we do NOT silently fire a second transaction (that's how a
+ * prior version of this function caused real double-submits) — instead we
+ * throw PENDING_UNCONFIRMED, the same "genuinely unknown outcome, don't
+ * blindly retry" signal already wired through the whole app's error
+ * handling, and stop attempting the suffix for the rest of this session.
+ * The user's own next tap (naturally the way anyone responds to a stuck
+ * action) becomes the unsuffixed retry — a real user gesture, not code
+ * silently resubmitting behind their back.
  */
 export async function safeSend(opts: {
   call: RawCall
@@ -191,11 +245,33 @@ export async function safeSend(opts: {
   dataSuffix?: `0x${string}`
   sendTransaction: (call: RawCall) => Promise<`0x${string}`>
 }): Promise<`0x${string}`> {
-  const { call, account, publicClient, isSmartWallet, provider, sendTransaction } = opts
+  const { call, account, publicClient, isSmartWallet, provider, dataSuffix, sendTransaction } = opts
 
   await preflightSimulate(publicClient, account, call)
 
   if (isSmartWallet && provider) {
+    if (dataSuffix && call.data && !attributionTimedOutThisSession) {
+      const suffixedCall: RawCall = { ...call, data: (call.data + dataSuffix.slice(2)) as `0x${string}` }
+      try {
+        const id = await withTimeout(submitViaEip5792(provider, account, suffixedCall), ATTRIBUTION_TIMEOUT_MS)
+        return await resolveEip5792(provider, id, publicClient)
+      } catch (e) {
+        if (e === TIMEOUT_SENTINEL) {
+          attributionTimedOutThisSession = true
+          throw new Error('PENDING_UNCONFIRMED:attribution-timeout')
+        }
+        // A genuine response (rejection, exhausted shape negotiation, some
+        // other real error) — the wallet definitely processed this request,
+        // so there's no ambiguity about a second one being a duplicate.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const err = e as any
+        const m = (err?.message || '').toLowerCase()
+        const userRejected = err?.code === 4001 || m.includes('user rejected') || m.includes('user denied') || m.includes('rejected the request')
+        const finalOutcome = m.startsWith('contract_revert:') || m.startsWith('pending_unconfirmed:')
+        if (userRejected || finalOutcome) throw e
+        // Otherwise fall through to the unsuffixed attempt below.
+      }
+    }
     return sendViaEip5792(provider, account, call, publicClient)
   }
 

@@ -36,6 +36,24 @@ const B20_FACTORY_DEPLOYED = B20_FACTORY_ADDRESS.length > 0
 
 const ADMIN_ADDRESS = '0xa77A5D4D37d6F39C20C2441295da9fA60Ab9fD69'
 
+// Base Builder Code attribution on the smart-wallet EIP-5792 path: once a
+// suffixed wallet_sendCalls request times out this session (see
+// writeContractAsync below and the matching design in lib/safeSend.ts),
+// stop trying it — this host's confirmation preview has demonstrated it
+// can't handle the extra calldata bytes. Resets on page reload.
+let attributionTimedOutThisSession = false
+const ATTRIBUTION_TIMEOUT_MS = 12_000
+const ATTRIBUTION_TIMEOUT_SENTINEL = Symbol('writeContractAsync-attribution-timeout')
+function withAttributionTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(ATTRIBUTION_TIMEOUT_SENTINEL), ms)
+    promise.then(
+      v => { clearTimeout(timer); resolve(v) },
+      e => { clearTimeout(timer); reject(e) },
+    )
+  })
+}
+
 interface Post {
   id: bigint
   author: string
@@ -531,23 +549,24 @@ export default function Home() {
     // behaviour is never worse than before (a genuine failure/rejection is
     // surfaced, not retried, to avoid a double prompt).
     //
-    // NOTE: Base Builder Code attribution is deliberately NOT attempted here.
-    // A prior attempt (tried-with-suffix-first, falling back to unsuffixed on
-    // failure) reintroduced the exact failure mode this comment used to warn
-    // about: on at least some hosts, the wallet's own confirmation preview
-    // doesn't cleanly reject the suffixed calldata — it just never renders a
-    // prompt at all, so wallet_sendCalls hangs indefinitely and the retry
-    // logic never gets a chance to run (there's no error to catch). That
-    // took down likes/tips/every smart-wallet action in Base App. Getting
-    // WTU credit is not worth that risk — do not re-add this without a way
-    // to time out a stuck confirmation and fall back cleanly.
+    // Base Builder Code attribution is tried first (suffixed calldata), with
+    // the SUBMISSION step specifically (not the whole flow) raced against a
+    // timeout — a prior version tried suffixed-then-unsuffixed purely on a
+    // caught error, but on at least some hosts the wallet's confirmation
+    // preview doesn't reject suffixed calldata, it just never renders a
+    // prompt at all, so the request hangs forever with nothing to catch.
+    // That took down every smart-wallet action in Base App. A timeout alone
+    // isn't enough either — automatically firing a second transaction when
+    // the first might still be pending would risk a genuine double-submit —
+    // so a timeout here does NOT retry automatically. It throws
+    // PENDING_UNCONFIRMED (the same "don't blindly retry" signal already
+    // used everywhere else) and disables the suffix for the rest of this
+    // session; the user's own next tap becomes the (unsuffixed) retry.
     if (isSmartWalletMiniApp && address && config?.abi && config?.functionName) {
       try {
         const provider: any = await connector?.getProvider()
         if (!provider) throw new Error('no provider')
-        const data = encodeFunctionData({ abi: config.abi, functionName: config.functionName, args: config.args ?? [] })
-        const call: any = { to: config.address, data }
-        if (config.value) call.value = `0x${BigInt(config.value).toString(16)}`
+        const baseData = encodeFunctionData({ abi: config.abi, functionName: config.functionName, args: config.args ?? [] })
         const chainIdHex = `0x${base.id.toString(16)}`
 
         // EIP-5792 changed shape across versions. The Base App / Farcaster
@@ -558,35 +577,63 @@ export default function Home() {
         // back to legacy "1.0" for older hosts. Only a genuine method-missing
         // / invalid-params error advances to the next shape; a user rejection
         // or other real failure is rethrown.
-        const shapes = [
-          { version: '2.0.0', from: address, chainId: chainIdHex, atomicRequired: false, calls: [call] },
-          { version: '1.0', chainId: chainIdHex, from: address, calls: [call] },
-        ]
-        let id: string | undefined
-        let lastErr: any
-        for (const params of shapes) {
-          try {
-            const res: any = await provider.request({ method: 'wallet_sendCalls', params: [params] })
-            id = typeof res === 'string' ? res : res?.id
-            break
-          } catch (sendErr: any) {
-            const code = sendErr?.code
-            const msg = (sendErr?.message || '').toLowerCase()
-            const userRejected =
-              code === 4001 || msg.includes('user rejected') || msg.includes('user denied') || msg.includes('rejected the request')
-            if (userRejected) throw sendErr
-            // Wrong-shape signals: method unsupported (-32601/4200) or invalid
-            // params (-32602) → try the next version. Anything else is a real
-            // failure for this method; stop and let the classic path try.
-            const wrongShape =
-              code === -32601 || code === 4200 || code === -32602 ||
-              msg.includes('not support') || msg.includes('unsupported') ||
-              msg.includes('method not found') || msg.includes('invalid param')
-            lastErr = sendErr
-            if (!wrongShape) throw sendErr
+        const submit = async (data: `0x${string}`): Promise<string> => {
+          const call: any = { to: config.address, data }
+          if (config.value) call.value = `0x${BigInt(config.value).toString(16)}`
+          const shapes = [
+            { version: '2.0.0', from: address, chainId: chainIdHex, atomicRequired: false, calls: [call] },
+            { version: '1.0', chainId: chainIdHex, from: address, calls: [call] },
+          ]
+          let id: string | undefined
+          let lastErr: any
+          for (const params of shapes) {
+            try {
+              const res: any = await provider.request({ method: 'wallet_sendCalls', params: [params] })
+              id = typeof res === 'string' ? res : res?.id
+              break
+            } catch (sendErr: any) {
+              const code = sendErr?.code
+              const msg = (sendErr?.message || '').toLowerCase()
+              const userRejected =
+                code === 4001 || msg.includes('user rejected') || msg.includes('user denied') || msg.includes('rejected the request')
+              if (userRejected) throw sendErr
+              // Wrong-shape signals: method unsupported (-32601/4200) or invalid
+              // params (-32602) → try the next version. Anything else is a real
+              // failure for this method; stop and let the classic path try.
+              const wrongShape =
+                code === -32601 || code === 4200 || code === -32602 ||
+                msg.includes('not support') || msg.includes('unsupported') ||
+                msg.includes('method not found') || msg.includes('invalid param')
+              lastErr = sendErr
+              if (!wrongShape) throw sendErr
+            }
           }
+          if (!id) throw lastErr || new Error('wallet_sendCalls failed')
+          return id
         }
-        if (!id) throw lastErr || new Error('wallet_sendCalls failed')
+
+        let id: string | undefined
+        if (!attributionTimedOutThisSession) {
+          const suffixedData = (baseData + BUILDER_CODE_DATA_SUFFIX.slice(2)) as `0x${string}`
+          try {
+            id = await withAttributionTimeout(submit(suffixedData), ATTRIBUTION_TIMEOUT_MS)
+          } catch (e: any) {
+            if (e === ATTRIBUTION_TIMEOUT_SENTINEL) {
+              attributionTimedOutThisSession = true
+              throw new Error('PENDING_UNCONFIRMED:attribution-timeout')
+            }
+            // A genuine response (rejection, exhausted shape negotiation) —
+            // the wallet definitely processed this request, so retrying
+            // unsuffixed isn't an ambiguous duplicate. A real user rejection
+            // still stops here rather than prompting a second time.
+            const m = (e?.message || '').toLowerCase()
+            const userRejected = e?.code === 4001 || m.includes('user rejected') || m.includes('user denied') || m.includes('rejected the request')
+            if (userRejected) throw e
+            id = await submit(baseData)
+          }
+        } else {
+          id = await submit(baseData)
+        }
         // Resolve the bundle id to a real tx hash AND its outcome. Previously
         // this only checked for a transactionHash's presence — a REVERTED call
         // still gets mined and gets a real hash, so a self-tip / any other

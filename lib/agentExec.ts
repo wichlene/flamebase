@@ -350,6 +350,7 @@ export async function executeAction(a: AgentAction, wallet: WalletLike, publicCl
     publicClient,
     isSmartWallet: !!ctx?.isSmartWallet,
     provider: ctx?.provider,
+    dataSuffix: BUILDER_CODE_DATA_SUFFIX,
     sendTransaction: c => wallet.sendTransaction({
       to: c.to,
       data: (!ctx?.isSmartWallet && c.data) ? ((c.data + BUILDER_CODE_DATA_SUFFIX.slice(2)) as `0x${string}`) : c.data,
