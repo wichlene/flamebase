@@ -30,8 +30,17 @@ export { BUILDER_CODE_DATA_SUFFIX } from '../lib/builderCode'
 const connectors = connectorsForWallets(
   [
     {
+      // WalletConnect listed first: on mobile web (not inside a wallet's own
+      // in-app browser), the MetaMask button redirects through
+      // metamask.app.link (MetaMask's own Branch.io-hosted deep link
+      // service) — when that domain has issues, it fails with an SSL error
+      // before ever reaching the wallet, and even when it works it swaps the
+      // user's whole browsing session into MetaMask's in-app browser with no
+      // way back to their original browser tab. WalletConnect's mobile flow
+      // keeps the user in their original browser the whole time, bouncing
+      // to the wallet app only per-signature and returning automatically.
       groupName: 'Popüler',
-      wallets: [coinbaseWallet, metaMaskWallet, phantomWallet, walletConnectWallet, rainbowWallet],
+      wallets: [walletConnectWallet, coinbaseWallet, metaMaskWallet, phantomWallet, rainbowWallet],
     },
     {
       groupName: 'Diğer',
