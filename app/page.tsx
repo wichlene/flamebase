@@ -1796,18 +1796,21 @@ export default function Home() {
     if (translatedPosts[postId]) { setTranslatedPosts(prev => { const n = {...prev}; delete n[postId]; return n }); return }
     setTranslatingPost(postId)
     try {
+      // Target the viewer's current UI language (the site's own language
+      // switcher), same idea as X's "Translate post" going to your app language.
+      const targetLang = LANG_LABELS[lang].replace(/^\S+\s*/, '')
       const res = await fetch('/api/ai', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: [{ role: 'user', content: `Translate the following text to English. Reply with ONLY the translation, nothing else: "${content}"` }] }),
+        body: JSON.stringify({ messages: [{ role: 'user', content: `Translate the following text to ${targetLang}. Reply with ONLY the translation, nothing else: "${content}"` }] }),
       })
       const data = await res.json()
       if (data.content) {
         // Strip quotes the model may echo back, then compare — if the post was
-        // already English the "translation" is just the original text, so skip
-        // showing a redundant box and tell the user instead.
+        // already in the target language the "translation" is just the
+        // original text, so skip showing a redundant box and tell the user instead.
         const norm = (s: string) => s.trim().replace(/^["'“”]+|["'“”]+$/g, '').toLowerCase()
         if (norm(data.content) === norm(content)) {
-          showToast('info', t('alreadyInLanguage'))
+          showToast('info', t('alreadyInLanguage', { lang: targetLang }))
         } else {
           setTranslatedPosts(prev => ({ ...prev, [postId]: data.content }))
         }
@@ -2907,7 +2910,7 @@ export default function Home() {
 
                             {translatedPosts[key] && (
                               <div className="mb-3 px-3 py-2.5 bg-green-50 border border-green-200 rounded-xl">
-                                <p className="text-[10px] font-black text-green-700 uppercase tracking-wide mb-1">🌐 Translation</p>
+                                <p className="text-[10px] font-black text-green-700 uppercase tracking-wide mb-1">🌐 {t('translationLabel')}</p>
                                 <p className="text-[#0A0B0D] text-sm leading-relaxed">{translatedPosts[key]}</p>
                               </div>
                             )}
@@ -2947,6 +2950,14 @@ export default function Home() {
                                 title="Share to Farcaster / X"
                                 className="flex items-center gap-1 text-[#5B6271] hover:text-[#0052FF] hover:bg-[#E6EEFF] rounded-xl px-3 py-2 text-sm transition-all">
                                 <span className="text-lg">↗</span>
+                              </button>
+
+                              <button onClick={() => translatePost(key, post.content)}
+                                disabled={translatingPost === key}
+                                title={translatedPosts[key] ? t('translationLabel') : t('translate')}
+                                className={`flex items-center gap-1 rounded-xl px-3 py-2 text-sm transition-all disabled:opacity-50 ${translatedPosts[key] ? 'text-[#0052FF] bg-[#E6EEFF]' : 'text-[#5B6271] hover:text-[#0052FF] hover:bg-[#E6EEFF]'}`}>
+                                <span className="text-lg">🌐</span>
+                                {translatingPost === key && <span className="text-xs">{t('translating')}</span>}
                               </button>
 
                               {isOwnPost && !((boostedPosts[key] || 0) > Date.now()) && (
