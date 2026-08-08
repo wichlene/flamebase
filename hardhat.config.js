@@ -12,5 +12,10 @@ module.exports = {
       url: process.env.BASE_RPC || "https://mainnet.base.org",
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
     },
+    ink: {
+      url: process.env.INK_RPC || "https://rpc-qnd.inkonchain.com",
+      chainId: 57073,
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
+    },
   },
 };
