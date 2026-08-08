@@ -28,7 +28,7 @@ jobs:
     steps:
       - name: Post to X
         run: |
-          code=$(curl -sS -o /tmp/out.json -w '%{http_code}' -X POST \
+          code=$(curl -sSL -o /tmp/out.json -w '%{http_code}' -X POST \
             "https://flamebase.xyz/api/x/post" \
             -H "x-notify-secret: ${{ secrets.NOTIFY_SECRET }}")
           echo "HTTP $code"; cat /tmp/out.json || true
