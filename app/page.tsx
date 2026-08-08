@@ -1,7 +1,7 @@
 'use client'
 
 import { ConnectButton, useConnectModal } from '@rainbow-me/rainbowkit'
-import { useAccount, useWriteContract, useReadContract, usePublicClient, useBalance, useSwitchChain, useChainId, useDisconnect, useConnect } from 'wagmi'
+import { useAccount, useWriteContract, useReadContract, usePublicClient, useBalance, useSwitchChain, useChainId, useDisconnect, useConnect, useSignMessage } from 'wagmi'
 import { sdk as fcSdk } from '@farcaster/miniapp-sdk'
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react'
 import { parseEther, formatEther, erc20Abi, encodeFunctionData, keccak256, toHex, decodeEventLog, parseAbiItem } from 'viem'
@@ -12,6 +12,7 @@ import { BUILDER_CODE_DATA_SUFFIX } from '../lib/builderCode'
 import { T, LANG_LABELS, type Lang } from '../lib/i18n'
 import { TOOLS_ADDRESS, TOKEN_FACTORY_ADDRESS, NFT_FACTORY_ADDRESS, DAO_ADDRESS, FOLLOW_ADDRESS, TOOLS_ABI, TOKEN_FACTORY_ABI, NFT_FACTORY_ABI, DAO_ABI, FOLLOW_ABI, FLAME_NFT_ADDRESS, FLAME_NFT_ABI, B20_FACTORY_ADDRESS, B20_FACTORY_ABI, encodeB20AssetCreateParams, encodeB20BatchMintInitCall } from '../lib/toolsContracts'
 import { SFX, isSoundEnabled, setSoundEnabled } from '../lib/sounds'
+import { authMessage } from '../lib/walletAuth'
 import { ToastStack, type ToastItem, type ToastKind } from '../components/Toast'
 import Avatar, { IPFS_GATEWAYS } from '../components/Avatar'
 
@@ -291,6 +292,7 @@ function AITabContent() {
 
 export default function Home() {
   const { address, isConnected, connector } = useAccount()
+  const { signMessageAsync } = useSignMessage()
   const { disconnect } = useDisconnect()
   const { connect, connectors: wagmiConnectors } = useConnect()
   const chainId = useChainId()
@@ -812,6 +814,11 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState('')
   const [notifications, setNotifications] = useState<Array<{type: 'like' | 'tip'; postId: string; delta: string; preview: string; timestamp: number}>>([])
   const [showNotifications, setShowNotifications] = useState(false)
+  // Notifications are keyed off whichever address was connected when they
+  // fired — switching accounts mid-session (no unmount) otherwise left the
+  // previous account's stale "you got a tip" notifications visible under the
+  // newly-connected address.
+  useEffect(() => { setNotifications([]) }, [address])
   const [activeTool, setActiveTool] = useState<string | null>(null)
   // Tool form states
   const [counterLoading, setCounterLoading] = useState(false)
@@ -1879,12 +1886,18 @@ export default function Home() {
 
   // Deploy the official FlameBase Logo NFT collection (admin only)
   const deployLogoNft = async () => {
-    if (deployingLogoNft || !NFT_FACTORY_DEPLOYED) return
+    if (deployingLogoNft || !NFT_FACTORY_DEPLOYED || !address) return
     setDeployingLogoNft(true)
     try {
       // 1. Upload logo to IPFS — get imageHash + baseURI (our metadata API)
       showToast('success', 'Uploading logo to IPFS…')
-      const setupRes = await fetch('/api/setup-logo-nft', { method: 'POST' })
+      const timestamp = Date.now()
+      const signature = await signMessageAsync({ message: authMessage('setup-logo-nft', address, timestamp) })
+      const setupRes = await fetch('/api/setup-logo-nft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address, timestamp, signature }),
+      })
       const setupData = await setupRes.json()
       if (!setupRes.ok || !setupData.baseURI) {
         showToast('error', 'IPFS setup failed')
@@ -1995,58 +2008,6 @@ export default function Home() {
       localStorage.setItem('flamebase_boosted', JSON.stringify(next))
       showToast('success', '🚀 Boosted! Post will appear at the top for 24h')
     } catch (e) { showToast('error', txError(e)) }
-    setLoadingAction(null)
-  }
-
-  // Mint a post as a 1-of-1 NFT via the existing NFT Factory: deploy a
-  // single-edition collection whose metadata describes this post, then
-  // immediately mint token #0 into the caller's wallet.
-  const mintPostAsNft = async (post: Post) => {
-    if (!NFT_FACTORY_DEPLOYED || !publicClient || !address) return
-    const postId = post.id.toString()
-    setLoadingAction(`mintnft-${postId}`)
-    try {
-      const image = post.ipfsHash && !post.ipfsHash.startsWith('vid_')
-        ? `ipfs://${post.ipfsHash}`
-        : 'https://flamebase.xyz/logo.png'
-      const params = new URLSearchParams({
-        postId,
-        author: post.author,
-        content: (post.content || '').slice(0, 280),
-        image,
-      })
-      const baseURI = `https://flamebase.xyz/api/nft-metadata/post?${params.toString()}&t=`
-      const name = `FlameBase Post #${postId}`
-      await writeContractAsync({
-        address: NFT_FACTORY_ADDRESS, abi: NFT_FACTORY_ABI, functionName: 'deployNFT',
-        args: [name, 'FBPOST', 1n, 0n, baseURI],
-        value: fixedFee,
-      }, 'mintPostNft')
-      showToast('success', 'Deploying your post NFT…')
-      // Wait for the deployment to be indexable, then mint token #0 — kept
-      // inside this same try/finally (was previously an un-awaited
-      // setTimeout) so the loading guard below stays set for the ENTIRE
-      // two-step flow. It used to clear immediately after the first
-      // writeContractAsync, re-enabling the button up to 5s before the
-      // second transaction even started — a second click in that window
-      // would deploy a second, orphaned NFT collection for the same post.
-      await new Promise(r => setTimeout(r, 5000))
-      try {
-        const cols = await publicClient.readContract({
-          address: NFT_FACTORY_ADDRESS, abi: NFT_FACTORY_ABI, functionName: 'getCollections',
-        }) as unknown as Array<{ addr: `0x${string}`; name: string; creator: string }>
-        const mine = cols.filter(c => c.creator.toLowerCase() === address.toLowerCase() && c.name === name).pop()
-        if (!mine) { showToast('error', 'Deployed, but could not auto-mint — check Basescan'); return }
-        await writeContractAsync({ address: mine.addr, abi: FLAME_NFT_ABI, functionName: 'mint', value: 0n }, 'mintPostNftFinal')
-        showToast('success', `🎉 Post minted as NFT! ${mine.addr.slice(0, 8)}…${mine.addr.slice(-4)}`)
-      } catch (e) {
-        console.error(e)
-        showToast('error', 'Collection deployed, but mint step failed — try minting it on Basescan')
-      }
-    } catch (e) {
-      console.error(e)
-      showToast('error', txError(e))
-    }
     setLoadingAction(null)
   }
 
@@ -2606,7 +2567,7 @@ export default function Home() {
                 notifications.map((n, i) => (
                   <button
                     key={`${n.postId}-${n.type}-${n.timestamp}-${i}`}
-                    onClick={() => { setActiveTab('feed'); setShowNotifications(false) }}
+                    onClick={() => { setActiveTab('feed'); setShowNotifications(false); scrollToPost(n.postId) }}
                     className="w-full text-left px-4 py-3 border-b border-[#EEF1F5] hover:bg-[#F7F9FC] transition-colors flex items-start gap-3"
                   >
                     <span className="text-xl flex-shrink-0">{n.type === 'tip' ? '💸' : '🔥'}</span>
@@ -4139,7 +4100,7 @@ export default function Home() {
               if (tab === 'ai') setAiEverOpened(true)
               if (tab === 'activity') {
                 const snapshot: Record<string, number> = {}
-                myPosts.forEach(p => { snapshot[p.id.toString()] = Number(p.likes) + Number(p.tips) })
+                myPosts.forEach(p => { snapshot[p.id.toString()] = Number(p.likes) })
                 setSeenActivity(snapshot)
                 localStorage.setItem('flamebase_seen_activity', JSON.stringify(snapshot))
                 myPosts.forEach(p => { if (!postComments[p.id.toString()]) loadComments(p.id.toString()) })

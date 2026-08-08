@@ -1,9 +1,24 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { readFile } from 'fs/promises'
 import path from 'path'
+import { verifyWalletAuth } from '../../../lib/walletAuth'
 
-export async function POST() {
+// Admin-only: deploys the official FlameBase Logo NFT collection. Re-uploads
+// to Pinata under the project's paid JWT on every call, so this must be
+// gated — previously had no check at all, letting anyone POST here directly
+// and burn the Pinata quota.
+const ADMIN_ADDRESS = '0xa77A5D4D37d6F39C20C2441295da9fA60Ab9fD69'
+
+export async function POST(req: NextRequest) {
   try {
+    const { address, timestamp, signature } = await req.json().catch(() => ({}))
+    if (address?.toLowerCase() !== ADMIN_ADDRESS.toLowerCase()) {
+      return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+    }
+    if (!(await verifyWalletAuth('setup-logo-nft', address, timestamp, signature))) {
+      return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+    }
+
     if (!process.env.PINATA_JWT) {
       return NextResponse.json({ error: 'PINATA_JWT env var is missing' }, { status: 500 })
     }

@@ -59,6 +59,11 @@ export default function AIChat() {
   // lands on the create_post action even if the model forgets the ipfsHash arg.
   const lastAttachRef = useRef<string | null>(null)
   const endRef = useRef<HTMLDivElement>(null)
+  // Synchronous lock for confirmAction — a plain state check race (two clicks
+  // before the 'running' state update commits) let both read the same stale
+  // 'pending' message and both fire an on-chain transaction. A ref updates
+  // immediately, before any render, so the second call sees it right away.
+  const runningActionsRef = useRef<Set<number>>(new Set())
   const { isConnected, connector } = useAccount()
   const { data: walletClient } = useWalletClient()
   const publicClient = usePublicClient()
@@ -165,12 +170,14 @@ export default function AIChat() {
   }
 
   const confirmAction = async (i: number) => {
+    if (runningActionsRef.current.has(i)) return
     const m = messages[i]
     if (!m.action) return
     if (!isConnected || !walletClient || !publicClient) {
       updateAt(i, { actionError: 'Connect your wallet first.' })
       return
     }
+    runningActionsRef.current.add(i)
     updateAt(i, { actionState: 'running', actionError: undefined })
     try {
       // Base App / Farcaster mini-app connects an ERC-4337 Coinbase Smart
@@ -184,6 +191,8 @@ export default function AIChat() {
       updateAt(i, { actionState: 'done', actionTx: hash })
     } catch (e) {
       updateAt(i, { actionState: 'error', actionError: friendlyError(e) })
+    } finally {
+      runningActionsRef.current.delete(i)
     }
   }
 
