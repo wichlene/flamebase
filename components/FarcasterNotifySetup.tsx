@@ -25,7 +25,13 @@ export default function FarcasterNotifySetup() {
   const [fid, setFid] = useState<number | null>(null)
   const [status, setStatus] = useState<'idle' | 'working' | 'done' | 'error'>('idle')
   const [errorMsg, setErrorMsg] = useState('')
-  const [dismissed, setDismissed] = useState(false)
+  // Persisted so a dismissal survives reloads/reopening the mini-app — an
+  // in-memory-only flag reset on every mount, making the banner reappear
+  // right after being closed no matter how many times the user dismisses it.
+  const [dismissed, setDismissed] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return localStorage.getItem('flamebase_fc_notify_dismissed') === 'true'
+  })
   // Set only by the notificationsEnabled/miniAppAdded host events below —
   // never auto-signed from there (signMessage silently fails when it isn't
   // the direct result of a user gesture, see the note above enable()). When
@@ -78,7 +84,6 @@ export default function FarcasterNotifySetup() {
   useEffect(() => {
     setStatus('idle')
     setErrorMsg('')
-    setDismissed(false)
     setPendingNd(null)
   }, [address])
 
@@ -183,7 +188,7 @@ export default function FarcasterNotifySetup() {
           🔔 {status === 'working' ? 'Enabling…' : pendingNd ? 'Finish setup' : status === 'error' ? 'Try again' : 'Enable Farcaster notifications'}
         </button>
         <button
-          onClick={() => setDismissed(true)}
+          onClick={() => { setDismissed(true); localStorage.setItem('flamebase_fc_notify_dismissed', 'true') }}
           aria-label="Dismiss"
           style={{
             background: 'rgba(0,0,0,.55)', color: '#fff', border: 'none',
