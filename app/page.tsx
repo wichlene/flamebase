@@ -146,15 +146,29 @@ function parseCommentMedia(text: string): { text: string; imgHash: string | null
   return { text: text.slice(0, m.index).trimEnd(), imgHash: m[1] }
 }
 
+// Tracks whichever <video> in the feed is currently playing, across all
+// IpfsVideo instances — without this, starting one post's video while a
+// different post's video was already playing left BOTH running (and both
+// audible) at once instead of the second one taking over.
+let currentlyPlayingVideo: HTMLVideoElement | null = null
+
 function IpfsVideo({ hash, className }: { hash: string; className?: string }) {
   const [gatewayIndex, setGatewayIndex] = useState(0)
+  const videoRef = useRef<HTMLVideoElement>(null)
   const src = IPFS_GATEWAYS[gatewayIndex] + hash
   return (
     <video
+      ref={videoRef}
       src={src}
       controls
       playsInline
       className={`max-w-full ${className ?? ''}`}
+      onPlay={() => {
+        if (currentlyPlayingVideo && currentlyPlayingVideo !== videoRef.current) {
+          currentlyPlayingVideo.pause()
+        }
+        currentlyPlayingVideo = videoRef.current
+      }}
       onError={() => {
         if (gatewayIndex < IPFS_GATEWAYS.length - 1) setGatewayIndex(i => i + 1)
       }}
