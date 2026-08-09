@@ -156,12 +156,33 @@ function IpfsVideo({ hash, className }: { hash: string; className?: string }) {
   const [gatewayIndex, setGatewayIndex] = useState(0)
   const videoRef = useRef<HTMLVideoElement>(null)
   const src = IPFS_GATEWAYS[gatewayIndex] + hash
+
+  // Autoplay when scrolled into view, pause when scrolled out — matches
+  // standard feed behavior (Instagram/X/TikTok). Muted is required for
+  // browsers to allow autoplay without a tap; the native controls still let
+  // the user unmute.
+  useEffect(() => {
+    const el = videoRef.current
+    if (!el) return
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) el.play().catch(() => {})
+        else el.pause()
+      },
+      { threshold: 0.6 }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
   return (
     <video
       ref={videoRef}
       src={src}
       controls
       playsInline
+      muted
+      preload="auto"
       className={`max-w-full ${className ?? ''}`}
       onPlay={() => {
         if (currentlyPlayingVideo && currentlyPlayingVideo !== videoRef.current) {
@@ -2394,10 +2415,13 @@ export default function Home() {
 
         {/* ── Left Sidebar (desktop) ── */}
         <aside className="hidden md:flex flex-col fixed left-0 top-0 h-full w-60 bg-white border-r border-[#E4E7EB] z-40 px-3 py-5">
-          <div className="flex items-center gap-2.5 mb-8 px-3">
+          <button
+            onClick={() => { setActiveTab('feed'); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+            className="flex items-center gap-2.5 mb-8 px-3 text-left"
+          >
             <FlameLogo size={36} />
             <span className="text-lg font-black text-[#0A0B0D]">FlameBase</span>
-          </div>
+          </button>
           <nav className="flex-1 space-y-1">
             {navItems.filter(n => n.tab !== 'launch').map(({ tab, icon, labelKey }) => (
               <button key={tab} onClick={() => {
@@ -2511,10 +2535,13 @@ export default function Home() {
             className="md:hidden fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur border-b border-[#E4E7EB] px-4 pb-3 flex items-center justify-between gap-2"
             style={{ paddingTop: 'max(0.75rem, var(--inset-top, 0px))' }}
           >
-            <div className="flex items-center gap-2">
+            <button
+              onClick={() => { setActiveTab('feed'); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+              className="flex items-center gap-2"
+            >
               <FlameLogo size={32} />
               <span className="font-black text-base text-[#0A0B0D]">FlameBase</span>
-            </div>
+            </button>
             <div className="flex items-center gap-1.5 ml-auto">
               {/* Wallet button — always first/most prominent */}
               {isConnected ? (
