@@ -159,11 +159,15 @@ function IpfsVideo({ hash, className }: { hash: string; className?: string }) {
 
   // Autoplay when scrolled into view, pause when scrolled out — matches
   // standard feed behavior (Instagram/X/TikTok). Muted is required for
-  // browsers to allow autoplay without a tap; the native controls still let
-  // the user unmute.
+  // browsers to allow autoplay without a tap, but it's set imperatively
+  // ONCE here rather than as a JSX prop — a JSX `muted` attribute gets
+  // reasserted by React on every re-render of this (very frequently
+  // re-rendering) page, silently re-muting the video even after the user
+  // tapped the native controls to unmute it.
   useEffect(() => {
     const el = videoRef.current
     if (!el) return
+    el.muted = true
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) el.play().catch(() => {})
@@ -181,7 +185,6 @@ function IpfsVideo({ hash, className }: { hash: string; className?: string }) {
       src={src}
       controls
       playsInline
-      muted
       preload="auto"
       className={`max-w-full ${className ?? ''}`}
       onPlay={() => {
