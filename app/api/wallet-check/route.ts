@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 
+export const maxDuration = 60
+
 const BS_V2 = 'https://base.blockscout.com/api/v2'
 const BS_COMPAT = 'https://base.blockscout.com/api'
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
@@ -11,7 +13,7 @@ async function bsV2(path: string) {
     const res = await fetch(`${BS_V2}${path}`, {
       headers: { Accept: 'application/json' },
       next: { revalidate: 120 },
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(15000),
     })
     if (!res.ok) return null
     return res.json()
@@ -61,7 +63,15 @@ async function txStats(address: string, maxPages = 16) {
   let next = ''
 
   for (let i = 0; i < maxPages; i++) {
-    const d = await bsV2(`/addresses/${address}/transactions${next}`)
+    let d = await bsV2(`/addresses/${address}/transactions${next}`)
+    // A null response means the fetch itself failed/timed out (transient —
+    // Blockscout under load, not "no transactions"). Retrying blindly makes
+    // a real empty page look identical to a failed one, silently reporting
+    // zero activity for wallets that actually have plenty. One retry only
+    // on the FIRST page, where a failure would otherwise zero out every
+    // activity metric (streaks, heatmap, active days) despite a healthy
+    // non-zero txCount from the separate counters endpoint.
+    if (d === null && i === 0) d = await bsV2(`/addresses/${address}/transactions${next}`)
     const items: any[] = Array.isArray(d?.items) ? d.items : []
     if (items.length === 0) break
 
