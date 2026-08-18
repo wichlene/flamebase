@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { clearConversationForUser, isAddr } from '@/lib/messageStore'
+import { verifyWalletAuth, MESSAGES_AUTH_MAX_AGE_MS } from '@/lib/walletAuth'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,6 +16,8 @@ export async function POST(req: Request) {
   if (!convId.includes('_') || !convId.toLowerCase().includes(address.toLowerCase())) {
     return NextResponse.json({ error: 'convId must be one of your conversations' }, { status: 400 })
   }
+  const ok = await verifyWalletAuth('messages', address, body?.timestamp, body?.signature, '', MESSAGES_AUTH_MAX_AGE_MS)
+  if (!ok) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   try {
     await clearConversationForUser(address, convId)
     return NextResponse.json({ ok: true })

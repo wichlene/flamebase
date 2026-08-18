@@ -64,14 +64,14 @@ async function txStats(address: string, maxPages = 16) {
 
   for (let i = 0; i < maxPages; i++) {
     let d = await bsV2(`/addresses/${address}/transactions${next}`)
-    // A null response means the fetch itself failed/timed out (transient —
-    // Blockscout under load, not "no transactions"). Retrying blindly makes
-    // a real empty page look identical to a failed one, silently reporting
-    // zero activity for wallets that actually have plenty. One retry only
-    // on the FIRST page, where a failure would otherwise zero out every
-    // activity metric (streaks, heatmap, active days) despite a healthy
-    // non-zero txCount from the separate counters endpoint.
-    if (d === null && i === 0) d = await bsV2(`/addresses/${address}/transactions${next}`)
+    // bsV2() returns null ONLY when the fetch/parse itself failed (timeout,
+    // non-2xx, thrown exception) — a legitimate "no more pages" is a real
+    // JSON object with an empty `items` array, never null. So a null here is
+    // unambiguously a transient failure, on ANY page, not "end of data";
+    // retrying once is always correct. Without this, a failure on page 2+
+    // silently truncates the scan and under-reports activity/streaks/heatmap
+    // for wallets with more history than what got scanned before it hit.
+    if (d === null) d = await bsV2(`/addresses/${address}/transactions${next}`)
     const items: any[] = Array.isArray(d?.items) ? d.items : []
     if (items.length === 0) break
 

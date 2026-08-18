@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAccount, usePublicClient, useWatchAsset } from 'wagmi'
 import { encodeFunctionData, erc20Abi, formatUnits, parseEther, parseUnits } from 'viem'
 import { useSafeSend } from '../lib/useSafeSend'
@@ -223,6 +223,15 @@ export default function Launchpad() {
   const [liqBusy, setLiqBusy] = useState(false)
   const [liqNote, setLiqNote] = useState<{ ok: boolean; t: string } | null>(null)
   const [liqBal, setLiqBal] = useState<{ bal: bigint; dec: number; sym: string } | null>(null)
+  // Synchronous locks for doTrade/addLiquidity — the `busy`/`liqBusy` React
+  // state guard alone leaves a window where two fast clicks/taps, both firing
+  // before the `setBusy(true)` update commits and re-renders the disabled
+  // button, can both pass the guard and both fire an on-chain transaction
+  // (double swap / double add-liquidity). A ref updates immediately, before
+  // any render, so the second call sees it right away. Same pattern as
+  // AIChat.tsx's runningActionsRef.
+  const tradeBusyRef = useRef(false)
+  const liqBusyRef = useRef(false)
 
   // live balance of the pasted token so the admin sees if they actually hold it
   useEffect(() => {
@@ -245,6 +254,8 @@ export default function Launchpad() {
   const addLiquidity = async () => {
     if (!isAddressLike(liqToken) || !liqTok || !liqEth || !address || !publicClient || liqBusy) return
     if (Number(liqTok) <= 0 || Number(liqEth) <= 0) return
+    if (liqBusyRef.current) return
+    liqBusyRef.current = true
     setLiqBusy(true); setLiqNote(null)
     try {
       const token = liqToken.trim() as `0x${string}`
@@ -254,7 +265,7 @@ export default function Launchpad() {
       const amtEth = parseEther(liqEth)
       // must actually hold the token
       const bal = await publicClient.readContract({ address: token, abi: erc20Abi, functionName: 'balanceOf', args: [address] }) as bigint
-      if (bal < amtTok) { setLiqNote({ ok: false, t: `You only hold ${fmtTok(Number(formatUnits(bal, dec)))} of this token.` }); setLiqBusy(false); return }
+      if (bal < amtTok) { setLiqNote({ ok: false, t: `You only hold ${fmtTok(Number(formatUnits(bal, dec)))} of this token.` }); return }
       // approve exact token amount to the router — WAIT for it to confirm before adding
       const allowance = await publicClient.readContract({ address: token, abi: erc20Abi, functionName: 'allowance', args: [address, AERO_ROUTER] }) as bigint
       if (allowance < amtTok) {
@@ -276,8 +287,10 @@ export default function Launchpad() {
     } catch (e) {
       const m = e instanceof Error ? e.message : ''
       setLiqNote({ ok: false, t: /reject|denied/i.test(m) ? 'Cancelled in wallet.' : /insufficient|exceeds|balance/i.test(m) ? 'Not enough token or ETH balance.' : (m.split('\n')[0].slice(0, 140) || 'Failed — try again.') })
+    } finally {
+      liqBusyRef.current = false
+      setLiqBusy(false)
     }
-    setLiqBusy(false)
   }
 
   // Quote a trade: try the KyberSwap aggregator (best price across all Base
@@ -352,6 +365,8 @@ export default function Launchpad() {
 
   const doTrade = async () => {
     if (!active || !isConnected || !publicClient || !amount || Number(amount) <= 0 || !quote || busy) return
+    if (tradeBusyRef.current) return
+    tradeBusyRef.current = true
     setBusy(true); setNote(null)
     try {
       const spender = quote.venue === 'aero' ? AERO_ROUTER : quote.router!
@@ -388,8 +403,10 @@ export default function Launchpad() {
       const m = e instanceof Error ? (e.message || String(e)) : String(e)
       const short = m.split('\n')[0].slice(0, 140)
       setNote({ ok: false, t: /reject|denied|rejected/i.test(m) ? 'Cancelled in wallet.' : /insufficient funds|exceeds balance/i.test(m) ? 'Not enough ETH/balance.' : short })
+    } finally {
+      tradeBusyRef.current = false
+      setBusy(false)
     }
-    setBusy(false)
   }
 
   return (

@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { useAccount } from 'wagmi'
+import { useAccount, useSignMessage } from 'wagmi'
 import Avatar from './Avatar'
+import { authMessage } from '../lib/walletAuth'
 
 type Conv = {
   convId: string
@@ -46,6 +47,41 @@ function convIdOf(a: string, b: string): string {
 export default function Messages({ profiles, fixedFee, pendingTarget, onPendingHandled, onUnreadCount, onOpenProfile }: Props) {
   const { address } = useAccount()
   const me = address?.toLowerCase() || ''
+  const { signMessageAsync } = useSignMessage()
+
+  // Messages API routes now require proof of address ownership (previously
+  // anyone could read/send as any address — no signature check at all). A
+  // fresh signature per request would mean a wallet popup every 3-5s poll,
+  // so we sign ONCE per wallet connection and reuse it for every messages/*
+  // call within its validity window (see MESSAGES_AUTH_MAX_AGE_MS).
+  const authRef = useRef<{ timestamp: number; signature: string } | null>(null)
+  const authAttemptedRef = useRef(false)
+  const [needsAuth, setNeedsAuth] = useState(false)
+
+  const getAuth = useCallback(async (): Promise<{ timestamp: number; signature: string } | null> => {
+    if (authRef.current) return authRef.current
+    if (!me) return null
+    try {
+      const timestamp = Date.now()
+      const signature = await signMessageAsync({ message: authMessage('messages', me, timestamp) })
+      authRef.current = { timestamp, signature }
+      setNeedsAuth(false)
+      return authRef.current
+    } catch {
+      setNeedsAuth(true)
+      return null
+    }
+  }, [me, signMessageAsync])
+
+  useEffect(() => {
+    authRef.current = null
+    authAttemptedRef.current = false
+    setNeedsAuth(false)
+    if (!me) return
+    authAttemptedRef.current = true
+    getAuth()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [me])
 
   const [conversations, setConversations] = useState<Conv[]>([])
   const [durable, setDurable] = useState(true)
@@ -84,8 +120,10 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
 
   const refreshConversations = useCallback(async () => {
     if (!me) return
+    const auth = await getAuth()
+    if (!auth) return
     try {
-      const res = await fetch(`/api/messages/conversations?address=${me}`, { cache: 'no-store' })
+      const res = await fetch(`/api/messages/conversations?address=${me}&ts=${auth.timestamp}&sig=${encodeURIComponent(auth.signature)}`, { cache: 'no-store' })
       const data = await res.json()
       if (typeof data.durable === 'boolean') setDurable(data.durable)
       if (Array.isArray(data.conversations)) {
@@ -93,13 +131,15 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
         reportUnread(data.conversations)
       }
     } catch {}
-  }, [me, reportUnread])
+  }, [me, reportUnread, getAuth])
 
   const loadThread = useCallback(async (cid: string) => {
     if (!me) return
     const peer = peerOf(cid)
+    const auth = await getAuth()
+    if (!auth) return
     try {
-      const res = await fetch(`/api/messages/thread?a=${me}&b=${peer}`, { cache: 'no-store' })
+      const res = await fetch(`/api/messages/thread?a=${me}&b=${peer}&ts=${auth.timestamp}&sig=${encodeURIComponent(auth.signature)}`, { cache: 'no-store' })
       const data = await res.json()
       if (Array.isArray(data.messages)) {
         setMessages(prev => {
@@ -110,7 +150,7 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
         })
       }
     } catch {}
-  }, [me, peerOf])
+  }, [me, peerOf, getAuth])
 
   // Initial load + poll conversation list
   useEffect(() => {
@@ -158,6 +198,8 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
   const send = async () => {
     const text = draft.trim()
     if (!text || !activeId || !me) return
+    const auth = await getAuth()
+    if (!auth) { alert('Wallet signature required to send messages.'); return }
     const peer = peerOf(activeId)
     setSending(true)
     sendingRef.current = true
@@ -169,7 +211,7 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
       const res = await fetch('/api/messages/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from: me, to: peer, text }),
+        body: JSON.stringify({ from: me, to: peer, text, timestamp: auth.timestamp, signature: auth.signature }),
       })
       if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'Send failed') }
       await loadThread(activeId)
@@ -233,6 +275,20 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
 
   if (!address) return <div className="p-8 text-center text-[#8A919E]">Connect your wallet to use messages.</div>
 
+  if (needsAuth) return (
+    <div className="p-8 text-center space-y-3">
+      <p className="text-[#8A919E] text-sm">Sign a message with your wallet to unlock messages — this proves it's really you before we show or send anything.</p>
+      <button
+        onClick={() => { authAttemptedRef.current = true; getAuth() }}
+        className="bg-[#0052FF] hover:bg-[#1652F0] text-white font-bold py-2.5 px-5 rounded-xl text-sm transition-colors"
+      >
+        Sign to continue
+      </button>
+    </div>
+  )
+
+  if (!authRef.current) return <div className="p-8 text-center text-[#8A919E]">Waiting for signature…</div>
+
   const seenMap = getSeenMap()
   const activePeer = activeId ? peerOf(activeId) : ''
   const activePeerLabel = activeId ? labelFor(activePeer) : ''
@@ -290,6 +346,8 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
                 </button>
                 <button
                   onClick={async () => {
+                    const auth = await getAuth()
+                    if (!auth) return
                     if (activeId === c.convId) { setActiveId(null); setMessages([]) }
                     // Optimistic remove, then persist the "delete for me" server-side
                     // so it sticks across devices and never touches the peer's copy.
@@ -297,7 +355,7 @@ export default function Messages({ profiles, fixedFee, pendingTarget, onPendingH
                     try {
                       await fetch('/api/messages/delete', {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ address: me, convId: c.convId }),
+                        body: JSON.stringify({ address: me, convId: c.convId, timestamp: auth.timestamp, signature: auth.signature }),
                       })
                     } catch {}
                   }}

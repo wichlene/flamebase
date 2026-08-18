@@ -18,6 +18,12 @@ import { verifyMessage } from 'viem'
 // was shown.
 const MAX_AGE_MS = 5 * 60 * 1000
 
+// Messages are polled every few seconds while a thread is open — requiring a
+// fresh signature per request would mean a wallet popup every 3s. Instead the
+// client signs ONCE per session (lib/messages, see components/Messages.tsx)
+// and reuses that signature for every messages/* call within this window.
+export const MESSAGES_AUTH_MAX_AGE_MS = 12 * 60 * 60 * 1000
+
 export function authMessage(action: string, address: string, timestamp: number, payload = ''): string {
   return `FlameBase notifications\naction: ${action}\naddress: ${address.toLowerCase()}\ntimestamp: ${timestamp}\npayload: ${payload}`
 }
@@ -28,10 +34,11 @@ export async function verifyWalletAuth(
   timestamp: number | undefined | null,
   signature: string | undefined | null,
   payload = '',
+  maxAgeMs = MAX_AGE_MS,
 ): Promise<boolean> {
   if (!address || !/^0x[a-fA-F0-9]{40}$/.test(address)) return false
   if (!signature || typeof timestamp !== 'number' || !Number.isFinite(timestamp)) return false
-  if (Math.abs(Date.now() - timestamp) > MAX_AGE_MS) return false
+  if (Math.abs(Date.now() - timestamp) > maxAgeMs) return false
   try {
     return await verifyMessage({
       address: address as `0x${string}`,

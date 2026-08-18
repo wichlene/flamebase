@@ -1841,26 +1841,36 @@ export default function Home() {
     if (translatedPosts[postId]) { setTranslatedPosts(prev => { const n = {...prev}; delete n[postId]; return n }); return }
     setTranslatingPost(postId)
     try {
+      // Polls are stored as [POLL]question[OPTIONS]a|b[/POLL]trailing text —
+      // translating that raw markup asks the model to "translate" literal
+      // [POLL]/[OPTIONS] tokens too, producing garbled tag soup. Translate
+      // just the question text instead.
+      const pollMatch = content.match(/^\[POLL\](.*?)\[OPTIONS\]/)
+      const textToTranslate = pollMatch ? pollMatch[1].trim() : content
       // Target the viewer's current UI language (the site's own language
       // switcher), same idea as X's "Translate post" going to your app language.
       const targetLang = LANG_LABELS[lang].replace(/^\S+\s*/, '')
       const res = await fetch('/api/ai', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: [{ role: 'user', content: `Translate the following text to ${targetLang}. Reply with ONLY the translation, nothing else: "${content}"` }] }),
+        body: JSON.stringify({ messages: [{ role: 'user', content: `Translate the following text to ${targetLang}. Reply with ONLY the translation, nothing else: "${textToTranslate}"` }] }),
       })
       const data = await res.json()
-      if (data.content) {
+      if (!res.ok || !data.content) {
+        showToast('error', t('errNetworkError'))
+      } else {
         // Strip quotes the model may echo back, then compare — if the post was
         // already in the target language the "translation" is just the
         // original text, so skip showing a redundant box and tell the user instead.
         const norm = (s: string) => s.trim().replace(/^["'“”]+|["'“”]+$/g, '').toLowerCase()
-        if (norm(data.content) === norm(content)) {
+        if (norm(data.content) === norm(textToTranslate)) {
           showToast('info', t('alreadyInLanguage', { lang: targetLang }))
         } else {
           setTranslatedPosts(prev => ({ ...prev, [postId]: data.content }))
         }
       }
-    } catch {}
+    } catch {
+      showToast('error', t('errNetworkError'))
+    }
     setTranslatingPost(null)
   }
 
@@ -2794,6 +2804,15 @@ export default function Home() {
                   const isTipping = loadingAction === `tip-${post.id}`
                   const isCommenting = loadingAction === `comment-${post.id}`
                   const isOwnPost = address && post.author.toLowerCase() === address.toLowerCase()
+                  // Token-gated posts store their hidden text right in post.content
+                  // (behind a [GATE:addr:minBal] prefix) — the Translate button used
+                  // to send that raw string straight to the AI regardless of whether
+                  // the viewer had actually unlocked it, leaking gated content to
+                  // anyone via translation. Mirror the same unlock check used for
+                  // the actual gated-content render below.
+                  const gateMatchOuter = post.content?.match(/^\[GATE:(0x[a-fA-F0-9]{40}):(\d+)\]([\s\S]*)/)
+                  const isLockedGate = !!gateMatchOuter && !(isOwnPost || gateUnlocked[key] === true)
+                  const translatableContent = gateMatchOuter ? gateMatchOuter[3].trim() : post.content
 
                   return (
                     <article key={key} id={`post-${key}`} className="animate-card-in border-b border-[#EEF1F5] hover:bg-[#FAFBFD] hover:shadow-sm hover:-translate-y-px transition-all duration-200 overflow-hidden">
@@ -2957,13 +2976,15 @@ export default function Home() {
                                 <span className="text-lg">↗</span>
                               </button>
 
-                              <button onClick={() => translatePost(key, post.content)}
-                                disabled={translatingPost === key}
-                                title={translatedPosts[key] ? t('translationLabel') : t('translate')}
-                                className={`flex items-center gap-1 rounded-xl px-3 py-2 text-sm transition-all disabled:opacity-50 ${translatedPosts[key] ? 'text-[#0052FF] bg-[#E6EEFF]' : 'text-[#5B6271] hover:text-[#0052FF] hover:bg-[#E6EEFF]'}`}>
-                                <span className="text-lg">🌐</span>
-                                {translatingPost === key && <span className="text-xs">{t('translating')}</span>}
-                              </button>
+                              {!isLockedGate && (
+                                <button onClick={() => translatePost(key, translatableContent)}
+                                  disabled={translatingPost === key}
+                                  title={translatedPosts[key] ? t('translationLabel') : t('translate')}
+                                  className={`flex items-center gap-1 rounded-xl px-3 py-2 text-sm transition-all disabled:opacity-50 ${translatedPosts[key] ? 'text-[#0052FF] bg-[#E6EEFF]' : 'text-[#5B6271] hover:text-[#0052FF] hover:bg-[#E6EEFF]'}`}>
+                                  <span className="text-lg">🌐</span>
+                                  {translatingPost === key && <span className="text-xs">{t('translating')}</span>}
+                                </button>
+                              )}
 
                               {isOwnPost && !((boostedPosts[key] || 0) > Date.now()) && (
                                 <button onClick={() => boostPost(key)} disabled={loadingAction === `boost-${key}`}
