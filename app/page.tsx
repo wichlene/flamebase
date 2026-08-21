@@ -185,7 +185,13 @@ function IpfsVideo({ hash, className }: { hash: string; className?: string }) {
       src={src}
       controls
       playsInline
-      preload="auto"
+      // "auto" here would make EVERY video in the feed start eagerly
+      // downloading its full data the moment it mounts — including ones far
+      // off-screen — all competing for bandwidth and slowing down whichever
+      // one the user is actually trying to watch. "metadata" keeps it light
+      // until the IntersectionObserver's play() call (below) actually needs
+      // the video, at which point the browser buffers it properly.
+      preload="metadata"
       className={`max-w-full ${className ?? ''}`}
       onPlay={() => {
         if (currentlyPlayingVideo && currentlyPlayingVideo !== videoRef.current) {
