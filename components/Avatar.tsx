@@ -5,6 +5,11 @@ import { useState } from 'react'
 export type AvatarProfile = { username?: string; avatarHash?: string }
 
 export const IPFS_GATEWAYS = [
+  // Our own dedicated Pinata gateway — first because the shared public
+  // gateway.pinata.cloud is deliberately throttled for non-paying/shared
+  // traffic, which was making every image and video in the feed load slowly.
+  // A dedicated gateway serves the exact same content without that limit.
+  'https://salmon-just-krill-367.mypinata.cloud/ipfs/',
   'https://gateway.pinata.cloud/ipfs/',
   'https://cloudflare-ipfs.com/ipfs/',
   'https://ipfs.io/ipfs/',
