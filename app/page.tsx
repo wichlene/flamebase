@@ -1656,7 +1656,7 @@ export default function Home() {
     try {
       await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'createProfile', args: [newUsername, ''] })
       setTimeout(() => refetchProfile(), 3000)
-    } catch (e) { console.error(e); showToast('error', t('errProfileFailed')) }
+    } catch (e) { console.error(e); showToast('error', txError(e)) }
     setLoading(false)
   }
 
@@ -1692,7 +1692,12 @@ export default function Home() {
       showToast('success', 'Post published — confirming on Base…')
     } catch (e) {
       console.error(e)
-      showToast('error', 'Post failed — transaction rejected')
+      // Route through txError() rather than a hardcoded string: it surfaces
+      // contract revert reasons, distinguishes a genuinely unconfirmed tx from
+      // a failed one, and (crucially inside Base App / Farcaster) prints the
+      // raw provider error instead of flatly claiming "transaction rejected",
+      // which made every failure look like the user cancelled it.
+      showToast('error', txError(e))
     }
     setLoading(false)
   }
@@ -1774,7 +1779,7 @@ export default function Home() {
       })
       setReplyingTo(prev => ({ ...prev, [key]: '' }))
       await loadComments(key)
-    } catch (e) { console.error(e); showToast('error', t('errCommentFailed')) }
+    } catch (e) { console.error(e); showToast('error', txError(e)) }
     setLoadingAction(null)
   }
 
@@ -1908,7 +1913,7 @@ export default function Home() {
       setPremiumUsers(next)
       localStorage.setItem('flamebase_premium', JSON.stringify([...next]))
       showToast('success', '✨ Premium badge activated!')
-    } catch { showToast('error', 'Purchase failed') }
+    } catch (e) { console.error(e); showToast('error', txError(e)) }
     setBuyingPremium(false)
   }
 
@@ -1986,7 +1991,7 @@ export default function Home() {
       }, 5000)
     } catch (e) {
       console.error(e)
-      showToast('error', 'Deploy failed')
+      showToast('error', txError(e))
     }
     setDeployingLogoNft(false)
   }
