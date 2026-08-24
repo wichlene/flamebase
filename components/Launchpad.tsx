@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAccount, usePublicClient, useWatchAsset } from 'wagmi'
 import { encodeFunctionData, erc20Abi, formatUnits, parseEther, parseUnits } from 'viem'
 import { useSafeSend } from '../lib/useSafeSend'
+import VerifiedBadge from './VerifiedBadge'
+import { classifyToken } from '../lib/tokenizedStocks'
 
 /*
   B20 DEX — a Uniswap-Explore-style table of every B20 token on Base, with
@@ -86,6 +88,19 @@ function fmtTok(n: number) {
 }
 
 function isAddressLike(s: string) { return /^0x[0-9a-fA-F]{40}$/.test(s.trim()) }
+
+// Shown when a token's symbol exactly matches a real stock ticker but the
+// contract isn't one of Coinbase's official tokenized stocks — see
+// lib/tokenizedStocks.ts for why this matters and how narrow the match is.
+const FAKE_STOCK_COPY = "This token's symbol copies a real stock ticker, but it is NOT an official Coinbase tokenized stock. It has no connection to the company and is not backed by any share. Official ones are listed at base.org/stocks."
+
+function ImpersonatorPill() {
+  return (
+    <span title={FAKE_STOCK_COPY} className="bg-amber-100 text-amber-700 text-[9px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0">
+      NOT OFFICIAL
+    </span>
+  )
+}
 
 function TokenLogo({ img, symbol, size = 30 }: { img?: string; symbol: string; size?: number }) {
   const [err, setErr] = useState(false)
@@ -213,6 +228,10 @@ export default function Launchpad() {
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState<{ ok: boolean; t: string } | null>(null)
   const [bought, setBought] = useState(false) // show "add token to wallet" after a buy
+  // Buying a ticker-impersonating token requires an explicit acknowledgement.
+  // Deliberately gates BUY only — someone already holding a scam token must be
+  // able to sell out without friction, or the warning traps them in it.
+  const [ackRisk, setAckRisk] = useState(false)
 
   // admin-only "add liquidity" (opens a market for a token via Aerodrome)
   const isAdmin = !!address && address.toLowerCase() === ADMIN
@@ -356,7 +375,7 @@ export default function Launchpad() {
     run()
   }, [active, address, publicClient, busy])
 
-  const openTrade = (t: Tok, s: 'buy' | 'sell') => { setActive(t); setSide(s); setAmount(''); setQuote(null); setNote(null); setBought(false) }
+  const openTrade = (t: Tok, s: 'buy' | 'sell') => { setActive(t); setSide(s); setAmount(''); setQuote(null); setNote(null); setBought(false); setAckRisk(false) }
 
   const addToWallet = async () => {
     if (!active) return
@@ -365,6 +384,9 @@ export default function Launchpad() {
 
   const doTrade = async () => {
     if (!active || !isConnected || !publicClient || !amount || Number(amount) <= 0 || !quote || busy) return
+    // Re-check the acknowledgement here, not just via the button's disabled
+    // attribute — that's presentation, this is the actual guard.
+    if (side === 'buy' && classifyToken(active.token, active.symbol) === 'impersonator' && !ackRisk) return
     if (tradeBusyRef.current) return
     tradeBusyRef.current = true
     setBusy(true); setNote(null)
@@ -469,6 +491,7 @@ export default function Launchpad() {
             {rows.slice(0, 150).map((t, i) => {
               const m = mkt[t.token.toLowerCase()]
               const up = (m?.change24 ?? 0) >= 0
+              const status = classifyToken(t.token, t.symbol)
               return (
                 <tr key={t.token} onClick={() => setDetail(t)} className="border-b border-[#F5F7FA] last:border-0 transition-colors cursor-pointer hover:bg-[#F0F4FF]">
                   <td className="py-2 pl-3">
@@ -476,7 +499,11 @@ export default function Launchpad() {
                       <span className="text-[10px] text-[#C5CBD3] w-3.5 text-right flex-shrink-0">{i + 1}</span>
                       <TokenLogo img={m?.img} symbol={t.symbol} size={30} />
                       <div className="min-w-0">
-                        <div className="font-bold text-[#0A0B0D] text-[13px] truncate">{t.name}</div>
+                        <div className="flex items-center gap-1 min-w-0">
+                          <span className="font-bold text-[#0A0B0D] text-[13px] truncate">{t.name}</span>
+                          {status === 'official' && <VerifiedBadge title="Official Coinbase tokenized stock" />}
+                          {status === 'impersonator' && <ImpersonatorPill />}
+                        </div>
                         <div className="text-[10px] text-[#8A919E] truncate">${t.symbol}</div>
                       </div>
                     </div>
@@ -533,6 +560,7 @@ export default function Launchpad() {
       {detail && (() => {
         const m = mkt[detail.token.toLowerCase()]
         const up = (m?.change24 ?? 0) >= 0
+        const detailStatus = classifyToken(detail.token, detail.symbol)
         const stats: [string, string][] = [
           ['Price', m?.price ? fmtUsd(m.price) : '-'],
           ['24h', m ? `${up ? '▲' : '▼'} ${Math.abs(m.change24).toFixed(1)}%` : '-'],
@@ -548,7 +576,10 @@ export default function Launchpad() {
               <div className="flex items-center gap-3 p-4 border-b border-[#F0F2F5] sticky top-0 bg-white z-10">
                 <TokenLogo img={m?.img} symbol={detail.symbol} size={40} />
                 <div className="flex-1 min-w-0">
-                  <div className="font-black text-[#0A0B0D] truncate">{detail.name}</div>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="font-black text-[#0A0B0D] truncate">{detail.name}</span>
+                    {detailStatus === 'official' && <VerifiedBadge title="Official Coinbase tokenized stock" />}
+                  </div>
                   <div className="text-xs text-[#8A919E]">${detail.symbol}</div>
                 </div>
                 <div className="text-right">
@@ -557,6 +588,12 @@ export default function Launchpad() {
                 </div>
                 <button onClick={() => setDetail(null)} className="text-[#8A919E] hover:text-[#0A0B0D] text-xl leading-none ml-1">✕</button>
               </div>
+
+              {detailStatus === 'impersonator' && (
+                <div className="mx-4 mt-3 text-[11px] leading-snug bg-amber-50 border border-amber-200 text-amber-800 rounded-xl px-3 py-2.5">
+                  <span className="font-black">⚠️ Not an official tokenized stock.</span> {FAKE_STOCK_COPY.split('. ').slice(1).join('. ')}
+                </div>
+              )}
 
               {/* candlestick chart via DexScreener embed */}
               {m?.pair ? (
@@ -601,6 +638,8 @@ export default function Launchpad() {
       {active && (() => {
         const m = mkt[active.token.toLowerCase()]
         const quick = side === 'buy' ? ['0.005', '0.01', '0.05', '0.1'] : null
+        const activeStatus = classifyToken(active.token, active.symbol)
+        const needsAck = activeStatus === 'impersonator' && side === 'buy'
         return (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center z-[60] p-3" onClick={() => setActive(null)}>
             <div className="animate-modal-in bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-sm p-5 shadow-2xl max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
@@ -613,6 +652,21 @@ export default function Launchpad() {
                 </div>
                 <button onClick={() => setActive(null)} className="text-[#8A919E] hover:text-[#0A0B0D] text-xl leading-none">✕</button>
               </div>
+
+              {activeStatus === 'impersonator' && (
+                <div className="mb-3 rounded-xl px-3 py-2.5 bg-red-50 border border-red-200">
+                  <p className="text-[11px] leading-snug text-red-700">
+                    <span className="font-black">⚠️ Not an official tokenized stock.</span> {FAKE_STOCK_COPY.split('. ').slice(1).join('. ')}
+                  </p>
+                  {side === 'buy' && (
+                    <label className="mt-2 flex items-start gap-2 cursor-pointer">
+                      <input type="checkbox" checked={ackRisk} onChange={e => setAckRisk(e.target.checked)}
+                        className="mt-0.5 w-4 h-4 accent-red-600 flex-shrink-0" />
+                      <span className="text-[11px] font-bold text-red-700">I understand this is not a real share and I could lose everything I spend.</span>
+                    </label>
+                  )}
+                </div>
+              )}
 
               {/* buy / sell toggle */}
               <div className="flex gap-1 bg-[#F0F2F5] rounded-xl p-1 mb-3">
@@ -658,7 +712,7 @@ export default function Launchpad() {
                 </button>
               )}
 
-              <button onClick={doTrade} disabled={!isConnected || busy || quoting || !amount || Number(amount) <= 0 || !quote}
+              <button onClick={doTrade} disabled={!isConnected || busy || quoting || !amount || Number(amount) <= 0 || !quote || (needsAck && !ackRisk)}
                 className={`w-full mt-4 text-white font-black text-base py-3.5 rounded-2xl transition-colors disabled:opacity-50 ${side === 'buy' ? 'bg-[#0052FF] hover:bg-[#1652F0]' : 'bg-[#0A0B0D] hover:bg-black'}`}>
                 {busy ? 'Confirm in wallet…' : !isConnected ? 'Connect wallet' : quoting && Number(amount) > 0 ? 'Finding best price…' : !quote && Number(amount) > 0 ? 'No route found' : side === 'buy' ? `Buy ${active.symbol}` : `Sell ${active.symbol}`}
               </button>

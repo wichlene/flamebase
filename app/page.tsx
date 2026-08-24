@@ -15,6 +15,7 @@ import { SFX, isSoundEnabled, setSoundEnabled } from '../lib/sounds'
 import { authMessage } from '../lib/walletAuth'
 import { ToastStack, type ToastItem, type ToastKind } from '../components/Toast'
 import Avatar, { IPFS_GATEWAYS } from '../components/Avatar'
+import VerifiedBadge from '../components/VerifiedBadge'
 
 const Messages = dynamic(() => import('../components/Messages'), { ssr: false, loading: () => <div className="p-8 text-center text-[#5B6271]">💬 Loading…</div> })
 const AIChat = dynamic(() => import('../components/AIChat'), { ssr: false, loading: () => <div className="p-8 text-center text-[#5B6271]">🤖 Loading AI…</div> })
@@ -103,22 +104,6 @@ type Tab = 'feed' | 'post' | 'activity' | 'messages' | 'profile' | 'ai' | 'reels
 function FlameLogo({ size = 32 }: { size?: number }) {
   return (
     <img src="/logo.png" alt="FlameBase" width={size} height={size} className="flex-shrink-0 object-contain" />
-  )
-}
-
-function VerifiedBadge({ size = 'sm' }: { size?: 'sm' | 'lg' }) {
-  const cls = size === 'lg'
-    ? 'w-6 h-6'
-    : 'w-4 h-4'
-  return (
-    <span
-      title="Coinbase Verified Account"
-      className={`inline-flex items-center justify-center ${cls} rounded-full bg-[#0052FF] flex-shrink-0`}
-    >
-      <svg viewBox="0 0 12 12" fill="none" className="w-2.5 h-2.5">
-        <path d="M2 6l3 3 5-5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    </span>
   )
 }
 
