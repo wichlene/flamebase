@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { safeJson } from '../../../lib/safeJson'
 
 const REGION_MAP: Record<string, string> = {
   tr: 'TR', en: 'US', ru: 'RU', es: 'ES', pt: 'BR',
@@ -72,7 +73,7 @@ export async function GET(request: Request) {
         ...(pageToken && { pageToken }),
       })
       const res = await fetch(`https://www.googleapis.com/youtube/v3/videos?${params}`)
-      const data = await res.json()
+      const data = await safeJson<any>(res)
       if (!res.ok) return NextResponse.json({ error: data?.error?.message || 'YouTube error' }, { status: 500 })
       nextPageToken = data.nextPageToken || ''
       items = data.items || []

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useAccount, useWalletClient, usePublicClient } from 'wagmi'
 import { askPremium, type AgentReply } from '../lib/premiumAI'
 import { executeAction, describeAction, validateAction, AgentActionError, type AgentAction } from '../lib/agentExec'
+import { uploadMedia } from '../lib/uploadMedia'
 
 type ActionState = 'pending' | 'running' | 'done' | 'cancelled' | 'error'
 type Attachment = { hash: string; kind: 'image' | 'video'; name: string }
@@ -113,13 +114,9 @@ export default function AIChat() {
     if (!file || uploading) return
     setUploading(true)
     try {
-      const fd = new FormData()
-      fd.append('file', file)
-      const res = await fetch('/api/upload', { method: 'POST', body: fd })
-      const data = await res.json().catch(() => null)
-      if (!res.ok || !data?.ipfsHash) throw new Error(data?.error || 'Upload failed')
+      const hash = await uploadMedia(file)
       const isVideo = file.type.startsWith('video/')
-      setAttachment({ hash: isVideo ? `vid_${data.ipfsHash}` : data.ipfsHash, kind: isVideo ? 'video' : 'image', name: file.name })
+      setAttachment({ hash: isVideo ? `vid_${hash}` : hash, kind: isVideo ? 'video' : 'image', name: file.name })
     } catch (err) {
       push({ role: 'assistant', content: `⚠️ Upload failed: ${err instanceof Error ? err.message : 'try again.'}` })
     }

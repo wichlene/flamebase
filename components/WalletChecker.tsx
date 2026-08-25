@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import { useWalletClient } from 'wagmi'
+import { safeJson } from '../lib/safeJson'
 
 interface DayActivity { date: string; count: number }
 interface NftItem { name: string; symbol: string; count: number }
@@ -224,9 +225,11 @@ export default function WalletChecker({ onPay, compact, targetAddress }: { onPay
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ address }),
       })
-      const data = await res.json()
+      // /api/wallet-check runs with maxDuration = 60; a gateway timeout there
+      // returns an HTML error page, not JSON.
+      const data = await safeJson<any>(res)
       if (mountedRef.current) {
-        if (!res.ok || data.error) setError(data.error || 'An error occurred')
+        if (!res.ok || !data || data.error) setError(data?.error || 'An error occurred')
         else setResult(data)
       }
     } catch (e: any) {

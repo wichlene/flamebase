@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { safeJson } from '../lib/safeJson'
 
 type YTVideo = {
   id: string
@@ -156,9 +157,9 @@ export default function Reels() {
       _: String(Date.now()),
     })
     fetch(`/api/youtube?${params}`)
-      .then(r => r.json())
-      .then(data => {
-        const parsed: YTVideo[] = (data.items || []).map((item: any) => ({
+      .then(safeJson)
+      .then((data: any) => {
+        const parsed: YTVideo[] = (data?.items || []).map((item: any) => ({
           id: typeof item.id === 'string' ? item.id : item.id?.videoId,
           title: item.snippet?.title || '',
           channelTitle: item.snippet?.channelTitle || '',

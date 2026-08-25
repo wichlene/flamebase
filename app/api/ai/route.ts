@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { safeJson } from '../../../lib/safeJson'
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
 // Groq deprecated llama-3.3-70b-versatile (2026-06-17); openai/gpt-oss-120b is its replacement.
@@ -44,7 +45,7 @@ export async function POST(request: Request) {
       signal: AbortSignal.timeout(20000),
     })
 
-    const data = await response.json()
+    const data = await safeJson<any>(response)
     if (!response.ok) {
       console.error('Groq error', data)
       return NextResponse.json({ error: data?.error?.message || 'AI error' }, { status: 500 })

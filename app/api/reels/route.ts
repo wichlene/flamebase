@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { safeJson } from '../../../lib/safeJson'
 
 // Rotating mix of entertaining search terms
 const MIX_QUERIES = [
@@ -36,7 +37,7 @@ export async function GET(request: Request) {
 
   try {
     const res = await fetch(`https://pixabay.com/api/videos/?${params}`)
-    const data = await res.json()
+    const data = await safeJson<any>(res)
     if (!res.ok) return NextResponse.json({ error: data }, { status: 500 })
     // Shuffle results for variety
     if (data.hits) data.hits = data.hits.sort(() => Math.random() - 0.5)

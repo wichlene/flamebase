@@ -13,6 +13,8 @@ import { T, LANG_LABELS, type Lang } from '../lib/i18n'
 import { TOOLS_ADDRESS, TOKEN_FACTORY_ADDRESS, NFT_FACTORY_ADDRESS, DAO_ADDRESS, FOLLOW_ADDRESS, TOOLS_ABI, TOKEN_FACTORY_ABI, NFT_FACTORY_ABI, DAO_ABI, FOLLOW_ABI, FLAME_NFT_ADDRESS, FLAME_NFT_ABI, B20_FACTORY_ADDRESS, B20_FACTORY_ABI, encodeB20AssetCreateParams, encodeB20BatchMintInitCall } from '../lib/toolsContracts'
 import { SFX, isSoundEnabled, setSoundEnabled } from '../lib/sounds'
 import { authMessage } from '../lib/walletAuth'
+import { uploadMedia, checkMediaFile, mediaProblemMessage } from '../lib/uploadMedia'
+import { safeJson } from '../lib/safeJson'
 import { ToastStack, type ToastItem, type ToastKind } from '../components/Toast'
 import Avatar, { IPFS_GATEWAYS } from '../components/Avatar'
 import VerifiedBadge from '../components/VerifiedBadge'
@@ -469,6 +471,10 @@ export default function Home() {
   const [loading, setLoading] = useState(false)
   const [loadingAction, setLoadingAction] = useState<string | null>(null)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  // Upload progress %, or null when no upload is in flight. Media now goes
+  // straight to Pinata and can be tens of MB, so a frozen button with no
+  // feedback isn't good enough.
+  const [uploadPct, setUploadPct] = useState<number | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   // Photo attachments for comments, keyed by postId — a comment's on-chain
   // struct has no image field, so an attached photo's IPFS hash is embedded in
@@ -1571,7 +1577,7 @@ export default function Home() {
   const [supportersLoaded, setSupportersLoaded] = useState(false)
   useEffect(() => {
     let cancelled = false
-    const load = () => fetch('/api/leaderboard?n=5').then(r => r.json()).then(d => {
+    const load = () => fetch('/api/leaderboard?n=5').then(safeJson).then(d => {
       if (cancelled) return
       if (Array.isArray(d?.leaderboard)) setSupporters(d.leaderboard)
       setSupportersLoaded(true)
@@ -1626,8 +1632,12 @@ export default function Home() {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] || null
-    if (file && file.size > 50 * 1024 * 1024) {
-      showToast('error', t('errFileTooLarge'))
+    // Validation lives in checkMediaFile() so every upload path (post,
+    // comment, avatar, banner, AI chat) enforces the same rules — avatar and
+    // banner previously enforced none at all.
+    const invalid = file ? checkMediaFile(file) : null
+    if (invalid) {
+      showToast('error', invalid === 'too-large' ? t('errFileTooLarge') : mediaProblemMessage(invalid, file!))
       e.target.value = ''
       return
     }
@@ -1653,16 +1663,17 @@ export default function Home() {
     try {
       let ipfsHash = ''
       if (selectedFile) {
-        const fd = new FormData()
-        fd.append('file', selectedFile)
-        const res = await fetch('/api/upload', { method: 'POST', body: fd })
-        const data = await res.json()
-        if (!res.ok || !data.ipfsHash) {
-          showToast('error', 'Upload failed — try a smaller file or different format')
+        let hash: string
+        try {
+          hash = await uploadMedia(selectedFile, setUploadPct)
+        } catch (e) {
+          showToast('error', e instanceof Error ? e.message : 'Upload failed')
+          setUploadPct(null)
           setLoading(false)
           return
         }
-        ipfsHash = selectedFile.type.startsWith('video/') ? `vid_${data.ipfsHash}` : data.ipfsHash
+        setUploadPct(null)
+        ipfsHash = selectedFile.type.startsWith('video/') ? `vid_${hash}` : hash
       }
       await writeContractAsync({
         address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'createPost',
@@ -1723,8 +1734,9 @@ export default function Home() {
 
   const handleCommentFileChange = (key: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] || null
-    if (file && file.size > 50 * 1024 * 1024) {
-      showToast('error', t('errFileTooLarge'))
+    const invalid = file ? checkMediaFile(file) : null
+    if (invalid) {
+      showToast('error', invalid === 'too-large' ? t('errFileTooLarge') : mediaProblemMessage(invalid, file!))
       e.target.value = ''
       return
     }
@@ -1744,16 +1756,17 @@ export default function Home() {
     try {
       let finalText = text
       if (file) {
-        const fd = new FormData()
-        fd.append('file', file)
-        const res = await fetch('/api/upload', { method: 'POST', body: fd })
-        const data = await res.json()
-        if (!res.ok || !data.ipfsHash) {
-          showToast('error', 'Upload failed — try a smaller file or different format')
+        let hash: string
+        try {
+          hash = await uploadMedia(file, setUploadPct)
+        } catch (e) {
+          showToast('error', e instanceof Error ? e.message : 'Upload failed')
+          setUploadPct(null)
           setLoadingAction(null)
           return
         }
-        finalText = `${text}\n[[img:${data.ipfsHash}]]`
+        setUploadPct(null)
+        finalText = `${text}\n[[img:${hash}]]`
       }
       await writeContractAsync({ address: CONTRACT_ADDRESS, abi: CONTRACT_ABI, functionName: 'comment', args: [postId, finalText], value: effectiveFee(commentPrice as bigint | undefined, DEFAULT_COMMENT_PRICE) })
       setCommentTexts(prev => ({ ...prev, [key]: '' }))
@@ -1850,18 +1863,19 @@ export default function Home() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: [{ role: 'user', content: `Translate the following text to ${targetLang}. Reply with ONLY the translation, nothing else: "${textToTranslate}"` }] }),
       })
-      const data = await res.json()
-      if (!res.ok || !data.content) {
+      const data = await safeJson<{ content?: string }>(res)
+      if (!res.ok || !data?.content) {
         showToast('error', t('errNetworkError'))
       } else {
+        const translated = data.content
         // Strip quotes the model may echo back, then compare — if the post was
         // already in the target language the "translation" is just the
         // original text, so skip showing a redundant box and tell the user instead.
         const norm = (s: string) => s.trim().replace(/^["'“”]+|["'“”]+$/g, '').toLowerCase()
-        if (norm(data.content) === norm(textToTranslate)) {
+        if (norm(translated) === norm(textToTranslate)) {
           showToast('info', t('alreadyInLanguage', { lang: targetLang }))
         } else {
-          setTranslatedPosts(prev => ({ ...prev, [postId]: data.content }))
+          setTranslatedPosts(prev => ({ ...prev, [postId]: translated }))
         }
       }
     } catch {
@@ -1875,16 +1889,17 @@ export default function Home() {
     if (!file || !address) return
     setUploadingBanner(true)
     try {
-      const fd = new FormData(); fd.append('file', file)
-      const res = await fetch('/api/upload', { method: 'POST', body: fd })
-      const data = await res.json()
-      if (data.ipfsHash) {
-        const next = { ...profileBanners, [address.toLowerCase()]: data.ipfsHash }
-        setProfileBanners(next)
-        localStorage.setItem('flamebase_banners', JSON.stringify(next))
-        showToast('success', 'Banner uploaded!')
-      }
-    } catch {}
+      const hash = await uploadMedia(file, setUploadPct)
+      const next = { ...profileBanners, [address.toLowerCase()]: hash }
+      setProfileBanners(next)
+      localStorage.setItem('flamebase_banners', JSON.stringify(next))
+      showToast('success', 'Banner uploaded!')
+    } catch (e) {
+      // Was an empty catch: a failed banner upload died in total silence,
+      // spinner just stopped with no explanation.
+      showToast('error', e instanceof Error ? e.message : 'Upload failed')
+    }
+    setUploadPct(null)
     setUploadingBanner(false)
   }
 
@@ -1906,9 +1921,9 @@ export default function Home() {
     setLoadingNfts(true)
     try {
       const res = await fetch(`https://base.blockscout.com/api/v2/addresses/${addr}/nft/collections?type=ERC-721,ERC-1155`)
-      const data = await res.json()
+      const data = await safeJson<{ items?: any[] }>(res)
       const items: Array<{name: string; image: string; collection: string}> = []
-      if (data.items) {
+      if (data?.items) {
         for (const col of data.items) {
           const instances = col.token_instances || []
           for (const t of instances.slice(0, 3)) {
@@ -1942,8 +1957,8 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ address, timestamp, signature }),
       })
-      const setupData = await setupRes.json()
-      if (!setupRes.ok || !setupData.baseURI) {
+      const setupData = await safeJson<{ baseURI?: string; imageHash?: string }>(setupRes)
+      if (!setupRes.ok || !setupData?.baseURI) {
         showToast('error', 'IPFS setup failed')
         setDeployingLogoNft(false)
         return
@@ -2068,21 +2083,22 @@ export default function Home() {
     if (!file) return
     setUploadingAvatar(true)
     try {
-      const fd = new FormData()
-      fd.append('file', file)
-      const res = await fetch('/api/upload', { method: 'POST', body: fd })
-      const data = await res.json()
-      if (!data.ipfsHash) {
-        console.error('Avatar upload failed', data)
-        showToast('error', t('errAvatarUploadFailed'))
+      let hash: string
+      try {
+        hash = await uploadMedia(file, setUploadPct)
+      } catch (err) {
+        console.error('Avatar upload failed', err)
+        showToast('error', err instanceof Error ? err.message : t('errAvatarUploadFailed'))
+        setUploadPct(null)
         setUploadingAvatar(false)
         return
       }
+      setUploadPct(null)
       await writeContractAsync({
         address: CONTRACT_ADDRESS,
         abi: CONTRACT_ABI,
         functionName: 'uploadAvatar',
-        args: [data.ipfsHash],
+        args: [hash],
         value: effectiveFee(photoPrice as bigint | undefined, DEFAULT_PHOTO_PRICE),
       })
       showToast('success', t('avatarUpdated'))
@@ -3258,8 +3274,8 @@ export default function Home() {
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ messages: [{ role: 'user', content: newPost }], type: 'improve' }),
                               })
-                              const data = await res.json()
-                              if (data.content) setNewPost(data.content)
+                              const data = await safeJson<{ content?: string }>(res)
+                              if (data?.content) setNewPost(data.content)
                             } catch {}
                             setImproving(false)
                           }}
@@ -3284,7 +3300,7 @@ export default function Home() {
                       <div className="px-4 pb-3">
                         <button onClick={createPost} disabled={loading || (!newPost.trim() && !selectedFile)}
                           className="w-full bg-[#0052FF] hover:bg-[#1652F0] text-white py-3 rounded-xl font-bold disabled:opacity-40 transition-colors shadow-sm">
-                          {loading ? t('posting') : t('post')}
+                          {uploadPct !== null ? `${t('uploading')} ${uploadPct}%` : loading ? t('posting') : t('post')}
                         </button>
                       </div>
                     </div>

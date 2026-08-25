@@ -5,6 +5,7 @@ import { CONTRACT_ABI, CONTRACT_ADDRESS } from './contract'
 import { TOOLS_ABI, TOOLS_ADDRESS, TOKEN_FACTORY_ABI, TOKEN_FACTORY_ADDRESS, DAO_ABI, DAO_ADDRESS } from './toolsContracts'
 import { safeSend, type RawCall, type MinimalProvider } from './safeSend'
 import { BUILDER_CODE_DATA_SUFFIX } from './builderCode'
+import { safeJson } from './safeJson'
 
 // USDC on Base (6 decimals).
 const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as const
@@ -538,7 +539,7 @@ export async function executeAction(a: AgentAction, wallet: WalletLike, publicCl
           amountIn: amountIn.toString(), sender, recipient: sender, slippageBps: 1000,
         }),
       })
-      const d = await res.json()
+      const d = await safeJson<any>(res)
       if (!res.ok || !d?.to) throw new AgentActionError(d?.error || 'No liquidity route for this token.')
 
       if (side === 'sell' && d.needsApprove) {

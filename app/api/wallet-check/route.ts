@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { safeJson } from '../../../lib/safeJson'
 
 export const maxDuration = 60
 
@@ -34,7 +35,7 @@ async function firstTxTimestamp(address: string): Promise<number> {
       signal: AbortSignal.timeout(8000),
     })
     if (!res.ok) return 0
-    const d = await res.json()
+    const d = await safeJson<any>(res)
     const ts = Array.isArray(d?.result) ? parseInt(d.result[0]?.timeStamp, 10) : 0
     return isNaN(ts) ? 0 : ts
   } catch {
@@ -270,7 +271,7 @@ Drop estimate ranges (tokens / USD): S=12000-20000/$3000-5000, A=6000-10000/$150
           body: JSON.stringify({ model: MODEL, messages: [{ role: 'user', content: prompt }], max_tokens: 280, temperature: 0.2 }),
           signal: AbortSignal.timeout(20000),
         })
-        const gd = await gr.json()
+        const gd = await safeJson<any>(gr)
         const raw = gd.choices?.[0]?.message?.content?.trim() ?? ''
         const m = raw.match(/\{[\s\S]*\}/)
         if (m) {

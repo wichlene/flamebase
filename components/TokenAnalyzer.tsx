@@ -1,5 +1,6 @@
 'use client'
 import { useState } from 'react'
+import { safeJson } from '../lib/safeJson'
 
 interface TokenInfo {
   name: string
@@ -56,8 +57,8 @@ export default function TokenAnalyzer() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ address: target }),
       })
-      const data = await res.json()
-      if (!res.ok || data.error) setError(data.error || 'Analysis failed')
+      const data = await safeJson<any>(res)
+      if (!res.ok || !data || data.error) setError(data?.error || 'Analysis failed')
       else setResult(data)
     } catch {
       setError('Connection error. Try again.')

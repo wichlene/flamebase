@@ -1,5 +1,16 @@
 import { NextResponse } from 'next/server'
 
+// Fallback upload path. The primary path is now browser -> Pinata directly
+// (see lib/uploadMedia.ts + app/api/upload/sign), because Vercel caps a
+// function's request body at 4.5 MB at the platform edge — anything larger
+// never reaches this handler at all. This route still serves small uploads
+// and covers the case where minting a scoped Pinata key fails.
+export const maxDuration = 60
+
+// Matches the platform ceiling rather than the old 50 MB, which was
+// unreachable here and only served to make the real failure confusing.
+const MAX_PROXY_BYTES = 4 * 1024 * 1024
+
 export async function POST(request: Request) {
   try {
     if (!process.env.PINATA_JWT) {
@@ -12,8 +23,11 @@ export async function POST(request: Request) {
     if (!file) {
       return NextResponse.json({ error: 'No file' }, { status: 400 })
     }
-    if (file.size > 50 * 1024 * 1024) {
-      return NextResponse.json({ error: 'File too large (max 50 MB)' }, { status: 413 })
+    if (file.size > MAX_PROXY_BYTES) {
+      return NextResponse.json(
+        { error: 'File too large for the fallback upload path — the direct upload should have handled this.' },
+        { status: 413 },
+      )
     }
     if (!/^(image|video)\//.test(file.type)) {
       return NextResponse.json({ error: 'Only image or video files are allowed' }, { status: 415 })

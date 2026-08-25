@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAddress } from 'viem'
+import { safeJson } from '../../../lib/safeJson'
 
 const COINBASE_ATTESTER = '0x357458739F90461b99789350868CD7CF330Dd7EE'
 const VERIFIED_ACCOUNT_SCHEMA = '0xf8b05c79f090979bf4a80270aba232dff11a10d9ca55c4f88de95317970f0de9'
@@ -38,7 +39,7 @@ export async function GET(req: NextRequest) {
       signal: AbortSignal.timeout(5000),
     })
 
-    const data = await res.json()
+    const data = await safeJson<any>(res)
     const verified = (data?.data?.attestations?.length ?? 0) > 0
     return NextResponse.json({ verified }, {
       headers: { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=7200' },

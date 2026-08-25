@@ -6,6 +6,7 @@ import { encodeFunctionData, erc20Abi, formatUnits, parseEther, parseUnits } fro
 import { useSafeSend } from '../lib/useSafeSend'
 import VerifiedBadge from './VerifiedBadge'
 import { classifyToken } from '../lib/tokenizedStocks'
+import { safeJson } from '../lib/safeJson'
 
 /*
   B20 DEX — a Uniswap-Explore-style table of every B20 token on Base, with
@@ -173,7 +174,7 @@ export default function Launchpad() {
       await Promise.all(chunks.slice(i, i + CONC).map(async chunk => {
         try {
           const r = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${chunk.join(',')}`)
-          const d = await r.json()
+          const d = await safeJson<any>(r)
           for (const p of (d?.pairs || []) as Record<string, unknown>[]) {
             if (p.chainId !== 'base') continue
             const bt = p.baseToken as { address?: string } | undefined
@@ -330,7 +331,7 @@ export default function Launchpad() {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ tokenIn, tokenOut, amountIn: amountIn.toString(), sender: address, recipient: address, slippageBps: 1000 }),
       })
-      const d = await r.json()
+      const d = await safeJson<any>(r)
       if (r.ok && d?.to) return { quote: { venue: 'kyber', to: d.to, router: d.router, data: d.data, value: d.value, amountOut: BigInt(d.amountOut || '0'), needsApprove: !!d.needsApprove }, reason: null }
       kyberReason = typeof d?.error === 'string' && d.error ? d.error : `route service error (${r.status})`
     } catch {
