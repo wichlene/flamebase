@@ -39,13 +39,13 @@ const frameEmbed = {
 export const metadata: Metadata = {
   metadataBase: new URL('https://flamebase.xyz'),
   title: {
-    default: 'FlameBase — On-chain social on Base',
+    default: 'FlameBase — Trading, payments & AI agents on Base',
     template: '%s · FlameBase',
   },
   description:
-    'Every like, comment, and tip is a real on-chain transaction on Base. The first truly on-chain social network — own your posts, own your followers, own your tips.',
+    'Every trade, tip, and AI agent action is a real on-chain transaction on Base. Own your posts, own your trades, own your agents.',
   keywords: [
-    'Base', 'on-chain social', 'Web3 social', 'Farcaster', 'crypto social',
+    'Base', 'on-chain trading', 'AI agents', 'Web3 payments', 'crypto social',
     'Base chain', 'XMTP', 'decentralized social', 'social finance', 'tip jar',
     'on-chain likes', 'wallet social', 'FlameBase',
   ],
@@ -62,15 +62,15 @@ export const metadata: Metadata = {
     locale: 'en_US',
     url: 'https://flamebase.xyz',
     siteName: 'FlameBase',
-    title: 'FlameBase — On-chain social on Base',
+    title: 'FlameBase — Trading, payments & AI agents on Base',
     description:
-      'Every like, comment, and tip is a real transaction on Base. Own your social graph.',
+      'Every trade, tip, and AI agent action is a real transaction on Base. Own your posts, own your trades, own your agents.',
     images: [
       {
         url: '/thumbnail-base.png',
         width: 1200,
         height: 628,
-        alt: 'FlameBase — on-chain social on Base',
+        alt: 'FlameBase — trading, payments & AI agents on Base',
       },
     ],
   },
@@ -78,9 +78,9 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     site: '@PrimeAirdropTR',
     creator: '@PrimeAirdropTR',
-    title: 'FlameBase — On-chain social on Base',
+    title: 'FlameBase — Trading, payments & AI agents on Base',
     description:
-      'Every like, comment, and tip is a real transaction on Base. Own your social graph.',
+      'Every trade, tip, and AI agent action is a real transaction on Base. Own your posts, own your trades, own your agents.',
     images: ['/thumbnail-base.png'],
   },
   robots: {
@@ -120,7 +120,7 @@ const organizationSchema = {
   '@type': 'WebApplication',
   name: 'FlameBase',
   url: 'https://flamebase.xyz',
-  description: 'The first truly on-chain social network on Base. Every like, comment, and tip is a real on-chain transaction.',
+  description: 'Trading, payments, and AI agents on Base. Every trade, tip, and agent action is a real on-chain transaction.',
   applicationCategory: 'SocialNetworkingApplication',
   operatingSystem: 'Web',
   offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
