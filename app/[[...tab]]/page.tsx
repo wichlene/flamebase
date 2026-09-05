@@ -19,6 +19,7 @@ import { ToastStack, type ToastItem, type ToastKind } from '../../components/Toa
 import Avatar, { IPFS_GATEWAYS } from '../../components/Avatar'
 import VerifiedBadge from '../../components/VerifiedBadge'
 import { refreshTalentScore } from '../../lib/talentRefresh'
+import { CHANGELOG } from '../../lib/changelog'
 
 const Messages = dynamic(() => import('../../components/Messages'), { ssr: false, loading: () => <div className="p-8 text-center text-[#5B6271]">💬 Loading…</div> })
 const AIChat = dynamic(() => import('../../components/AIChat'), { ssr: false, loading: () => <div className="p-8 text-center text-[#5B6271]">🤖 Loading AI…</div> })
@@ -4036,6 +4037,32 @@ export default function Home({ params }: { params: Promise<{ tab?: string[] }> }
 
         {/* ── Right Sidebar ── */}
         <aside className="hidden xl:flex flex-col fixed right-0 top-0 h-full w-96 bg-white border-l border-[#E4E7EB] z-40 overflow-y-auto">
+
+          {/* What's New — every visitor sees this, logged in or not, no
+              tracking of "seen" state needed for it to be useful: it's just
+              a clickable list of recent ships, newest first. */}
+          <div className="px-3 pt-4 pb-1">
+            <p className="text-xs font-black text-[#8A919E] uppercase tracking-wider px-1 mb-2">✨ What's New</p>
+            <div className="bg-[#FAFBFD] border border-[#EEF1F5] rounded-2xl overflow-hidden">
+              {CHANGELOG.map((entry, i) => (
+                <button
+                  key={entry.id}
+                  onClick={() => {
+                    if ('tab' in entry) goToTab(entry.tab)
+                    else window.open(entry.href, '_blank', 'noopener,noreferrer')
+                  }}
+                  style={{ animationDelay: `${i * 40}ms` }}
+                  className="animate-card-in w-full flex items-start gap-2.5 px-3 py-2.5 text-left hover:bg-[#F0F4FF] transition-colors border-b border-[#EEF1F5] last:border-b-0"
+                >
+                  <span className="text-lg flex-shrink-0">{entry.emoji}</span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-bold text-[#0A0B0D] leading-snug">{entry.title}</span>
+                    <span className="block text-[11px] text-[#8A919E] mt-0.5">{entry.date}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
 
           {/* Top Supporters — total on-chain actions ever taken on FlameBase,
               not just likes/tips on whatever posts happen to be loaded. Shown
