@@ -11,6 +11,10 @@ export const LANG_LABELS: Record<Lang, string> = {
 export const T: Record<Lang, Record<string, string>> = {
   en: {
     appTagline: 'Trade, tip, and run AI agents — on-chain on Base.',
+    whatsNew: "What's New",
+    changelogTalentScore: 'Real onchain Talent Protocol Builder Score on your profile',
+    changelogX402Agent: 'AI agent now trades, tips, and posts on your behalf via x402',
+    changelogUploadFix: 'Media uploads now support files up to 100MB',
     navFeed: 'Feed',
     navNewPost: 'New Post',
     navMessages: 'Messages',
@@ -114,6 +118,10 @@ export const T: Record<Lang, Record<string, string>> = {
   },
   tr: {
     appTagline: "Base'de on-chain trade et, bahşiş ver, AI ajanlarını çalıştır.",
+    whatsNew: 'Yenilikler',
+    changelogTalentScore: "Profilinde gerçek, zincir üstü Talent Protocol Builder Score",
+    changelogX402Agent: "AI ajan artık x402 ile senin adına trade yapıyor, bahşiş veriyor, post atıyor",
+    changelogUploadFix: "Medya yüklemeleri artık 100MB'a kadar dosyaları destekliyor",
     navFeed: 'Feed',
     navNewPost: 'Yeni Post',
     navMessages: 'Mesajlar',
@@ -217,6 +225,10 @@ export const T: Record<Lang, Record<string, string>> = {
   },
   ru: {
     appTagline: 'Торгуй, отправляй чаевые и запускай AI-агентов — on-chain на Base.',
+    whatsNew: 'Что нового',
+    changelogTalentScore: 'Реальный ончейн Talent Protocol Builder Score в твоём профиле',
+    changelogX402Agent: 'AI-агент теперь торгует, отправляет чаевые и постит от твоего имени через x402',
+    changelogUploadFix: 'Загрузка медиа теперь поддерживает файлы до 100 МБ',
     navFeed: 'Лента',
     navNewPost: 'Новый пост',
     navMessages: 'Сообщения',
@@ -312,6 +324,10 @@ export const T: Record<Lang, Record<string, string>> = {
   },
   es: {
     appTagline: 'Opera, da propinas y ejecuta agentes de IA — on-chain en Base.',
+    whatsNew: 'Novedades',
+    changelogTalentScore: 'Puntuación real onchain de Talent Protocol Builder en tu perfil',
+    changelogX402Agent: 'El agente de IA ahora opera, da propinas y publica en tu nombre vía x402',
+    changelogUploadFix: 'Las subidas de medios ahora admiten archivos de hasta 100MB',
     navFeed: 'Feed',
     navNewPost: 'Nueva publicación',
     navMessages: 'Mensajes',
@@ -407,6 +423,10 @@ export const T: Record<Lang, Record<string, string>> = {
   },
   pt: {
     appTagline: 'Negocie, dê gorjetas e execute agentes de IA — on-chain na Base.',
+    whatsNew: 'Novidades',
+    changelogTalentScore: 'Pontuação real onchain do Talent Protocol Builder no seu perfil',
+    changelogX402Agent: 'O agente de IA agora negocia, dá gorjetas e publica em seu nome via x402',
+    changelogUploadFix: 'Uploads de mídia agora suportam arquivos de até 100MB',
     navFeed: 'Feed',
     navNewPost: 'Nova publicação',
     navMessages: 'Mensagens',

@@ -4042,7 +4042,7 @@ export default function Home({ params }: { params: Promise<{ tab?: string[] }> }
               tracking of "seen" state needed for it to be useful: it's just
               a clickable list of recent ships, newest first. */}
           <div className="px-3 pt-4 pb-1">
-            <p className="text-xs font-black text-[#8A919E] uppercase tracking-wider px-1 mb-2">✨ What's New</p>
+            <p className="text-xs font-black text-[#8A919E] uppercase tracking-wider px-1 mb-2">✨ {t('whatsNew')}</p>
             <div className="bg-[#FAFBFD] border border-[#EEF1F5] rounded-2xl overflow-hidden">
               {CHANGELOG.map((entry, i) => (
                 <button
@@ -4056,7 +4056,7 @@ export default function Home({ params }: { params: Promise<{ tab?: string[] }> }
                 >
                   <span className="text-lg flex-shrink-0">{entry.emoji}</span>
                   <span className="min-w-0">
-                    <span className="block text-sm font-bold text-[#0A0B0D] leading-snug">{entry.title}</span>
+                    <span className="block text-sm font-bold text-[#0A0B0D] leading-snug">{t(entry.titleKey)}</span>
                     <span className="block text-[11px] text-[#8A919E] mt-0.5">{entry.date}</span>
                   </span>
                 </button>
