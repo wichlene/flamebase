@@ -3,29 +3,29 @@
 import { ConnectButton, useConnectModal } from '@rainbow-me/rainbowkit'
 import { useAccount, useWriteContract, useReadContract, usePublicClient, useBalance, useSwitchChain, useChainId, useDisconnect, useConnect, useSignMessage, useWalletClient } from 'wagmi'
 import { sdk as fcSdk } from '@farcaster/miniapp-sdk'
-import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, use } from 'react'
 import { parseEther, formatEther, erc20Abi, encodeFunctionData, keccak256, toHex, decodeEventLog, parseAbiItem } from 'viem'
 import { base } from 'wagmi/chains'
 import dynamic from 'next/dynamic'
-import { CONTRACT_ADDRESS, CONTRACT_ABI } from '../lib/contract'
-import { BUILDER_CODE_DATA_SUFFIX } from '../lib/builderCode'
-import { T, LANG_LABELS, type Lang } from '../lib/i18n'
-import { TOOLS_ADDRESS, TOKEN_FACTORY_ADDRESS, NFT_FACTORY_ADDRESS, DAO_ADDRESS, FOLLOW_ADDRESS, TOOLS_ABI, TOKEN_FACTORY_ABI, NFT_FACTORY_ABI, DAO_ABI, FOLLOW_ABI, FLAME_NFT_ADDRESS, FLAME_NFT_ABI, B20_FACTORY_ADDRESS, B20_FACTORY_ABI, encodeB20AssetCreateParams, encodeB20BatchMintInitCall } from '../lib/toolsContracts'
-import { SFX, isSoundEnabled, setSoundEnabled } from '../lib/sounds'
-import { authMessage } from '../lib/walletAuth'
-import { uploadMedia, checkMediaFile, mediaProblemMessage } from '../lib/uploadMedia'
-import { safeJson } from '../lib/safeJson'
-import { ToastStack, type ToastItem, type ToastKind } from '../components/Toast'
-import Avatar, { IPFS_GATEWAYS } from '../components/Avatar'
-import VerifiedBadge from '../components/VerifiedBadge'
-import { refreshTalentScore } from '../lib/talentRefresh'
+import { CONTRACT_ADDRESS, CONTRACT_ABI } from '../../lib/contract'
+import { BUILDER_CODE_DATA_SUFFIX } from '../../lib/builderCode'
+import { T, LANG_LABELS, type Lang } from '../../lib/i18n'
+import { TOOLS_ADDRESS, TOKEN_FACTORY_ADDRESS, NFT_FACTORY_ADDRESS, DAO_ADDRESS, FOLLOW_ADDRESS, TOOLS_ABI, TOKEN_FACTORY_ABI, NFT_FACTORY_ABI, DAO_ABI, FOLLOW_ABI, FLAME_NFT_ADDRESS, FLAME_NFT_ABI, B20_FACTORY_ADDRESS, B20_FACTORY_ABI, encodeB20AssetCreateParams, encodeB20BatchMintInitCall } from '../../lib/toolsContracts'
+import { SFX, isSoundEnabled, setSoundEnabled } from '../../lib/sounds'
+import { authMessage } from '../../lib/walletAuth'
+import { uploadMedia, checkMediaFile, mediaProblemMessage } from '../../lib/uploadMedia'
+import { safeJson } from '../../lib/safeJson'
+import { ToastStack, type ToastItem, type ToastKind } from '../../components/Toast'
+import Avatar, { IPFS_GATEWAYS } from '../../components/Avatar'
+import VerifiedBadge from '../../components/VerifiedBadge'
+import { refreshTalentScore } from '../../lib/talentRefresh'
 
-const Messages = dynamic(() => import('../components/Messages'), { ssr: false, loading: () => <div className="p-8 text-center text-[#5B6271]">💬 Loading…</div> })
-const AIChat = dynamic(() => import('../components/AIChat'), { ssr: false, loading: () => <div className="p-8 text-center text-[#5B6271]">🤖 Loading AI…</div> })
-const Reels = dynamic(() => import('../components/Reels'), { ssr: false, loading: () => <div className="p-8 text-center text-[#5B6271]">🎬 Loading Reels…</div> })
-const Launchpad = dynamic(() => import('../components/Launchpad'), { ssr: false, loading: () => <div className="p-8 text-center text-[#5B6271]">🚀 Loading…</div> })
-const TokenAnalyzer = dynamic(() => import('../components/TokenAnalyzer'), { ssr: false, loading: () => <div className="p-8 text-center text-[#5B6271]">🔍 Loading…</div> })
-const WalletChecker = dynamic(() => import('../components/WalletChecker'), { ssr: false, loading: () => <div className="p-3 text-center text-[#5B6271] text-xs">Loading…</div> })
+const Messages = dynamic(() => import('../../components/Messages'), { ssr: false, loading: () => <div className="p-8 text-center text-[#5B6271]">💬 Loading…</div> })
+const AIChat = dynamic(() => import('../../components/AIChat'), { ssr: false, loading: () => <div className="p-8 text-center text-[#5B6271]">🤖 Loading AI…</div> })
+const Reels = dynamic(() => import('../../components/Reels'), { ssr: false, loading: () => <div className="p-8 text-center text-[#5B6271]">🎬 Loading Reels…</div> })
+const Launchpad = dynamic(() => import('../../components/Launchpad'), { ssr: false, loading: () => <div className="p-8 text-center text-[#5B6271]">🚀 Loading…</div> })
+const TokenAnalyzer = dynamic(() => import('../../components/TokenAnalyzer'), { ssr: false, loading: () => <div className="p-8 text-center text-[#5B6271]">🔍 Loading…</div> })
+const WalletChecker = dynamic(() => import('../../components/WalletChecker'), { ssr: false, loading: () => <div className="p-3 text-center text-[#5B6271] text-xs">Loading…</div> })
 
 const TOOLS_DEPLOYED = TOOLS_ADDRESS.length > 0
 const TOKEN_FACTORY_DEPLOYED = TOKEN_FACTORY_ADDRESS.length > 0
@@ -103,6 +103,17 @@ interface ProfileData {
 }
 
 type Tab = 'feed' | 'post' | 'activity' | 'messages' | 'profile' | 'ai' | 'reels' | 'tools' | 'launch'
+// Each tab gets a real, shareable, bookmarkable URL (flamebase.xyz/profile,
+// /activity, ...) via app/[[...tab]]/page.tsx's optional catch-all route,
+// with 'feed' as the bare root. Navigation stays a plain useState update —
+// only the address bar is kept in sync via the History API (see goToTab
+// below) — so switching tabs never remounts this component or re-fetches
+// anything, unlike an actual Next.js route change would.
+const VALID_TABS: Tab[] = ['feed', 'post', 'activity', 'messages', 'profile', 'ai', 'reels', 'tools', 'launch']
+function tabFromPath(segments: string[] | undefined): Tab {
+  const seg = segments?.[0]
+  return seg && (VALID_TABS as string[]).includes(seg) ? (seg as Tab) : 'feed'
+}
 
 function FlameLogo({ size = 32 }: { size?: number }) {
   return (
@@ -322,7 +333,8 @@ function AITabContent() {
   )
 }
 
-export default function Home() {
+export default function Home({ params }: { params: Promise<{ tab?: string[] }> }) {
+  const { tab: tabFromUrl } = use(params)
   const { address, isConnected, connector } = useAccount()
   const { signMessageAsync } = useSignMessage()
   const { disconnect } = useDisconnect()
@@ -366,7 +378,22 @@ export default function Home() {
     const fc = wagmiConnectors.find(c => c.id === 'farcaster')
     if (fc) connect({ connector: fc, chainId: base.id })
   }, [connect, wagmiConnectors])
-  const [activeTab, setActiveTab] = useState<Tab>('feed')
+  const [activeTab, setActiveTab] = useState<Tab>(() => tabFromPath(tabFromUrl))
+
+  // Keep the address bar in sync with the active tab (plain History API, no
+  // Next.js navigation — see the comment on VALID_TABS above for why) and
+  // restore the tab on browser back/forward.
+  const goToTab = useCallback((nextTab: Tab) => {
+    setActiveTab(nextTab)
+    if (typeof window === 'undefined') return
+    const path = nextTab === 'feed' ? '/' : `/${nextTab}`
+    if (window.location.pathname !== path) window.history.pushState(null, '', path)
+  }, [])
+  useEffect(() => {
+    const onPopState = () => setActiveTab(tabFromPath(window.location.pathname.split('/').filter(Boolean)))
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [])
   const [reelsEverOpened, setReelsEverOpened] = useState(false)
   const [aiEverOpened, setAiEverOpened] = useState(false)
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
@@ -407,7 +434,7 @@ export default function Home() {
   // shared by the /?post= deep-link below and by clicking a post in the
   // Instagram-style "My Posts" grid on the profile tab.
   const scrollToPost = (id: string, attemptsLeft = 10) => {
-    setActiveTab('feed')
+    goToTab('feed')
     // A leftover search/bookmarks filter can hide the target post from the
     // feed entirely (it's still in `posts`, so it shows in the profile grid,
     // but never gets an <article> in the DOM) — clear both so the post we're
@@ -1726,7 +1753,7 @@ export default function Home() {
       })
       setNewPost(''); setSelectedFile(null); setPreviewUrl(null)
       setTimeout(() => refetchCount(), 3000)
-      setActiveTab('feed')
+      goToTab('feed')
       setQuotingPost(null)
       setShowPollCreator(false)
       SFX.post()
@@ -2067,7 +2094,7 @@ export default function Home() {
     const preview = post.content ? post.content.slice(0, 120) : '📎 media'
     setNewPost(`\n\n📌 @${author}: "${preview}${post.content.length > 120 ? '…' : ''}"`)
     setQuotingPost(post)
-    setActiveTab('post')
+    goToTab('post')
   }
 
   // Share a post OUTSIDE FlameBase — the distribution loop. Inside Base App /
@@ -2486,7 +2513,7 @@ export default function Home() {
         {/* ── Left Sidebar (desktop) ── */}
         <aside className="hidden md:flex flex-col fixed left-0 top-0 h-full w-60 bg-white border-r border-[#E4E7EB] z-40 px-3 py-5">
           <button
-            onClick={() => { setActiveTab('feed'); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+            onClick={() => { goToTab('feed'); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
             className="flex items-center gap-2.5 mb-8 px-3 text-left"
           >
             <FlameLogo size={36} />
@@ -2495,7 +2522,7 @@ export default function Home() {
           <nav className="flex-1 space-y-1">
             {navItems.filter(n => n.tab !== 'launch').map(({ tab, icon, labelKey }) => (
               <button key={tab} onClick={() => {
-                setActiveTab(tab)
+                goToTab(tab)
                 if (tab === 'reels') setReelsEverOpened(true)
                 if (tab === 'ai') setAiEverOpened(true)
                 if (tab === 'activity') {
@@ -2527,7 +2554,7 @@ export default function Home() {
 
             {/* Prominent B20 DEX entry — opens the on-site launchpad/DEX */}
             <button
-              onClick={() => setActiveTab('launch')}
+              onClick={() => goToTab('launch')}
               className="mt-2 w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl font-bold text-left text-sm text-white bg-gradient-to-r from-[#0052FF] via-[#3D7BFF] to-[#7B61FF] hover:opacity-95 shadow-sm transition-all"
             >
               <span className="text-base">🚀</span>
@@ -2606,7 +2633,7 @@ export default function Home() {
             style={{ paddingTop: 'max(0.75rem, var(--inset-top, 0px))' }}
           >
             <button
-              onClick={() => { setActiveTab('feed'); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+              onClick={() => { goToTab('feed'); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
               className="flex items-center gap-2"
             >
               <FlameLogo size={32} />
@@ -2678,7 +2705,7 @@ export default function Home() {
                 notifications.map((n, i) => (
                   <button
                     key={`${n.postId}-${n.type}-${n.timestamp}-${i}`}
-                    onClick={() => { setActiveTab('feed'); setShowNotifications(false); scrollToPost(n.postId) }}
+                    onClick={() => { goToTab('feed'); setShowNotifications(false); scrollToPost(n.postId) }}
                     className="w-full text-left px-4 py-3 border-b border-[#EEF1F5] hover:bg-[#F7F9FC] transition-colors flex items-start gap-3"
                   >
                     <span className="text-xl flex-shrink-0">{n.type === 'tip' ? '💸' : '🔥'}</span>
@@ -2822,7 +2849,7 @@ export default function Home() {
                     <p className="font-black text-[#0A0B0D] text-xl">{t('noPostsTitle')}</p>
                     <p className="text-sm mt-2 mb-5 max-w-xs mx-auto">{t('noPostsSub')}</p>
                     {isConnected && (
-                      <button onClick={() => setActiveTab('post')}
+                      <button onClick={() => goToTab('post')}
                         className="bg-[#0052FF] hover:bg-[#1652F0] text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-colors shadow-sm">
                         ✏️ Write the first post
                       </button>
@@ -3633,7 +3660,7 @@ export default function Home() {
                             <h3 className="font-black text-[#0A0B0D]">Most popular post</h3>
                           </div>
                           <button
-                            onClick={() => setActiveTab('feed')}
+                            onClick={() => goToTab('feed')}
                             className="w-full text-left bg-[#FAFBFD] hover:bg-[#F0F4FF] rounded-xl p-4 transition-colors border border-[#EEF1F5]"
                           >
                             {top.content && (
@@ -4243,7 +4270,7 @@ export default function Home() {
         <div className="flex">
           {navItems.map(({ tab, icon, labelKey }) => (
             <button key={tab} onClick={() => {
-              setActiveTab(tab)
+              goToTab(tab)
               if (tab === 'reels') setReelsEverOpened(true)
               if (tab === 'ai') setAiEverOpened(true)
               if (tab === 'activity') {
@@ -4317,7 +4344,7 @@ export default function Home() {
                       {loadingAction === `follow-${selectedUser.toLowerCase()}` ? '…' : '+ Add Friend'}
                     </button>
                   )}
-                  <button onClick={() => { setPendingDmTarget(selectedUser); setActiveTab('messages'); setSelectedUser(null) }}
+                  <button onClick={() => { setPendingDmTarget(selectedUser); goToTab('messages'); setSelectedUser(null) }}
                     className="flex-1 px-3 py-2 rounded-xl bg-[#F0F4FF] text-[#0052FF] text-xs font-black hover:bg-[#E6EEFF] transition-colors">
                     💬 Message
                   </button>
