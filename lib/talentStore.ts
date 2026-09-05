@@ -32,3 +32,18 @@ export async function setAttestationUID(address: string, uid: string): Promise<v
   if (useRedis) await redis(['SET', key, uid])
   else mem[key] = uid
 }
+
+// When this address's attestation was last (re)scanned for on Base — gates
+// the paid $0.05 refresh so it can't be triggered more than once every 3
+// days (see REFRESH_COOLDOWN_MS in lib/talentScore.ts).
+export async function getLastChecked(address: string): Promise<number | null> {
+  const key = `fb:talent:checked:${address.toLowerCase()}`
+  const v = useRedis ? await redis(['GET', key]) : mem[key] ?? null
+  return v ? Number(v) : null
+}
+
+export async function setLastChecked(address: string, atMs: number): Promise<void> {
+  const key = `fb:talent:checked:${address.toLowerCase()}`
+  if (useRedis) await redis(['SET', key, atMs])
+  else mem[key] = String(atMs)
+}

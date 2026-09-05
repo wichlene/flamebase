@@ -1,6 +1,6 @@
 import { createPublicClient, http, fallback, decodeAbiParameters, parseAbiParameters, parseAbiItem } from 'viem'
 import { base } from 'viem/chains'
-import { getAttestationUID, setAttestationUID } from './talentStore'
+import { getAttestationUID, setAttestationUID, getLastChecked, setLastChecked } from './talentStore'
 
 // Reads a wallet's real Talent Protocol Builder Score straight from the EAS
 // attestation the user themselves published on Base (via "Attest onchain" on
@@ -54,6 +54,13 @@ export type TalentBuilderScore = {
   badges: string[]
 }
 
+// The attestation itself only changes when the user re-attests on
+// talentprotocol.com (which costs them gas), so there's no point rescanning
+// the chain on every profile view. The paid $0.05 refresh (see
+// app/api/talent-score/refresh) forces a fresh scan for a newer attestation
+// at most once per this window.
+export const REFRESH_COOLDOWN_MS = 3 * 24 * 60 * 60 * 1000
+
 const CHUNK = 9000n
 // The Talent Protocol EAS schema was only created 2026-08-18 (~18 days
 // before this was written) — no attestation under it can be older than
@@ -86,18 +93,9 @@ async function findAttestationUID(address: `0x${string}`): Promise<`0x${string}`
   return null
 }
 
-export async function getTalentBuilderScore(address: string): Promise<TalentBuilderScore | null> {
-  const addr = address.toLowerCase() as `0x${string}`
-  let uid = await getAttestationUID(addr)
-  if (!uid) {
-    const found = await findAttestationUID(addr)
-    if (!found) return null
-    uid = found
-    await setAttestationUID(addr, uid)
-  }
-
+async function readAttestation(uid: `0x${string}`): Promise<TalentBuilderScore | null> {
   const att = await client.readContract({
-    address: EAS_ADDRESS, abi: EAS_ABI, functionName: 'getAttestation', args: [uid as `0x${string}`],
+    address: EAS_ADDRESS, abi: EAS_ABI, functionName: 'getAttestation', args: [uid],
   })
   if (!att || att.revocationTime > 0n || /^0x0+$/.test(att.uid)) return null
 
@@ -106,4 +104,42 @@ export async function getTalentBuilderScore(address: string): Promise<TalentBuil
     string, string, string[], string[], string, bigint, string, number, bigint, bigint, string, string[]
   ]
   return { score: Number(score), githubHandle, verifyUrl, badges }
+}
+
+// Free/cached path: normal profile views. Only ever scans the chain the very
+// first time an address is looked up; every read after that is a Redis hit +
+// a single getAttestation call.
+export async function getTalentBuilderScore(address: string): Promise<TalentBuilderScore | null> {
+  const addr = address.toLowerCase() as `0x${string}`
+  let uid = await getAttestationUID(addr)
+  if (!uid) {
+    const found = await findAttestationUID(addr)
+    if (!found) return null
+    uid = found
+    await Promise.all([setAttestationUID(addr, uid), setLastChecked(addr, Date.now())])
+  }
+  return readAttestation(uid as `0x${string}`)
+}
+
+// How much longer until this address is allowed to pay for another refresh.
+// 0 means eligible now.
+export async function refreshCooldownRemainingMs(address: string): Promise<number> {
+  const last = await getLastChecked(address.toLowerCase())
+  if (!last) return 0
+  const remaining = REFRESH_COOLDOWN_MS - (Date.now() - last)
+  return remaining > 0 ? remaining : 0
+}
+
+// Paid path (see app/api/talent-score/refresh): ignores whatever UID is
+// cached and re-scans the chain for the user's latest attestation, in case
+// they've re-attested a newer score since we last looked. Caller is
+// responsible for enforcing the cooldown before calling this — this function
+// does the rescan unconditionally.
+export async function refreshTalentBuilderScore(address: string): Promise<TalentBuilderScore | null> {
+  const addr = address.toLowerCase() as `0x${string}`
+  const found = await findAttestationUID(addr)
+  await setLastChecked(addr, Date.now())
+  if (!found) return null
+  await setAttestationUID(addr, found)
+  return readAttestation(found)
 }

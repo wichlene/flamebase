@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isAddress } from 'viem'
-import { getTalentBuilderScore } from '../../../lib/talentScore'
+import { getTalentBuilderScore, refreshCooldownRemainingMs } from '../../../lib/talentScore'
 
 // Real Talent Protocol Builder Score, read straight off the EAS attestation
 // on Base — see lib/talentScore.ts for how. Cached per-address (first read
@@ -15,10 +15,13 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'valid address required' }, { status: 400 })
   }
   try {
-    const result = await getTalentBuilderScore(address)
-    return NextResponse.json(result || { score: null })
+    const [result, refreshCooldownMs] = await Promise.all([
+      getTalentBuilderScore(address),
+      refreshCooldownRemainingMs(address),
+    ])
+    return NextResponse.json({ ...(result || { score: null }), refreshCooldownMs })
   } catch (e) {
     console.error('talent-score error', e)
-    return NextResponse.json({ score: null })
+    return NextResponse.json({ score: null, refreshCooldownMs: 0 })
   }
 }

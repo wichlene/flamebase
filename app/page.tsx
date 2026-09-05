@@ -1,7 +1,7 @@
 'use client'
 
 import { ConnectButton, useConnectModal } from '@rainbow-me/rainbowkit'
-import { useAccount, useWriteContract, useReadContract, usePublicClient, useBalance, useSwitchChain, useChainId, useDisconnect, useConnect, useSignMessage } from 'wagmi'
+import { useAccount, useWriteContract, useReadContract, usePublicClient, useBalance, useSwitchChain, useChainId, useDisconnect, useConnect, useSignMessage, useWalletClient } from 'wagmi'
 import { sdk as fcSdk } from '@farcaster/miniapp-sdk'
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react'
 import { parseEther, formatEther, erc20Abi, encodeFunctionData, keccak256, toHex, decodeEventLog, parseAbiItem } from 'viem'
@@ -18,6 +18,7 @@ import { safeJson } from '../lib/safeJson'
 import { ToastStack, type ToastItem, type ToastKind } from '../components/Toast'
 import Avatar, { IPFS_GATEWAYS } from '../components/Avatar'
 import VerifiedBadge from '../components/VerifiedBadge'
+import { refreshTalentScore } from '../lib/talentRefresh'
 
 const Messages = dynamic(() => import('../components/Messages'), { ssr: false, loading: () => <div className="p-8 text-center text-[#5B6271]">💬 Loading…</div> })
 const AIChat = dynamic(() => import('../components/AIChat'), { ssr: false, loading: () => <div className="p-8 text-center text-[#5B6271]">🤖 Loading AI…</div> })
@@ -485,6 +486,7 @@ export default function Home() {
   const [txLog, setTxLog] = useState<Array<{ hash: string; type: string; time: number; pending?: boolean }>>([])
   const [showTerminal, setShowTerminal] = useState(false)
   const publicClient = usePublicClient()
+  const { data: walletClient } = useWalletClient()
   const { writeContractAsync: rawWriteContract } = useWriteContract()
 
   // Live B20 activation probe: eth_call the exact createB20 we would send
@@ -919,6 +921,8 @@ export default function Home() {
   const [deployedLogoNftAddr, setDeployedLogoNftAddr] = useState<string>('')
   const [walletBannerDismissed, setWalletBannerDismissed] = useState(false)
   const [talentScore, setTalentScore] = useState<{ score: number; badges: string[]; verifyUrl: string } | null>(null)
+  const [talentRefreshCooldownMs, setTalentRefreshCooldownMs] = useState(0)
+  const [refreshingTalent, setRefreshingTalent] = useState(false)
 
   // Follow graph. When the FlameFollow contract is deployed the source of
   // truth is on-chain (getFollowing); localStorage acts only as an optimistic
@@ -951,14 +955,37 @@ export default function Home() {
     if (!address) { setTalentScore(null); return }
     let cancelled = false
     fetch(`/api/talent-score?address=${address}`)
-      .then(safeJson<{ score: number | null; badges?: string[]; verifyUrl?: string }>)
+      .then(safeJson<{ score: number | null; badges?: string[]; verifyUrl?: string; refreshCooldownMs?: number }>)
       .then(data => {
-        if (cancelled || !data || data.score == null) return
+        if (cancelled || !data) return
+        setTalentRefreshCooldownMs(data.refreshCooldownMs || 0)
+        if (data.score == null) return
         setTalentScore({ score: data.score, badges: data.badges || [], verifyUrl: data.verifyUrl || '' })
       })
       .catch(() => {})
     return () => { cancelled = true }
   }, [address])
+
+  const refreshTalent = useCallback(async () => {
+    if (!walletClient || refreshingTalent || talentRefreshCooldownMs > 0) return
+    setRefreshingTalent(true)
+    try {
+      const r = await refreshTalentScore(walletClient)
+      if (r.error) {
+        showToast('error', r.error)
+        return
+      }
+      if (r.score != null) {
+        setTalentScore({ score: r.score, badges: r.badges || [], verifyUrl: r.verifyUrl || '' })
+      }
+      setTalentRefreshCooldownMs(3 * 24 * 60 * 60 * 1000)
+      showToast('success', 'Builder Score refreshed ($0.05 paid)')
+    } catch (e: any) {
+      showToast('error', e?.message || 'Refresh failed')
+    } finally {
+      setRefreshingTalent(false)
+    }
+  }, [walletClient, refreshingTalent, talentRefreshCooldownMs, showToast])
 
   const persistFollowing = useCallback((set: Set<string>) => {
     if (!address) return
@@ -3449,6 +3476,22 @@ export default function Home() {
                               🏆 {talentScore.score}
                             </a>
                           )}
+                          <button
+                            onClick={refreshTalent}
+                            disabled={refreshingTalent || talentRefreshCooldownMs > 0 || !walletClient}
+                            title={
+                              talentRefreshCooldownMs > 0
+                                ? `Available again in ${Math.ceil(talentRefreshCooldownMs / 3_600_000)}h`
+                                : 'Re-scan the chain for your latest Talent Protocol attestation — $0.05 USDC'
+                            }
+                            className="inline-flex items-center gap-1 border border-[#E4E7EB] text-[#5B6271] text-xs font-bold px-2 py-1 rounded-full hover:border-[#0052FF] hover:text-[#0052FF] transition-colors disabled:opacity-40 disabled:hover:border-[#E4E7EB] disabled:hover:text-[#5B6271]"
+                          >
+                            {refreshingTalent
+                              ? '⏳'
+                              : talentRefreshCooldownMs > 0
+                                ? `🔒 ${Math.ceil(talentRefreshCooldownMs / 3_600_000)}h`
+                                : '🔄 $0.05'}
+                          </button>
                         </div>
                         <p className="text-[#5B6271] text-sm mb-1">{address?.slice(0,10)}...{address?.slice(-6)}</p>
                         {walletBalance && (
