@@ -918,6 +918,7 @@ export default function Home() {
   const [mintingLogoNft, setMintingLogoNft] = useState(false)
   const [deployedLogoNftAddr, setDeployedLogoNftAddr] = useState<string>('')
   const [walletBannerDismissed, setWalletBannerDismissed] = useState(false)
+  const [talentScore, setTalentScore] = useState<{ score: number; badges: string[]; verifyUrl: string } | null>(null)
 
   // Follow graph. When the FlameFollow contract is deployed the source of
   // truth is on-chain (getFollowing); localStorage acts only as an optimistic
@@ -941,6 +942,23 @@ export default function Home() {
   const [profileList, setProfileList] = useState<null | 'following' | 'followers'>(null)
   const [followersList, setFollowersList] = useState<string[]>([])
   const [followersLoading, setFollowersLoading] = useState(false)
+
+  // Real Talent Protocol Builder Score, read from the user's own onchain EAS
+  // attestation on Base (see /api/talent-score + lib/talentScore.ts) — not
+  // present at all until the user has attested their score at
+  // talentprotocol.com, so a null result is the normal/common case.
+  useEffect(() => {
+    if (!address) { setTalentScore(null); return }
+    let cancelled = false
+    fetch(`/api/talent-score?address=${address}`)
+      .then(safeJson<{ score: number | null; badges?: string[]; verifyUrl?: string }>)
+      .then(data => {
+        if (cancelled || !data || data.score == null) return
+        setTalentScore({ score: data.score, badges: data.badges || [], verifyUrl: data.verifyUrl || '' })
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [address])
 
   const persistFollowing = useCallback((set: Set<string>) => {
     if (!address) return
@@ -3421,6 +3439,16 @@ export default function Home() {
                           <h2 className="text-2xl font-black text-[#0A0B0D]">{myProfile[0]}</h2>
                           {verifiedAddresses[address!.toLowerCase()] && <VerifiedBadge size="lg" />}
                           {premiumUsers.has(address!.toLowerCase()) && <span className="text-yellow-500 text-2xl" title="Premium member">✨</span>}
+                          {talentScore && (
+                            <a
+                              href={talentScore.verifyUrl || 'https://talentprotocol.com'}
+                              target="_blank" rel="noopener noreferrer"
+                              title="Talent Protocol Builder Score — verified onchain via EAS attestation on Base"
+                              className="inline-flex items-center gap-1 bg-[#0A0B0D] text-white text-sm font-bold px-2.5 py-1 rounded-full hover:opacity-80 transition-opacity"
+                            >
+                              🏆 {talentScore.score}
+                            </a>
+                          )}
                         </div>
                         <p className="text-[#5B6271] text-sm mb-1">{address?.slice(0,10)}...{address?.slice(-6)}</p>
                         {walletBalance && (
