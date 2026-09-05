@@ -115,6 +115,15 @@ function tabFromPath(segments: string[] | undefined): Tab {
   return seg && (VALID_TABS as string[]).includes(seg) ? (seg as Tab) : 'feed'
 }
 
+// A specific user's profile (the "selectedUser" modal) also gets a real,
+// shareable link: flamebase.xyz/u/0x... — distinct from the tab paths above
+// so both can be deep-linked into from the same URL at once (e.g. sharing
+// "the feed, with so-and-so's profile open").
+function userFromPath(segments: string[] | undefined): string | null {
+  if (!segments || segments[0] !== 'u' || !segments[1]) return null
+  return segments[1]
+}
+
 function FlameLogo({ size = 32 }: { size?: number }) {
   return (
     <img src="/logo.png" alt="FlameBase" width={size} height={size} className="flex-shrink-0 object-contain" />
@@ -873,7 +882,32 @@ export default function Home({ params }: { params: Promise<{ tab?: string[] }> }
 
   // New state variables
   const [hiddenPosts, setHiddenPosts] = useState<Set<string>>(new Set())
-  const [selectedUser, setSelectedUser] = useState<string | null>(null)
+  const [selectedUser, setSelectedUser] = useState<string | null>(() => userFromPath(tabFromUrl))
+
+  // Same History-API pattern as goToTab: opening someone's profile gets a
+  // real /u/<address> link (see userFromPath above), closing it goes back to
+  // whatever tab's own path is underneath. No Next.js navigation, so this
+  // never touches the rest of the page's state.
+  const openUserProfile = useCallback((targetAddr: string) => {
+    setSelectedUser(targetAddr)
+    if (typeof window === 'undefined') return
+    window.history.pushState(null, '', `/u/${targetAddr}`)
+  }, [])
+  const closeUserProfile = useCallback(() => {
+    setSelectedUser(null)
+    if (typeof window === 'undefined') return
+    const path = activeTab === 'feed' ? '/' : `/${activeTab}`
+    window.history.pushState(null, '', path)
+  }, [activeTab])
+  useEffect(() => {
+    const onPopState = () => {
+      const segments = window.location.pathname.split('/').filter(Boolean)
+      setSelectedUser(userFromPath(segments))
+    }
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [])
+
   const [pendingDmTarget, setPendingDmTarget] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [notifications, setNotifications] = useState<Array<{type: 'like' | 'tip'; postId: string; delta: string; preview: string; timestamp: number}>>([])
@@ -2902,13 +2936,13 @@ export default function Home({ params }: { params: Promise<{ tab?: string[] }> }
                     <article key={key} id={`post-${key}`} className="animate-card-in border-b border-[#EEF1F5] hover:bg-[#FAFBFD] hover:shadow-sm hover:-translate-y-px transition-all duration-200 overflow-hidden">
                       <div className="p-4">
                         <div className="flex gap-3">
-                          <button onClick={() => setSelectedUser(post.author)} className="flex-shrink-0 cursor-pointer">
+                          <button onClick={() => openUserProfile(post.author)} className="flex-shrink-0 cursor-pointer">
                             <Avatar addr={post.author} profiles={profiles} />
                           </button>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1 flex-wrap">
                               <button
-                                onClick={() => setSelectedUser(post.author)}
+                                onClick={() => openUserProfile(post.author)}
                                 className="font-bold text-[#0A0B0D] text-[15px] hover:underline cursor-pointer"
                               >
                                 {getUsername(post.author)}
@@ -3118,12 +3152,12 @@ export default function Home({ params }: { params: Promise<{ tab?: string[] }> }
                               const { text: cText, imgHash } = parseCommentMedia(c.text)
                               return (
                               <div key={idx} className="flex items-start gap-2 py-2 px-2 hover:bg-[#F7F9FC] rounded-xl transition-colors group">
-                                <button onClick={() => setSelectedUser(c.commenter)} className="flex-shrink-0 cursor-pointer">
+                                <button onClick={() => openUserProfile(c.commenter)} className="flex-shrink-0 cursor-pointer">
                                   <Avatar addr={c.commenter} profiles={profiles} size="sm" />
                                 </button>
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2 mb-0.5">
-                                    <button onClick={() => setSelectedUser(c.commenter)} className="font-bold text-sm text-[#0A0B0D] hover:underline cursor-pointer">{getUsername(c.commenter)}</button>
+                                    <button onClick={() => openUserProfile(c.commenter)} className="font-bold text-sm text-[#0A0B0D] hover:underline cursor-pointer">{getUsername(c.commenter)}</button>
                                     <span className="text-[#8A919E] text-xs">{timeAgo(c.timestamp)}</span>
                                   </div>
                                   {cText && <p className="text-[#0A0B0D] text-sm leading-relaxed"><RichText text={cText} onHashtag={setSearchQuery} onMention={(h) => setSearchQuery(h.toLowerCase())} /></p>}
@@ -3561,7 +3595,7 @@ export default function Home({ params }: { params: Promise<{ tab?: string[] }> }
                                 <div className="space-y-1">
                                   {list.map(addr => (
                                     <div key={addr} className="flex items-center gap-3 py-1.5 px-2 hover:bg-[#F7F9FC] rounded-xl transition-colors">
-                                      <button onClick={() => setSelectedUser(addr)} className="flex items-center gap-2 flex-1 min-w-0 hover:opacity-80 transition-opacity">
+                                      <button onClick={() => openUserProfile(addr)} className="flex items-center gap-2 flex-1 min-w-0 hover:opacity-80 transition-opacity">
                                         <Avatar addr={addr} profiles={profiles} size="sm" />
                                         <div className="min-w-0 text-left">
                                           <p className="text-sm font-bold truncate text-[#0A0B0D]">{profiles[addr]?.username || `${addr.slice(0,6)}…${addr.slice(-4)}`}</p>
@@ -4015,7 +4049,7 @@ export default function Home({ params }: { params: Promise<{ tab?: string[] }> }
                 <>
                   <div className="bg-[#FAFBFD] border border-[#EEF1F5] rounded-2xl overflow-hidden">
                     {supporters.slice(0, 5).map((u, i) => (
-                      <button key={u.addr} onClick={() => setSelectedUser(u.addr)}
+                      <button key={u.addr} onClick={() => openUserProfile(u.addr)}
                         style={{ animationDelay: `${i * 40}ms` }}
                         className="animate-card-in w-full flex items-center gap-3 px-3 py-2.5 hover:bg-[#F0F4FF] transition-colors border-b border-[#EEF1F5] last:border-b-0">
                         <span className={`text-sm font-black w-5 text-center flex-shrink-0 flex items-center justify-center ${i === 0 ? 'text-[#F59E0B]' : i === 1 ? 'text-[#9CA3AF]' : i === 2 ? 'text-[#B45309]' : 'text-[#C5CBD3]'}`}>
@@ -4307,11 +4341,11 @@ export default function Home({ params }: { params: Promise<{ tab?: string[] }> }
 
       {/* ── User Profile Modal ── */}
       {selectedUser && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4" onClick={() => setSelectedUser(null)}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4" onClick={() => closeUserProfile()}>
           <div className="animate-modal-in bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-y-auto overflow-x-hidden" onClick={e => e.stopPropagation()}>
             <div className="sticky top-0 bg-white border-b border-[#EEF1F5] px-5 py-4 flex items-center justify-between">
               <h2 className="font-black text-lg">Profile</h2>
-              <button onClick={() => setSelectedUser(null)} className="w-8 h-8 rounded-full hover:bg-[#F7F9FC] flex items-center justify-center text-[#5B6271] transition-colors">✕</button>
+              <button onClick={() => closeUserProfile()} className="w-8 h-8 rounded-full hover:bg-[#F7F9FC] flex items-center justify-center text-[#5B6271] transition-colors">✕</button>
             </div>
             {/* Profile header */}
             <div className="p-5">
@@ -4344,6 +4378,9 @@ export default function Home({ params }: { params: Promise<{ tab?: string[] }> }
                       {loadingAction === `follow-${selectedUser.toLowerCase()}` ? '…' : '+ Add Friend'}
                     </button>
                   )}
+                  {/* Plain setSelectedUser here, not closeUserProfile: goToTab already
+                      pushes the correct final URL (/messages) — closing the modal must
+                      not also push its own (stale, pre-navigation) path right after. */}
                   <button onClick={() => { setPendingDmTarget(selectedUser); goToTab('messages'); setSelectedUser(null) }}
                     className="flex-1 px-3 py-2 rounded-xl bg-[#F0F4FF] text-[#0052FF] text-xs font-black hover:bg-[#E6EEFF] transition-colors">
                     💬 Message
