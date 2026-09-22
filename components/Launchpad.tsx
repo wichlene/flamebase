@@ -16,7 +16,6 @@ import { safeJson } from '../lib/safeJson'
   Aerodrome, Uniswap V2/V3/V4, etc. — so any token with liquidity is tradeable.
 */
 
-const FACTORY = '0xB20f000000000000000000000000000000000000' as const
 const NATIVE = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE' as const // aggregator native-ETH sentinel
 const ADMIN = '0xa77A5D4D37d6F39C20C2441295da9fA60Ab9fD69'.toLowerCase()
 
@@ -43,18 +42,6 @@ const AERO_ROUTER_ABI = [
   { type: 'function', name: 'swapExactETHForTokens', stateMutability: 'payable', inputs: [{ name: 'amountOutMin', type: 'uint256' }, { name: 'routes', type: 'tuple[]', components: ROUTE_COMPONENTS }, { name: 'to', type: 'address' }, { name: 'deadline', type: 'uint256' }], outputs: [{ name: 'amounts', type: 'uint256[]' }] },
   { type: 'function', name: 'swapExactTokensForETH', stateMutability: 'nonpayable', inputs: [{ name: 'amountIn', type: 'uint256' }, { name: 'amountOutMin', type: 'uint256' }, { name: 'routes', type: 'tuple[]', components: ROUTE_COMPONENTS }, { name: 'to', type: 'address' }, { name: 'deadline', type: 'uint256' }], outputs: [{ name: 'amounts', type: 'uint256[]' }] },
 ] as const
-
-const B20_CREATED = {
-  type: 'event', name: 'B20Created',
-  inputs: [
-    { indexed: true, name: 'token', type: 'address' },
-    { indexed: true, name: 'variant', type: 'uint8' },
-    { indexed: false, name: 'name', type: 'string' },
-    { indexed: false, name: 'symbol', type: 'string' },
-    { indexed: false, name: 'decimals', type: 'uint8' },
-    { indexed: false, name: 'variantEventParams', type: 'bytes' },
-  ],
-} as const
 
 type SwapTx = {
   venue: 'kyber' | 'aero'
@@ -135,32 +122,25 @@ export default function Launchpad() {
     else { setSortKey(k); setSortDir('desc') }
   }
 
-  // discover every B20 from the factory (chunked — public RPCs reject wide ranges)
+  // The B20 token list is scanned server-side now (app/api/b20/scan, a
+  // GitHub Actions cron) instead of every visitor's browser chunking through
+  // hundreds of eth_getLogs calls over a public RPC — that was slow on
+  // mobile and, worse, only looked back a shallow, arbitrary window that
+  // missed tokens created before it. This is just a fast read of the
+  // pre-scanned list.
   const loadToks = useCallback(async () => {
-    if (!publicClient) return
     setLoading(true)
     try {
-      const latest = await publicClient.getBlockNumber()
-      const CHUNK = 9000n, MAX_BACK = 800_000n
-      const start = latest > MAX_BACK ? latest - MAX_BACK : 0n
-      const ranges: [bigint, bigint][] = []
-      for (let f = start; f <= latest; f += CHUNK + 1n) ranges.push([f, f + CHUNK > latest ? latest : f + CHUNK])
-      const seen = new Set<string>(); const rows: Tok[] = []
-      for (let i = 0; i < ranges.length; i += 16) {
-        const res = await Promise.all(ranges.slice(i, i + 16).map(([f, t]) =>
-          publicClient.getLogs({ address: FACTORY, event: B20_CREATED, fromBlock: f, toBlock: t }).catch(() => [])))
-        for (const logs of res) for (const l of logs as { blockNumber?: bigint; args?: { token?: `0x${string}`; name?: string; symbol?: string; variant?: number; decimals?: number } }[]) {
-          const a = l.args?.token?.toLowerCase(); if (!a || seen.has(a)) continue; seen.add(a)
-          const d = Number(l.args?.decimals ?? 18)
-          rows.push({ token: l.args!.token!, name: l.args?.name || 'B20', symbol: l.args?.symbol || '???', variant: Number(l.args?.variant ?? 0), block: l.blockNumber ?? 0n, dec: d >= 1 && d <= 18 ? d : 18 })
-        }
-        rows.sort((a, b) => (b.block > a.block ? 1 : -1))
-        setToks([...rows]) // stream in
-      }
+      const res = await fetch('/api/b20')
+      const data = await safeJson<{ tokens?: { token: string; name: string; symbol: string; variant: number; block: string; dec: number }[] }>(res)
+      const rows: Tok[] = (data?.tokens || [])
+        .map(t => ({ token: t.token as `0x${string}`, name: t.name, symbol: t.symbol, variant: t.variant, block: BigInt(t.block), dec: t.dec }))
+        .sort((a, b) => (b.block > a.block ? 1 : -1))
+      setToks(rows)
       loadMkt(rows.map(r => r.token))
     } catch { /* ignore */ }
     setLoading(false)
-  }, [publicClient]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // live market data from DexScreener — parallel batches so it fills in fast.
   // Only tokens with a real pool come back; we keep the most-liquid pair per token.
@@ -198,19 +178,14 @@ export default function Launchpad() {
     setLoadingMkt(false)
   }, [])
 
-  // Run the (expensive, 800k-block) scan exactly once on mount. wagmi's
-  // usePublicClient() isn't guaranteed referentially stable across renders —
-  // tying this effect to loadToks's identity directly (which depends on
-  // publicClient) restarted the whole scan from zero on any such change,
-  // which read as "stuck scanning forever" with stale market data still
-  // showing from whatever partial pass came before. The manual Refresh
-  // button below still calls loadToks() directly, bypassing this guard.
+  // Run once on mount; the manual Refresh button below calls loadToks()
+  // directly to re-fetch the (fast, pre-scanned) list on demand.
   const scannedOnce = useRef(false)
   useEffect(() => {
-    if (scannedOnce.current || !publicClient) return
+    if (scannedOnce.current) return
     scannedOnce.current = true
     loadToks()
-  }, [publicClient, loadToks])
+  }, [loadToks])
 
   // filter + sort: tokens with volume first (desc), then rest. A search
   // query always overrides the tradeable-only filter — you can still paste

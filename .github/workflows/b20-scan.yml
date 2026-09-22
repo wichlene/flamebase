@@ -1,0 +1,25 @@
+name: b20-scan
+
+# Incrementally scans the B20 factory's B20Created event to build the
+# Launchpad's DEX token list server-side — see leaderboard-scan.yml for why
+# GitHub Actions instead of Vercel Cron (free, more than once a day).
+#
+# Setup: reuses the same repo secret as notify-scan/leaderboard-scan
+# (NOTIFY_SECRET).
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger B20 token scan
+        run: |
+          code=$(curl -sSL -o /tmp/out.json -w '%{http_code}' -X POST \
+            "https://flamebase.xyz/api/b20/scan" \
+            -H "x-notify-secret: ${{ secrets.NOTIFY_SECRET }}")
+          echo "HTTP $code"; cat /tmp/out.json || true
+          test "$code" = "200"
