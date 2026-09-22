@@ -198,7 +198,19 @@ export default function Launchpad() {
     setLoadingMkt(false)
   }, [])
 
-  useEffect(() => { loadToks() }, [loadToks])
+  // Run the (expensive, 800k-block) scan exactly once on mount. wagmi's
+  // usePublicClient() isn't guaranteed referentially stable across renders —
+  // tying this effect to loadToks's identity directly (which depends on
+  // publicClient) restarted the whole scan from zero on any such change,
+  // which read as "stuck scanning forever" with stale market data still
+  // showing from whatever partial pass came before. The manual Refresh
+  // button below still calls loadToks() directly, bypassing this guard.
+  const scannedOnce = useRef(false)
+  useEffect(() => {
+    if (scannedOnce.current || !publicClient) return
+    scannedOnce.current = true
+    loadToks()
+  }, [publicClient, loadToks])
 
   // filter + sort: tokens with volume first (desc), then rest. A search
   // query always overrides the tradeable-only filter — you can still paste
