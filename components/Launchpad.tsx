@@ -97,7 +97,7 @@ function TokenLogo({ img, symbol, size = 30 }: { img?: string; symbol: string; s
   return <div style={s} className="rounded-full bg-gradient-to-br from-[#0052FF] to-[#7B61FF] flex items-center justify-center text-white font-black flex-shrink-0" ><span style={{ fontSize: size * 0.32 }}>{symbol.slice(0, 3)}</span></div>
 }
 
-export default function Launchpad() {
+export default function Launchpad({ officialOnly = false }: { officialOnly?: boolean }) {
   const { address, isConnected } = useAccount()
   // Base Builder Code attribution is applied inside useSafeSend() itself now
   // (try-with-suffix-first for smart wallets, always for classic ones) — call
@@ -195,10 +195,11 @@ export default function Launchpad() {
     let filtered = needle
       ? toks.filter(t => t.name.toLowerCase().includes(needle) || t.symbol.toLowerCase().includes(needle) || t.token.toLowerCase().includes(needle))
       : toks
+    if (officialOnly) filtered = filtered.filter(t => classifyToken(t.token, t.symbol) === 'official')
     if (tradeableOnly && !needle) filtered = filtered.filter(t => mkt[t.token.toLowerCase()])
     const val = (t: Tok) => { const m = mkt[t.token.toLowerCase()]; return m ? (m[sortKey] || 0) : -1 }
     return [...filtered].sort((a, b) => (sortDir === 'desc' ? val(b) - val(a) : val(a) - val(b)))
-  }, [toks, mkt, q, sortKey, sortDir, tradeableOnly])
+  }, [toks, mkt, q, sortKey, sortDir, tradeableOnly, officialOnly])
 
   const tradeable = useMemo(() => Object.keys(mkt).length, [mkt])
 
@@ -422,8 +423,14 @@ export default function Launchpad() {
   return (
     <div className="p-4 space-y-4">
       <div>
-        <h2 className="font-black text-[#0A0B0D] text-lg flex items-center gap-2">🚀 B20 DEX</h2>
-        <p className="text-xs text-[#5B6271] mt-0.5">Every B20 token on Base — buy &amp; sell right here.</p>
+        <h2 className="font-black text-[#0A0B0D] text-lg flex items-center gap-2">
+          {officialOnly ? '📈 Tokenized Stocks' : '🚀 B20 DEX'}
+        </h2>
+        <p className="text-xs text-[#5B6271] mt-0.5">
+          {officialOnly
+            ? 'Official Coinbase-issued tokenized stocks on Base — buy & sell right here.'
+            : 'Every B20 token on Base — buy & sell right here.'}
+        </p>
       </div>
 
       {/* search */}

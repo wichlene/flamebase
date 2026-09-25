@@ -50,14 +50,32 @@ export async function POST(req: Request) {
     if (!summary) return NextResponse.json({ error: route?.message || 'route not found' }, { status: 404 })
 
     // 2) build the executable transaction
-    const buildRes = await fetch(`${API}/route/build`, {
-      method: 'POST',
-      headers: { ...H, 'content-type': 'application/json' },
-      body: JSON.stringify({ routeSummary: summary, sender, recipient, slippageTolerance: slippage }),
-    })
-    const build = await buildRes.json()
-    const b = build?.data
-    if (!b?.data || !b?.routerAddress) return NextResponse.json({ error: build?.message || 'Could not build swap' }, { status: 502 })
+    async function build(routeSummary: typeof summary) {
+      const res = await fetch(`${API}/route/build`, {
+        method: 'POST',
+        headers: { ...H, 'content-type': 'application/json' },
+        body: JSON.stringify({ routeSummary, sender, recipient, slippageTolerance: slippage }),
+      })
+      const json = await res.json()
+      return json?.data
+    }
+
+    let b = await build(summary)
+    // Same reasoning as the fee-inclusive routes retry above, one step
+    // later: a route that quoted fine WITH the fee can still fail to build
+    // once Kyber actually tries to execute it against a thin pool — retrying
+    // the build with a no-fee route (already fetched above as a fallback,
+    // or fetched fresh here) rather than failing the trade outright.
+    if ((!b?.data || !b?.routerAddress) && feeApplied) {
+      const noFeeRoute = await (await fetch(`${API}/routes?${baseQs}`, { headers: H })).json()
+      const noFeeSummary = noFeeRoute?.data?.routeSummary
+      if (noFeeSummary) {
+        summary = noFeeSummary
+        feeApplied = false
+        b = await build(summary)
+      }
+    }
+    if (!b?.data || !b?.routerAddress) return NextResponse.json({ error: 'Not enough liquidity for this trade size' }, { status: 502 })
 
     return NextResponse.json({
       to: b.routerAddress as string,

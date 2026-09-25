@@ -103,14 +103,14 @@ interface ProfileData {
   tips: bigint
 }
 
-type Tab = 'feed' | 'post' | 'activity' | 'messages' | 'profile' | 'ai' | 'reels' | 'tools' | 'launch'
+type Tab = 'feed' | 'post' | 'activity' | 'messages' | 'profile' | 'ai' | 'reels' | 'tools' | 'launch' | 'stocks'
 // Each tab gets a real, shareable, bookmarkable URL (flamebase.xyz/profile,
 // /activity, ...) via app/[[...tab]]/page.tsx's optional catch-all route,
 // with 'feed' as the bare root. Navigation stays a plain useState update —
 // only the address bar is kept in sync via the History API (see goToTab
 // below) — so switching tabs never remounts this component or re-fetches
 // anything, unlike an actual Next.js route change would.
-const VALID_TABS: Tab[] = ['feed', 'post', 'activity', 'messages', 'profile', 'ai', 'reels', 'tools', 'launch']
+const VALID_TABS: Tab[] = ['feed', 'post', 'activity', 'messages', 'profile', 'ai', 'reels', 'tools', 'launch', 'stocks']
 function tabFromPath(segments: string[] | undefined): Tab {
   const seg = segments?.[0]
   return seg && (VALID_TABS as string[]).includes(seg) ? (seg as Tab) : 'feed'
@@ -2596,6 +2596,18 @@ export default function Home({ params }: { params: Promise<{ tab?: string[] }> }
               <span className="flex-1">B20 DEX</span>
               <span className="text-[9px] bg-white/20 px-1.5 py-0.5 rounded-full font-black">TRADE ↗</span>
             </button>
+
+            {/* Separate entry for the curated, official-only view — same
+                Launchpad component (officialOnly), never mixed with the
+                general B20 DEX's full token list above. */}
+            <button
+              onClick={() => goToTab('stocks')}
+              className="mt-2 w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl font-bold text-left text-sm text-white bg-gradient-to-r from-[#0A0B0D] via-[#1F2937] to-[#0052FF] hover:opacity-95 shadow-sm transition-all"
+            >
+              <span className="text-base">📈</span>
+              <span className="flex-1">B20 Tokenize</span>
+              <span className="text-[9px] bg-white/20 px-1.5 py-0.5 rounded-full font-black">STOCKS ↗</span>
+            </button>
           </nav>
 
           <div className="border-t border-[#EEF1F5] pt-4 mt-4 space-y-3">
@@ -3482,6 +3494,11 @@ export default function Home({ params }: { params: Promise<{ tab?: string[] }> }
             {/* ══ LAUNCHPAD ══ */}
             {activeTab === 'launch' && (
               <Launchpad />
+            )}
+
+            {/* ══ TOKENIZED STOCKS (official B20 only, never mixed with the general DEX above) ══ */}
+            {activeTab === 'stocks' && (
+              <Launchpad officialOnly />
             )}
 
             {/* ══ PROFILE ══ */}
