@@ -40,10 +40,11 @@ const B20_CREATED = {
 } as const
 
 const CHUNK = 9000n // public RPCs reject wider eth_getLogs ranges
-// B20 went live on Base 2026-07-08. Backfill generously past that (with
-// margin for the exact activation block being uncertain) rather than
-// hardcode a launch block we're not 100% sure of.
-const BACKFILL_BLOCKS = 3_500_000n
+// B20 went live on Base 2026-07-08 — confirmed too shallow before at 3.5M
+// blocks (missed tokens from right around launch). Widened with real margin;
+// the recomputedFloor logic above means this can just be bumped again later
+// without losing already-scanned progress.
+const BACKFILL_BLOCKS = 4_200_000n
 const TIME_BUDGET_MS = 50_000
 
 function authorized(req: NextRequest): boolean {
@@ -100,6 +101,16 @@ async function handle(req: NextRequest) {
       head = storedHead
       tail = (await getTail()) as bigint
       floor = (await getFloor()) as bigint
+      // BACKFILL_BLOCKS was widened after the initial estimate turned out too
+      // shallow (missed tokens created near B20's actual 2026-07-08 launch) —
+      // if the already-stored floor is shallower than what today's constant
+      // would target, push it deeper so backfill picks up the gap instead of
+      // permanently missing that early history.
+      const recomputedFloor = latest > BACKFILL_BLOCKS ? latest - BACKFILL_BLOCKS : 0n
+      if (recomputedFloor < floor) {
+        floor = recomputedFloor
+        await setFloor(floor)
+      }
     }
 
     const startedAt = Date.now()
