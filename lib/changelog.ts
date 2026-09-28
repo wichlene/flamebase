@@ -14,6 +14,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: 'security-hardening',
+    emoji: '🔒',
+    titleKey: 'changelogSecurityHardening',
+    date: '2026-09-28',
+    tab: 'tools',
+  },
+  {
     id: 'talent-score',
     emoji: '🏆',
     titleKey: 'changelogTalentScore',
