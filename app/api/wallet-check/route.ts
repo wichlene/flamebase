@@ -9,6 +9,47 @@ const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
 // Groq deprecated llama-3.3-70b-versatile (2026-06-17); openai/gpt-oss-120b is its replacement.
 const MODEL = process.env.GROQ_MODEL || 'openai/gpt-oss-120b'
 
+// This endpoint is public and unauthenticated by design (anyone can check any
+// address — it's all public on-chain data), but every call was firing a real,
+// billed Groq completion with zero caching: scripting a loop of addresses
+// could run up the site's Groq bill for free. Cache the full result per
+// address for an hour — same minimal Upstash Redis REST pattern used
+// elsewhere (leaderboardStore.ts etc.) — so repeat lookups (the common case:
+// someone re-checking their own wallet, or a popular address getting looked
+// up by many visitors) cost nothing after the first.
+const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || ''
+const REDIS_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || ''
+const useRedis = Boolean(REDIS_URL && REDIS_TOKEN)
+const CACHE_TTL_SECONDS = 60 * 60
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function redis(cmd: (string | number)[]): Promise<any> {
+  const res = await fetch(REDIS_URL, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${REDIS_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(cmd),
+    cache: 'no-store',
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok || (data && data.error)) throw new Error((data && data.error) || `redis ${res.status}`)
+  return data.result
+}
+
+async function getCached(address: string): Promise<unknown | null> {
+  if (!useRedis) return null
+  try {
+    const raw = await redis(['GET', `fb:walletcheck:${address.toLowerCase()}`])
+    return raw ? JSON.parse(raw) : null
+  } catch { return null }
+}
+
+async function setCached(address: string, result: unknown): Promise<void> {
+  if (!useRedis) return
+  try {
+    await redis(['SET', `fb:walletcheck:${address.toLowerCase()}`, JSON.stringify(result), 'EX', CACHE_TTL_SECONDS])
+  } catch { /* cache is an optimization, not a requirement */ }
+}
+
 async function bsV2(path: string) {
   try {
     const res = await fetch(`${BS_V2}${path}`, {
@@ -165,6 +206,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid address' }, { status: 400 })
     }
 
+    const cached = await getCached(address)
+    if (cached) return NextResponse.json(cached)
+
     const [counters, addrInfo, nftData, stats, firstTs] = await Promise.all([
       bsV2(`/addresses/${address}/counters`),
       bsV2(`/addresses/${address}`),
@@ -301,7 +345,7 @@ Drop estimate ranges (tokens / USD): S=12000-20000/$3000-5000, A=6000-10000/$150
       aiDropUsd = Math.round(aiDropTokens * 0.25)
     }
 
-    return NextResponse.json({
+    const result = {
       txCount, hasMore, contractCallCount, tokenTransfers,
       nftCount, nftCollections, nftList,
       ethBalance, volumeEth,
@@ -314,7 +358,9 @@ Drop estimate ranges (tokens / USD): S=12000-20000/$3000-5000, A=6000-10000/$150
       badges,
       score: finalScore, tier: finalTier,
       estimatedTokens: aiDropTokens, estimatedUsd: aiDropUsd,
-    })
+    }
+    await setCached(address, result)
+    return NextResponse.json(result)
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'Internal error' }, { status: 500 })
   }
