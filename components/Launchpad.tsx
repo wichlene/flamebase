@@ -381,13 +381,20 @@ export default function Launchpad({ officialOnly = false }: { officialOnly?: boo
     setBusy(true); setNote(null)
     try {
       const spender = quote.venue === 'aero' ? AERO_ROUTER : quote.router!
-      // sell: approve the router to pull the token first (exact amount, token
-      // decimals) — WAIT for it to confirm, or transferFrom reverts.
+      // sell: approve the router to pull the token first — WAIT for it to
+      // confirm, or transferFrom reverts. Approve a 10% buffer over the exact
+      // amount rather than the exact figure: the router's actual on-chain
+      // pull can differ by a sliver from what we computed client-side (price
+      // movement between quote and execution, rounding), and an exact-amount
+      // approval means that sliver alone is enough to revert the whole sell
+      // with TransferHelper: TRANSFER_FROM_FAILED. Bounded to this one sale
+      // (not unlimited) — still a real cap, just not razor-exact.
       if (side === 'sell' && quote.needsApprove) {
         const amt = parseUnits(amount, active.dec)
+        const approveAmt = (amt * 110n) / 100n
         const allowance = await publicClient.readContract({ address: active.token, abi: erc20Abi, functionName: 'allowance', args: [address!, spender] }) as bigint
-        if (allowance < amt) {
-          const approveData = encodeFunctionData({ abi: erc20Abi, functionName: 'approve', args: [spender, amt] })
+        if (allowance < approveAmt) {
+          const approveData = encodeFunctionData({ abi: erc20Abi, functionName: 'approve', args: [spender, approveAmt] })
           const approveHash = await safeSend({ to: active.token, data: approveData })
           await publicClient.waitForTransactionReceipt({ hash: approveHash })
         }
