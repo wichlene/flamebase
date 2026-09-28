@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { safeJson } from '../../../lib/safeJson'
+import { checkRateLimit, getClientIp } from '../../../lib/rateLimit'
 
 const REGION_MAP: Record<string, string> = {
   tr: 'TR', en: 'US', ru: 'RU', es: 'ES', pt: 'BR',
@@ -20,6 +21,18 @@ export async function GET(request: Request) {
   const videoCategoryId = searchParams.get('videoCategoryId') || '0'
   const shortsOnly = searchParams.get('shortsOnly') === '1'
   const KEY = process.env.YOUTUBE_API_KEY
+
+  // A search.list call costs 100 quota units against a 10,000/day project
+  // total — unthrottled, ~100 requests from one IP exhausts the whole
+  // site's daily quota. Trending (videos.list, chart=mostPopular) costs
+  // only 1 unit, so it gets a much looser cap.
+  const ip = getClientIp(request)
+  const allowed = q
+    ? await checkRateLimit('youtube-search', ip, 15, 3600)
+    : await checkRateLimit('youtube-trending', ip, 120, 3600)
+  if (!allowed) {
+    return NextResponse.json({ error: 'Rate limit exceeded, try again later' }, { status: 429 })
+  }
 
   // ISO 8601 → seconds. PT1M30S → 90, PT45S → 45
   const parseDuration = (iso: string): number => {

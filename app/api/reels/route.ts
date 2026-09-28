@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { safeJson } from '../../../lib/safeJson'
+import { checkRateLimit, getClientIp } from '../../../lib/rateLimit'
 
 // Rotating mix of entertaining search terms
 const MIX_QUERIES = [
@@ -19,6 +20,15 @@ export async function GET(request: Request) {
   const q = searchParams.get('q') || ''
   const lang = searchParams.get('lang') || 'en'
   const mix = searchParams.get('mix') === '1'
+
+  // Unauthenticated proxy to a keyed external API — throttle per IP so a
+  // scripted loop can't hammer PIXABAY_API_KEY into a rate-limit ban that
+  // would break this feature for every real visitor.
+  const ip = getClientIp(request)
+  const allowed = await checkRateLimit('reels', ip, 60, 3600)
+  if (!allowed) {
+    return NextResponse.json({ error: 'Rate limit exceeded, try again later' }, { status: 429 })
+  }
 
   // In mix mode: rotate through entertaining queries based on page
   const query = mix

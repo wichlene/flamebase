@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { safeJson } from '../../../lib/safeJson'
+import { checkRateLimit, getClientIp } from '../../../lib/rateLimit'
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
 // Groq deprecated llama-3.3-70b-versatile (2026-06-17); openai/gpt-oss-120b is its replacement.
@@ -24,9 +25,23 @@ export async function POST(request: Request) {
   }
 
   try {
+    // Public, unauthenticated endpoint that fires a real, billed Groq
+    // completion per call — throttle per IP so a scripted loop can't run up
+    // the site's Groq bill for free.
+    const ip = getClientIp(request)
+    const allowed = await checkRateLimit('ai-chat', ip, 30, 3600)
+    if (!allowed) {
+      return NextResponse.json({ error: 'Rate limit exceeded, try again later' }, { status: 429 })
+    }
+
     const { messages, type = 'chat' } = await request.json()
-    if (!Array.isArray(messages)) {
-      return NextResponse.json({ error: 'messages must be an array' }, { status: 400 })
+    if (!Array.isArray(messages) || messages.length === 0 || messages.length > 20) {
+      return NextResponse.json({ error: 'messages must be a non-empty array (max 20)' }, { status: 400 })
+    }
+    for (const m of messages) {
+      if (typeof m?.content !== 'string' || m.content.length > 4000) {
+        return NextResponse.json({ error: 'message content too long' }, { status: 400 })
+      }
     }
     const systemPrompt = SYSTEM_PROMPTS[type] || SYSTEM_PROMPTS.chat
 

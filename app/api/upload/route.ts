@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { checkRateLimit, getClientIp } from '../../../lib/rateLimit'
 
 // Fallback upload path. The primary path is now browser -> Pinata directly
 // (see lib/uploadMedia.ts + app/api/upload/sign), because Vercel caps a
@@ -15,6 +16,15 @@ export async function POST(request: Request) {
   try {
     if (!process.env.PINATA_JWT) {
       return NextResponse.json({ error: 'PINATA_JWT env var is missing on the server' }, { status: 500 })
+    }
+
+    // No other auth gate on this route — throttle per IP so unlimited call
+    // volume can't burn the project's Pinata storage quota (file size is
+    // already capped, but call count wasn't).
+    const ip = getClientIp(request)
+    const allowed = await checkRateLimit('upload', ip, 30, 3600)
+    if (!allowed) {
+      return NextResponse.json({ error: 'Rate limit exceeded, try again later' }, { status: 429 })
     }
 
     const formData = await request.formData() as unknown as globalThis.FormData

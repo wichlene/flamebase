@@ -1,9 +1,46 @@
 import { NextResponse } from 'next/server'
 import { safeJson } from '../../../../lib/safeJson'
+import { checkRateLimit, getClientIp } from '../../../../lib/rateLimit'
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
 // Groq deprecated llama-3.3-70b-versatile (2026-06-17); openai/gpt-oss-120b is its replacement.
 const MODEL = process.env.GROQ_MODEL || 'openai/gpt-oss-120b'
+
+// Same Redis REST pattern as wallet-check's cache — a token's on-chain
+// stats barely move minute to minute, so repeat analyses of the same
+// address within the window are free instead of re-billing Groq.
+const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || ''
+const REDIS_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || ''
+const useRedis = Boolean(REDIS_URL && REDIS_TOKEN)
+const CACHE_TTL_SECONDS = 10 * 60
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function redis(cmd: (string | number)[]): Promise<any> {
+  const res = await fetch(REDIS_URL, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${REDIS_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(cmd),
+    cache: 'no-store',
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok || (data && data.error)) throw new Error((data && data.error) || `redis ${res.status}`)
+  return data.result
+}
+
+async function getCached(addr: string): Promise<unknown | null> {
+  if (!useRedis) return null
+  try {
+    const raw = await redis(['GET', `fb:aianalyze:${addr.toLowerCase()}`])
+    return raw ? JSON.parse(raw) : null
+  } catch { return null }
+}
+
+async function setCached(addr: string, result: unknown): Promise<void> {
+  if (!useRedis) return
+  try {
+    await redis(['SET', `fb:aianalyze:${addr.toLowerCase()}`, JSON.stringify(result), 'EX', CACHE_TTL_SECONDS])
+  } catch { /* cache is an optimization, not a requirement */ }
+}
 
 export async function POST(request: Request) {
   if (!process.env.GROQ_API_KEY) {
@@ -16,6 +53,15 @@ export async function POST(request: Request) {
     const addr = String(address).trim()
     if (!/^0x[0-9a-fA-F]{40}$/.test(addr)) {
       return NextResponse.json({ error: 'Invalid token address' }, { status: 400 })
+    }
+
+    const cached = await getCached(addr)
+    if (cached) return NextResponse.json(cached)
+
+    const ip = getClientIp(request)
+    const allowed = await checkRateLimit('ai-analyze', ip, 30, 3600)
+    if (!allowed) {
+      return NextResponse.json({ error: 'Rate limit exceeded, try again later' }, { status: 429 })
     }
 
     const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${encodeURIComponent(addr)}`, {
@@ -93,10 +139,12 @@ Be concise, use emojis, max 180 words. No disclaimers.`
       return NextResponse.json({ error: data?.error?.message || 'AI error' }, { status: 500 })
     }
 
-    return NextResponse.json({
+    const result = {
       analysis: data.choices?.[0]?.message?.content || '',
       tokenInfo,
-    })
+    }
+    await setCached(addr, result)
+    return NextResponse.json(result)
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'Request failed' }, { status: 500 })
   }

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { safeJson } from '../../../../lib/safeJson'
+import { checkRateLimit, getClientIp } from '../../../../lib/rateLimit'
 
 // Mints a short-lived, upload-only Pinata key so the browser can pin a file
 // directly instead of streaming it through this function.
@@ -19,9 +20,18 @@ export const dynamic = 'force-dynamic'
 // leaked key is worth little.
 const KEY_TTL_SECONDS = 60 * 30
 
-export async function POST() {
+export async function POST(request: Request) {
   if (!process.env.PINATA_JWT) {
     return NextResponse.json({ error: 'PINATA_JWT env var is missing on the server' }, { status: 500 })
+  }
+
+  // No other auth gate on this route — throttle per IP so a scripted loop
+  // can't mint unlimited single-use Pinata keys and burn the project's
+  // Pinata storage/bandwidth quota.
+  const ip = getClientIp(request)
+  const allowed = await checkRateLimit('upload-sign', ip, 20, 3600)
+  if (!allowed) {
+    return NextResponse.json({ error: 'Rate limit exceeded, try again later' }, { status: 429 })
   }
 
   try {
