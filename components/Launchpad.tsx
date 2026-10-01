@@ -43,6 +43,46 @@ const AERO_ROUTER_ABI = [
   { type: 'function', name: 'swapExactTokensForETH', stateMutability: 'nonpayable', inputs: [{ name: 'amountIn', type: 'uint256' }, { name: 'amountOutMin', type: 'uint256' }, { name: 'routes', type: 'tuple[]', components: ROUTE_COMPONENTS }, { name: 'to', type: 'address' }, { name: 'deadline', type: 'uint256' }], outputs: [{ name: 'amounts', type: 'uint256[]' }] },
 ] as const
 
+// Base's Cobalt upgrade (Sep 2026) lets a B20 issuer schedule a display
+// "multiplier" for corporate actions like stock splits — raw balances and
+// transfer amounts are unchanged, only the UI-facing view scales (e.g. a 2x
+// split shows a raw balance of 100 as 200). None of our tracked tokenized
+// stocks have split yet (multiplier defaults to 1.0, so this is a no-op
+// today), but reading plain balanceOf/parseUnits would silently show and
+// transact the wrong amount the day one does. Calls fall back to the
+// pre-Cobalt behavior for any token that doesn't implement this (older B20
+// tokens, or plain ERC-20s added via the admin add-liquidity flow).
+const B20_MULTIPLIER_ABI = [
+  { type: 'function', name: 'scaledBalanceOf', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }], outputs: [{ name: '', type: 'uint256' }] },
+  { type: 'function', name: 'fromUIAmount', stateMutability: 'view', inputs: [{ name: 'uiAmount', type: 'uint256' }], outputs: [{ name: '', type: 'uint256' }] },
+] as const
+
+async function readDisplayBalance(
+  publicClient: NonNullable<ReturnType<typeof usePublicClient>>,
+  token: `0x${string}`,
+  owner: `0x${string}`,
+): Promise<bigint> {
+  try {
+    return await publicClient.readContract({ address: token, abi: B20_MULTIPLIER_ABI, functionName: 'scaledBalanceOf', args: [owner] }) as bigint
+  } catch {
+    return await publicClient.readContract({ address: token, abi: erc20Abi, functionName: 'balanceOf', args: [owner] }) as bigint
+  }
+}
+
+// Converts a UI-typed amount (already scaled to the token's decimals, e.g.
+// via parseUnits) into the raw amount a transfer/approve actually needs.
+async function uiAmountToRaw(
+  publicClient: NonNullable<ReturnType<typeof usePublicClient>>,
+  token: `0x${string}`,
+  uiAmount: bigint,
+): Promise<bigint> {
+  try {
+    return await publicClient.readContract({ address: token, abi: B20_MULTIPLIER_ABI, functionName: 'fromUIAmount', args: [uiAmount] }) as bigint
+  } catch {
+    return uiAmount
+  }
+}
+
 type SwapTx = {
   venue: 'kyber' | 'aero'
   amountOut: bigint
@@ -346,8 +386,13 @@ export default function Launchpad({ officialOnly = false }: { officialOnly?: boo
     setQuoting(true)
     const id = setTimeout(async () => {
       try {
-        // buy: amountIn is ETH (18 dec); sell: amountIn is the token (its own decimals)
-        const amt = side === 'buy' ? parseEther(amount) : parseUnits(amount, active.dec)
+        // buy: amountIn is ETH (18 dec); sell: amountIn is the token's RAW
+        // balance units — convert the UI-typed amount through the B20
+        // multiplier (uiAmountToRaw is a no-op for tokens without one).
+        const sellUiAmt = parseUnits(amount, active.dec)
+        const amt = side === 'buy'
+          ? parseEther(amount)
+          : publicClient ? await uiAmountToRaw(publicClient, active.token, sellUiAmt) : sellUiAmt
         const { quote: res, reason } = await fetchSwap(side, active.token, amt)
         if (!stop) { setQuote(res); setQuoteError(res ? null : reason) }
       } catch { if (!stop) { setQuote(null); setQuoteError('Quote failed — try again.') } }
@@ -359,7 +404,7 @@ export default function Launchpad({ officialOnly = false }: { officialOnly?: boo
   useEffect(() => {
     const run = async () => {
       if (!active || !publicClient || !address) { setBal(0n); return }
-      try { setBal(await publicClient.readContract({ address: active.token, abi: erc20Abi, functionName: 'balanceOf', args: [address] }) as bigint) } catch { setBal(0n) }
+      try { setBal(await readDisplayBalance(publicClient, active.token, address)) } catch { setBal(0n) }
     }
     run()
   }, [active, address, publicClient, busy])
@@ -390,7 +435,7 @@ export default function Launchpad({ officialOnly = false }: { officialOnly?: boo
       // with TransferHelper: TRANSFER_FROM_FAILED. Bounded to this one sale
       // (not unlimited) — still a real cap, just not razor-exact.
       if (side === 'sell' && quote.needsApprove) {
-        const amt = parseUnits(amount, active.dec)
+        const amt = await uiAmountToRaw(publicClient, active.token, parseUnits(amount, active.dec))
         const approveAmt = (amt * 110n) / 100n
         const allowance = await publicClient.readContract({ address: active.token, abi: erc20Abi, functionName: 'allowance', args: [address!, spender] }) as bigint
         if (allowance < approveAmt) {
