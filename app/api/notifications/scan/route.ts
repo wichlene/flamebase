@@ -154,6 +154,14 @@ async function handle(req: NextRequest) {
       jobs: jobs.length,
       delivered: { push, farcaster },
     })
+  } catch (e: unknown) {
+    // No catch here before meant any thrown error (RPC hiccup, Redis error,
+    // a push-provider failure) surfaced as an empty-body 500 — undiagnosable
+    // from the cron job's logs. Surface the real message instead; this route
+    // is secret-gated (CRON_SECRET/NOTIFY_SECRET), not public.
+    const err = e as Error
+    console.error('notify-scan error', err)
+    return NextResponse.json({ ok: false, error: err?.message || 'unknown error', stack: err?.stack?.slice(0, 2000) }, { status: 500 })
   } finally {
     await releaseScanLock()
   }
