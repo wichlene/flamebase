@@ -1,6 +1,7 @@
-import { createPublicClient, http, fallback, decodeAbiParameters, parseAbiParameters, parseAbiItem } from 'viem'
+import { createPublicClient, decodeAbiParameters, parseAbiParameters, parseAbiItem } from 'viem'
 import { base } from 'viem/chains'
 import { getAttestationUID, setAttestationUID, getLastChecked, setLastChecked } from './talentStore'
+import { baseRpcTransport } from './baseRpc'
 
 // Reads a wallet's real Talent Protocol Builder Score straight from the EAS
 // attestation the user themselves published on Base (via "Attest onchain" on
@@ -37,15 +38,7 @@ const TALENT_SCHEMA_FIELDS = parseAbiParameters(
   'uint16 score, uint64 computed_at, uint64 block_number, string verify_url, string[] badges'
 )
 
-const client = createPublicClient({
-  chain: base,
-  transport: fallback([
-    http('https://mainnet.base.org'),
-    http('https://base.drpc.org'),
-    http('https://base-rpc.publicnode.com'),
-    http('https://base.llamarpc.com'),
-  ]),
-})
+const client = createPublicClient({ chain: base, transport: baseRpcTransport() })
 
 export type TalentBuilderScore = {
   score: number

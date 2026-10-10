@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createPublicClient, http, fallback } from 'viem'
+import { createPublicClient } from 'viem'
 import { base } from 'viem/chains'
 import {
   getHead, setHead, getTail, setTail, getFloor, setFloor,
   addTokens, acquireScanLock, releaseScanLock, type StoredB20Token,
 } from '../../../../lib/b20Store'
+import { baseRpcTransport } from '../../../../lib/baseRpc'
 
 // Incremental on-chain scanner for the B20 (tokenized-stock) factory's
 // B20Created event, mirroring app/api/leaderboard/scan's exact design —
@@ -16,15 +17,7 @@ import {
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
-const client = createPublicClient({
-  chain: base,
-  transport: fallback([
-    http('https://mainnet.base.org'),
-    http('https://base.drpc.org'),
-    http('https://base-rpc.publicnode.com'),
-    http('https://base.llamarpc.com'),
-  ]),
-})
+const client = createPublicClient({ chain: base, transport: baseRpcTransport() })
 
 const FACTORY = '0xB20f000000000000000000000000000000000000' as const
 const B20_CREATED = {

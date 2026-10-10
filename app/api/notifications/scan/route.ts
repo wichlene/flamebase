@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createPublicClient, http, fallback, parseAbiItem, formatEther, getAddress } from 'viem'
+import { createPublicClient, parseAbiItem, formatEther, getAddress } from 'viem'
 import { base } from 'viem/chains'
 import { CONTRACT_ADDRESS, CONTRACT_ABI } from '../../../../lib/contract'
 import { getCursor, setCursor, acquireScanLock, releaseScanLock } from '../../../../lib/notifyStore'
 import { sendPushTo, sendFarcasterTo, type Notif } from '../../../../lib/notifySend'
+import { baseRpcTransport } from '../../../../lib/baseRpc'
 
 // On-chain watcher. A cron hits this; it reads the Social contract's Liked /
 // Commented / TipSent events since the last scanned block and pushes a
@@ -14,15 +15,7 @@ import { sendPushTo, sendFarcasterTo, type Notif } from '../../../../lib/notifyS
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
-const client = createPublicClient({
-  chain: base,
-  transport: fallback([
-    http('https://mainnet.base.org'),
-    http('https://base.drpc.org'),
-    http('https://base-rpc.publicnode.com'),
-    http('https://base.llamarpc.com'),
-  ]),
-})
+const client = createPublicClient({ chain: base, transport: baseRpcTransport() })
 
 const likedEvent = parseAbiItem('event Liked(uint256 indexed postId, address indexed from)')
 const commentedEvent = parseAbiItem('event Commented(uint256 indexed postId, address indexed from, string text)')

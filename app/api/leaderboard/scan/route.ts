@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createPublicClient, http, fallback, parseAbiItem, type AbiEvent } from 'viem'
+import { createPublicClient, parseAbiItem, type AbiEvent } from 'viem'
 import { base } from 'viem/chains'
 import { CONTRACT_ADDRESS } from '../../../../lib/contract'
 import { TOOLS_ADDRESS, TOKEN_FACTORY_ADDRESS, NFT_FACTORY_ADDRESS, DAO_ADDRESS, FOLLOW_ADDRESS } from '../../../../lib/toolsContracts'
 import { getHead, setHead, getTail, setTail, getFloor, setFloor, bumpScores, acquireScanLock, releaseScanLock } from '../../../../lib/leaderboardStore'
+import { baseRpcTransport } from '../../../../lib/baseRpc'
 
 // Incremental on-chain scanner that builds the "Top Supporters" leaderboard:
 // a total-actions-ever count per address, across every FlameBase-owned
@@ -20,15 +21,7 @@ import { getHead, setHead, getTail, setTail, getFloor, setFloor, bumpScores, acq
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
-const client = createPublicClient({
-  chain: base,
-  transport: fallback([
-    http('https://mainnet.base.org'),
-    http('https://base.drpc.org'),
-    http('https://base-rpc.publicnode.com'),
-    http('https://base.llamarpc.com'),
-  ]),
-})
+const client = createPublicClient({ chain: base, transport: baseRpcTransport() })
 
 type Source = { address: `0x${string}`; event: AbiEvent; argName: string }
 

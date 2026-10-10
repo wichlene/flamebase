@@ -1,23 +1,16 @@
 import { NextResponse } from 'next/server'
-import { createPublicClient, http, fallback, erc20Abi } from 'viem'
+import { createPublicClient, erc20Abi } from 'viem'
 import { base } from 'viem/chains'
 import { getAllTokens, type StoredB20Token } from '../../../lib/b20Store'
 import { OFFICIAL_TOKENIZED_STOCKS } from '../../../lib/tokenizedStocks'
+import { baseRpcTransport } from '../../../lib/baseRpc'
 
 // Public read endpoint for the Launchpad's DEX token list — pre-scanned by
 // app/api/b20/scan, so the client does one fast fetch instead of hundreds of
 // chunked eth_getLogs calls over a public RPC from the visitor's own device.
 export const dynamic = 'force-dynamic'
 
-const client = createPublicClient({
-  chain: base,
-  transport: fallback([
-    http('https://mainnet.base.org'),
-    http('https://base.drpc.org'),
-    http('https://base-rpc.publicnode.com'),
-    http('https://base.llamarpc.com'),
-  ]),
-})
+const client = createPublicClient({ chain: base, transport: baseRpcTransport() })
 
 // Official Coinbase tokenized stocks never emit the B20 factory's
 // B20Created event — Base docs confirm they're native precompiles, not
