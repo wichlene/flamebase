@@ -103,6 +103,7 @@ export const metadata: Metadata = {
   other: {
     'base:app_id': '6a0e223b6e6e49b3da234251',
     'talentapp:project_verification': '87d0e4708a710492b8242db188d91ceacc7c85596e146ce0ad229ed4e5b5bece83ed4290fb8e1d9c578b0cb0d747ce1ec91b6f529ff30817464bbed43ff656c6',
+    'virtual-protocol-site-verification': 'c42e2ba62d8c96eeafa98ac5f34225cd',
     'fc:miniapp': JSON.stringify(miniappEmbed),
     'fc:frame': JSON.stringify(frameEmbed),
   },
