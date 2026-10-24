@@ -11,6 +11,13 @@ import { http, fallback, type Transport } from 'viem'
 // anyone who hasn't set ALCHEMY_API_KEY.
 export function baseRpcTransport(): Transport {
   const alchemyKey = process.env.ALCHEMY_API_KEY
+  if (!alchemyKey) {
+    // Surfaces in notify-scan's error body (it has a catch block that
+    // returns the real error) instead of silently falling through to the
+    // public pool and failing with an unrelated Cloudflare 403 — makes a
+    // missing/misconfigured env var on the deploy immediately diagnosable.
+    console.warn('ALCHEMY_API_KEY is not set — falling back to public Base RPCs only')
+  }
   return fallback([
     ...(alchemyKey ? [http(`https://base-mainnet.g.alchemy.com/v2/${alchemyKey}`)] : []),
     http('https://mainnet.base.org'),

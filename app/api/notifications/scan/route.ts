@@ -154,7 +154,15 @@ async function handle(req: NextRequest) {
     // is secret-gated (CRON_SECRET/NOTIFY_SECRET), not public.
     const err = e as Error
     console.error('notify-scan error', err)
-    return NextResponse.json({ ok: false, error: err?.message || 'unknown error', stack: err?.stack?.slice(0, 2000) }, { status: 500 })
+    return NextResponse.json({
+      ok: false,
+      error: err?.message || 'unknown error',
+      stack: err?.stack?.slice(0, 2000),
+      // Diagnostic: if this is ever false on a deploy that's supposed to
+      // have the key, the env var isn't actually set on that deployment —
+      // settles the "did the redeploy pick it up" question without guessing.
+      alchemyKeyConfigured: Boolean(process.env.ALCHEMY_API_KEY),
+    }, { status: 500 })
   } finally {
     await releaseScanLock()
   }
