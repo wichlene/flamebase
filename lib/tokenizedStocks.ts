@@ -46,7 +46,18 @@ export type TokenStatus = 'official' | 'impersonator' | null
 // unflagged; a token calling itself precisely "$NVDA" is the real hazard.
 export function classifyToken(addr: string, symbol: string): TokenStatus {
   if (OFFICIAL_TOKENIZED_STOCKS[addr.toLowerCase()]) return 'official'
-  const norm = (symbol || '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+  const raw = (symbol || '').trim()
+  const norm = raw.toUpperCase().replace(/[^A-Z0-9]/g, '')
   if (norm && GUARDED_TICKERS.has(norm)) return 'impersonator'
+  // Every genuine Coinbase tokenized stock uses this exact symbol format:
+  // 2-5 uppercase letters + a lowercase "c" (NVDAc, METAc, AAPLc…). A wave
+  // of B20 tokens started copying real company names in this precise format
+  // (WDCc, ARMc, SANc, BILIc…) that were never added to
+  // OFFICIAL_TOKENIZED_STOCKS above — confirmed fake by FDVs orders of
+  // magnitude below the real companies' market caps. The deception is in
+  // mimicking the FORMAT itself, not any one famous ticker, so a fixed
+  // GUARDED_TICKERS list alone can never keep up with new copies. Flag the
+  // pattern directly instead.
+  if (/^[A-Z]{2,5}c$/.test(raw)) return 'impersonator'
   return null
 }
