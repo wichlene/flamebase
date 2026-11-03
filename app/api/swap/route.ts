@@ -7,7 +7,12 @@ import { NextResponse } from 'next/server'
 // avoid CORS and keep a stable client-id.
 
 const API = 'https://aggregator-api.kyberswap.com/base/api/v1'
-const H = { 'x-client-id': 'flamebase' }
+// x-client-id was always free/self-chosen; the API key (issued directly by
+// KyberSwap's BD team, Nov 2026) is what actually unlocks production rate
+// limits and attributes our volume to FlameBase as an integrator — keep
+// both headers, and don't let a missing key (local dev) break the route.
+const H: Record<string, string> = { 'x-client-id': 'flamebase' }
+if (process.env.KYBERSWAP_API_KEY) H['x-api-key'] = process.env.KYBERSWAP_API_KEY
 const NATIVE = '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'
 
 // Platform fee — a cut of every trade, taken via the aggregator's built-in fee
