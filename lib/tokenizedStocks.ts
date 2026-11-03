@@ -38,7 +38,7 @@ export const GUARDED_TICKERS = new Set([
   'JPM', 'V', 'MA', 'DIS', 'BABA', 'UBER', 'ABNB', 'SHOP', 'SQ', 'PYPL',
 ])
 
-export type TokenStatus = 'official' | 'impersonator' | null
+export type TokenStatus = 'official' | 'impersonator' | 'unverified' | null
 
 // Deliberately NARROW. The expensive mistake here is a false positive —
 // slapping a scam warning on a legitimate meme token — so only an EXACT
@@ -50,14 +50,14 @@ export function classifyToken(addr: string, symbol: string): TokenStatus {
   const norm = raw.toUpperCase().replace(/[^A-Z0-9]/g, '')
   if (norm && GUARDED_TICKERS.has(norm)) return 'impersonator'
   // Every genuine Coinbase tokenized stock uses this exact symbol format:
-  // 2-5 uppercase letters + a lowercase "c" (NVDAc, METAc, AAPLc…). A wave
-  // of B20 tokens started copying real company names in this precise format
-  // (WDCc, ARMc, SANc, BILIc…) that were never added to
-  // OFFICIAL_TOKENIZED_STOCKS above — confirmed fake by FDVs orders of
-  // magnitude below the real companies' market caps. The deception is in
-  // mimicking the FORMAT itself, not any one famous ticker, so a fixed
-  // GUARDED_TICKERS list alone can never keep up with new copies. Flag the
-  // pattern directly instead.
-  if (/^[A-Z]{2,5}c$/.test(raw)) return 'impersonator'
+  // 2-5 uppercase letters + a lowercase "c" (NVDAc, METAc, AAPLc…). Base
+  // keeps adding new ones (confirmed via CoinGecko's own "…-coinbase-
+  // tokenized-stock" listings for e.g. ARMc, RKLBc — both real, neither yet
+  // in OFFICIAL_TOKENIZED_STOCKS above, since we don't have their contract
+  // addresses) faster than any hardcoded list can track. So a format match
+  // we can't confirm is genuinely ambiguous — could be a brand-new real
+  // listing, could be a copy — NOT a confirmed fake like a GUARDED_TICKERS
+  // hit. 'unverified' reflects that honestly instead of accusing it.
+  if (/^[A-Z]{2,5}c$/.test(raw)) return 'unverified'
   return null
 }

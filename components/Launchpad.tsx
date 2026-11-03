@@ -122,10 +122,24 @@ function isAddressLike(s: string) { return /^0x[0-9a-fA-F]{40}$/.test(s.trim()) 
 // lib/tokenizedStocks.ts for why this matters and how narrow the match is.
 const FAKE_STOCK_COPY = "This token's symbol copies a real stock ticker, but it is NOT an official Coinbase tokenized stock. It has no connection to the company and is not backed by any share. Official ones are listed at base.org/stocks."
 
+// Shown for a symbol that matches Coinbase's "TICKERc" naming format but
+// isn't on our confirmed OFFICIAL_TOKENIZED_STOCKS list — genuinely
+// ambiguous (Base keeps shipping new ones faster than we can verify
+// addresses for), not a confirmed fake like FAKE_STOCK_COPY above.
+const UNVERIFIED_STOCK_COPY = "This token's symbol matches Coinbase's tokenized-stock naming format, but we haven't verified it against their official list yet — it could be a brand-new real listing or a copy. Check base.org/stocks before trusting it."
+
 function ImpersonatorPill() {
   return (
     <span title={FAKE_STOCK_COPY} className="bg-amber-100 text-amber-700 text-[9px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0">
       NOT OFFICIAL
+    </span>
+  )
+}
+
+function UnverifiedPill() {
+  return (
+    <span title={UNVERIFIED_STOCK_COPY} className="bg-slate-100 text-slate-600 text-[9px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0">
+      UNVERIFIED
     </span>
   )
 }
@@ -243,7 +257,7 @@ export default function Launchpad({ officialOnly = false }: { officialOnly?: boo
     // the whole point of flagging them is so they don't outrank the real
     // thing in a volume-sorted list just because more people got scammed
     // into trading the fake one. Still searchable, just not front-and-center.
-    const fake = (t: Tok) => (classifyToken(t.token, t.symbol) === 'impersonator' ? 1 : 0)
+    const fake = (t: Tok) => (classifyToken(t.token, t.symbol) === 'impersonator' || classifyToken(t.token, t.symbol) === 'unverified' ? 1 : 0)
     return [...filtered].sort((a, b) => {
       const fa = fake(a), fb = fake(b)
       if (fa !== fb) return fa - fb
@@ -430,7 +444,8 @@ export default function Launchpad({ officialOnly = false }: { officialOnly?: boo
     if (!active || !isConnected || !publicClient || !amount || Number(amount) <= 0 || !quote || busy) return
     // Re-check the acknowledgement here, not just via the button's disabled
     // attribute — that's presentation, this is the actual guard.
-    if (side === 'buy' && classifyToken(active.token, active.symbol) === 'impersonator' && !ackRisk) return
+    const activeClass = classifyToken(active.token, active.symbol)
+    if (side === 'buy' && (activeClass === 'impersonator' || activeClass === 'unverified') && !ackRisk) return
     if (tradeBusyRef.current) return
     tradeBusyRef.current = true
     setBusy(true); setNote(null)
@@ -560,6 +575,7 @@ export default function Launchpad({ officialOnly = false }: { officialOnly?: boo
                           <span className="font-bold text-[#0A0B0D] text-[13px] truncate">{t.name}</span>
                           {status === 'official' && <VerifiedBadge title="Official Coinbase tokenized stock" />}
                           {status === 'impersonator' && <ImpersonatorPill />}
+                          {status === 'unverified' && <UnverifiedPill />}
                         </div>
                         <div className="text-[10px] text-[#8A919E] truncate">${t.symbol}</div>
                       </div>
@@ -651,6 +667,11 @@ export default function Launchpad({ officialOnly = false }: { officialOnly?: boo
                   <span className="font-black">⚠️ Not an official tokenized stock.</span> {FAKE_STOCK_COPY.split('. ').slice(1).join('. ')}
                 </div>
               )}
+              {detailStatus === 'unverified' && (
+                <div className="mx-4 mt-3 text-[11px] leading-snug bg-slate-50 border border-slate-200 text-slate-700 rounded-xl px-3 py-2.5">
+                  <span className="font-black">⚠️ Unverified.</span> {UNVERIFIED_STOCK_COPY.split('. ').slice(1).join('. ')}
+                </div>
+              )}
 
               {/* candlestick chart via DexScreener embed */}
               {m?.pair ? (
@@ -696,7 +717,7 @@ export default function Launchpad({ officialOnly = false }: { officialOnly?: boo
         const m = mkt[active.token.toLowerCase()]
         const quick = side === 'buy' ? ['0.005', '0.01', '0.05', '0.1'] : null
         const activeStatus = classifyToken(active.token, active.symbol)
-        const needsAck = activeStatus === 'impersonator' && side === 'buy'
+        const needsAck = (activeStatus === 'impersonator' || activeStatus === 'unverified') && side === 'buy'
         return (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center z-[60] p-3" onClick={() => setActive(null)}>
             <div className="animate-modal-in bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-sm p-5 shadow-2xl max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
@@ -720,6 +741,20 @@ export default function Launchpad({ officialOnly = false }: { officialOnly?: boo
                       <input type="checkbox" checked={ackRisk} onChange={e => setAckRisk(e.target.checked)}
                         className="mt-0.5 w-4 h-4 accent-red-600 flex-shrink-0" />
                       <span className="text-[11px] font-bold text-red-700">I understand this is not a real share and I could lose everything I spend.</span>
+                    </label>
+                  )}
+                </div>
+              )}
+              {activeStatus === 'unverified' && (
+                <div className="mb-3 rounded-xl px-3 py-2.5 bg-slate-50 border border-slate-200">
+                  <p className="text-[11px] leading-snug text-slate-700">
+                    <span className="font-black">⚠️ Unverified.</span> {UNVERIFIED_STOCK_COPY.split('. ').slice(1).join('. ')}
+                  </p>
+                  {side === 'buy' && (
+                    <label className="mt-2 flex items-start gap-2 cursor-pointer">
+                      <input type="checkbox" checked={ackRisk} onChange={e => setAckRisk(e.target.checked)}
+                        className="mt-0.5 w-4 h-4 accent-slate-600 flex-shrink-0" />
+                      <span className="text-[11px] font-bold text-slate-700">I understand this hasn't been verified against Coinbase's official list.</span>
                     </label>
                   )}
                 </div>
