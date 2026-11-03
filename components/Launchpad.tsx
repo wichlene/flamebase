@@ -238,7 +238,17 @@ export default function Launchpad({ officialOnly = false }: { officialOnly?: boo
     if (officialOnly) filtered = filtered.filter(t => classifyToken(t.token, t.symbol) === 'official')
     if (tradeableOnly && !needle) filtered = filtered.filter(t => mkt[t.token.toLowerCase()])
     const val = (t: Tok) => { const m = mkt[t.token.toLowerCase()]; return m ? (m[sortKey] || 0) : -1 }
-    return [...filtered].sort((a, b) => (sortDir === 'desc' ? val(b) - val(a) : val(a) - val(b)))
+    // Impersonators (exact-ticker copies of real stocks, e.g. a "$NVDA" that
+    // isn't Coinbase's official one) sort last regardless of volume/FDV —
+    // the whole point of flagging them is so they don't outrank the real
+    // thing in a volume-sorted list just because more people got scammed
+    // into trading the fake one. Still searchable, just not front-and-center.
+    const fake = (t: Tok) => (classifyToken(t.token, t.symbol) === 'impersonator' ? 1 : 0)
+    return [...filtered].sort((a, b) => {
+      const fa = fake(a), fb = fake(b)
+      if (fa !== fb) return fa - fb
+      return sortDir === 'desc' ? val(b) - val(a) : val(a) - val(b)
+    })
   }, [toks, mkt, q, sortKey, sortDir, tradeableOnly, officialOnly])
 
   const tradeable = useMemo(() => Object.keys(mkt).length, [mkt])
