@@ -5,7 +5,7 @@ import { useAccount, usePublicClient, useWatchAsset } from 'wagmi'
 import { encodeFunctionData, erc20Abi, formatUnits, parseEther, parseUnits } from 'viem'
 import { useSafeSend } from '../lib/useSafeSend'
 import VerifiedBadge from './VerifiedBadge'
-import { classifyToken } from '../lib/tokenizedStocks'
+import { classifyToken, OFFICIAL_STOCK_ICONS } from '../lib/tokenizedStocks'
 import { safeJson } from '../lib/safeJson'
 
 /*
@@ -569,7 +569,7 @@ export default function Launchpad({ officialOnly = false }: { officialOnly?: boo
                   <td className="py-2 pl-3">
                     <div className="flex items-center gap-2.5 min-w-0">
                       <span className="text-[10px] text-[#C5CBD3] w-3.5 text-right flex-shrink-0">{i + 1}</span>
-                      <TokenLogo img={m?.img} symbol={t.symbol} size={30} />
+                      <TokenLogo img={m?.img || OFFICIAL_STOCK_ICONS[t.token.toLowerCase()]} symbol={t.symbol} size={30} />
                       <div className="min-w-0">
                         <div className="flex items-center gap-1 min-w-0">
                           <span className="font-bold text-[#0A0B0D] text-[13px] truncate">{t.name}</span>
@@ -647,7 +647,7 @@ export default function Launchpad({ officialOnly = false }: { officialOnly?: boo
             <div className="animate-modal-in bg-white sm:rounded-3xl w-full max-w-lg h-[100dvh] sm:h-auto sm:max-h-[92vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
               {/* header */}
               <div className="flex items-center gap-3 p-4 border-b border-[#F0F2F5] sticky top-0 bg-white z-10">
-                <TokenLogo img={m?.img} symbol={detail.symbol} size={40} />
+                <TokenLogo img={m?.img || OFFICIAL_STOCK_ICONS[detail.token.toLowerCase()]} symbol={detail.symbol} size={40} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 min-w-0">
                     <span className="font-black text-[#0A0B0D] truncate">{detail.name}</span>
@@ -723,7 +723,7 @@ export default function Launchpad({ officialOnly = false }: { officialOnly?: boo
             <div className="animate-modal-in bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-sm p-5 shadow-2xl max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
               {/* header */}
               <div className="flex items-center gap-3 mb-4">
-                <TokenLogo img={m?.img} symbol={active.symbol} size={44} />
+                <TokenLogo img={m?.img || OFFICIAL_STOCK_ICONS[active.token.toLowerCase()]} symbol={active.symbol} size={44} />
                 <div className="flex-1 min-w-0">
                   <div className="font-black text-[#0A0B0D] truncate">{active.name}</div>
                   <div className="text-xs text-[#8A919E]">${active.symbol}{m?.price ? ` · ${fmtUsd(m.price)}` : ''}</div>

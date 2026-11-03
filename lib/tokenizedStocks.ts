@@ -29,6 +29,28 @@ export const OFFICIAL_TOKENIZED_STOCKS: Record<string, string> = {
   '0xb2000000000000000000004aff16039ba04bdfbc': 'INTCc',
 }
 
+// Real icon URLs for the official stocks above, sourced from CoinGecko's own
+// Base coin listings (each entry's id is literally "<company>-coinbase-
+// tokenized-stock", confirming it's the same product). These are B20
+// precompiles, not normal liquidity-pool tokens, so DexScreener rarely has
+// image metadata for them — this fills that gap without relying on an
+// unverified, address-less source for anything outside this confirmed list.
+// INTCc has no entry here (not found in the CoinGecko export checked) and
+// falls back to the generic initials avatar like any other missing icon.
+export const OFFICIAL_STOCK_ICONS: Record<string, string> = {
+  '0xb20000000000000000000078ee7ce2fe4908108c': 'https://coin-images.coingecko.com/coins/images/102175596/large/nvda_200x200.png',
+  '0xb2000000000000000000008bc8786b856e61707c': 'https://coin-images.coingecko.com/coins/images/102175599/large/meta_200x200.png',
+  '0xb2000000000000000000002d0ba3164cc74f58b7': 'https://coin-images.coingecko.com/coins/images/102175598/large/goog_200x200.png',
+  '0xb200000000000000000000d9192b6b456483c2e8': 'https://coin-images.coingecko.com/coins/images/102178280/large/amzn-200.png',
+  '0xb200000000000000000000c2e324d24d7eecd1fb': 'https://coin-images.coingecko.com/coins/images/102175597/large/aapl_200x200.png',
+  '0xb2000000000000000000004884b426556b92883d': 'https://coin-images.coingecko.com/coins/images/102178282/large/mstr-200.png',
+  '0xb2000000000000000000001e800a7f5189430cd0': 'https://coin-images.coingecko.com/coins/images/102178285/large/tsla-200.png',
+  '0xb2000000000000000000007b9fcbd005511acbd5': 'https://coin-images.coingecko.com/coins/images/102178284/large/spcx-200.png',
+  '0xb200000000000000000000ab99cfa739e253872b': 'https://coin-images.coingecko.com/coins/images/102178281/large/msft-200.png',
+  '0xb200000000000000000000397293cb8cda9a10c5': 'https://coin-images.coingecko.com/coins/images/102178283/large/sndk-200.png',
+  '0xb20000000000000000000019f6e7c675b73c2e4d': 'https://coin-images.coingecko.com/coins/images/102179169/large/CRCLc-icon-200.png',
+}
+
 // Tickers worth guarding: well-known equities a scam token would impersonate.
 // Kept as bare tickers — matching is exact (see classifyToken), so adding a
 // ticker here can only ever flag a token literally calling itself that.
